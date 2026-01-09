@@ -11,7 +11,7 @@ import { aggregateTrades } from './utils/tradeAggregator';
 import { API_BASE } from './config';
 
 function App() {
-  const { trades, logs, accounts, positions, orders, historicalTrades, selectedAccountId, selectAccount, connect, logout, loadMoreLogs, isConnected, loading, settings, toggleTrading, config, updateConfig, historyFilter, setHistoryFilter } = useTopStep();
+  const { trades, logs, accounts, positions, orders, historicalTrades, selectedAccountId, selectAccount, connect, logout, loadMoreLogs, isConnected, loading, settings, toggleTrading, config, updateConfig, historyFilter, setHistoryFilter, marketStatus } = useTopStep();
   const [activeTab, setActiveTab] = useState<'trading' | 'logs'>('trading');
   const [expandedLogs, setExpandedLogs] = useState<Set<number>>(new Set());
 
@@ -25,13 +25,13 @@ function App() {
     setExpandedLogs(newSet);
   };
 
-  // Calculate Market Status
-  const now = new Date();
+
 
   // Aggregate Trades for display
   const aggregatedTrades = useMemo(() => aggregateTrades(historicalTrades), [historicalTrades]);
-  const currentHour = now.getHours();
-  const isMarketOpen = currentHour < 22; // Simplified logic, adjust as needed
+
+  const isMarketOpen = marketStatus.is_open;
+  // Optional: We can also show marketStatus.reason if needed in UI
 
   // Calculate Daily PnL
   const calculatedDailyPnl = historicalTrades

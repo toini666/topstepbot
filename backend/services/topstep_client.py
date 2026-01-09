@@ -156,7 +156,20 @@ class TopStepClient:
         async with httpx.AsyncClient() as client:
             try:
                 response = await client.post(url, json=payload, headers=headers, timeout=10)
-                data = response.json()
+                
+                if response.status_code != 200:
+                    self._log_api_call("POST", url, payload, None, response.status_code)
+                    if response.status_code == 401: 
+                        print("Token Expired or Invalid.")
+                        self.token = None 
+                    return []
+
+                try:
+                    data = response.json()
+                except json.JSONDecodeError:
+                    self._log_api_call("POST", url, payload, {"raw": response.text}, response.status_code)
+                    print(f"Get Accounts Error: Invalid JSON (Status {response.status_code})")
+                    return []
                 
                 if data.get("success") and data.get("accounts"):
                     self._log_api_call("POST", url, payload, data, response.status_code)
@@ -182,8 +195,18 @@ class TopStepClient:
         async with httpx.AsyncClient() as client:
             try:
                 response = await client.post(url, json=payload, headers=headers, timeout=10)
-                data = response.json()
                 
+                if response.status_code != 200:
+                    self._log_api_call("POST", url, payload, None, response.status_code)
+                    if response.status_code == 401: self.token = None 
+                    return []
+                
+                try:
+                    data = response.json()
+                except json.JSONDecodeError:
+                    self._log_api_call("POST", url, payload, {"raw": response.text}, response.status_code)
+                    return []
+
                 if data.get("success") and data.get("positions"):
                     self._log_api_call("POST", url, payload, data, response.status_code)
                     return data["positions"]
@@ -226,8 +249,18 @@ class TopStepClient:
         async with httpx.AsyncClient() as client:
             try:
                 response = await client.post(url, json=payload, headers=headers, timeout=10)
-                data = response.json()
                 
+                if response.status_code != 200:
+                    self._log_api_call("POST", url, payload, None, response.status_code)
+                    if response.status_code == 401: self.token = None 
+                    return []
+                
+                try:
+                    data = response.json()
+                except json.JSONDecodeError:
+                    self._log_api_call("POST", url, payload, {"raw": response.text}, response.status_code)
+                    return []
+
                 if data.get("success") and data.get("orders"):
                     self._log_api_call("POST", url, payload, data, response.status_code)
                     return data["orders"]
@@ -264,8 +297,18 @@ class TopStepClient:
         async with httpx.AsyncClient() as client:
             try:
                 response = await client.post(url, json=payload, headers=headers, timeout=10)
-                data = response.json()
                 
+                if response.status_code != 200:
+                    self._log_api_call("POST", url, payload, None, response.status_code)
+                    if response.status_code == 401: self.token = None 
+                    return []
+                
+                try:
+                    data = response.json()
+                except json.JSONDecodeError:
+                    self._log_api_call("POST", url, payload, {"raw": response.text}, response.status_code)
+                    return []
+
                 if data.get("success") and data.get("trades"):
                     self._log_api_call("POST", url, payload, data, response.status_code)
                     return data["trades"]
@@ -291,9 +334,19 @@ class TopStepClient:
         async with httpx.AsyncClient() as client:
             try:
                 response = await client.post(url, json=payload, headers=headers, timeout=10)
-                data = response.json()
-                self._log_api_call("POST", url, payload, data, response.status_code)
-                return data.get("success", False)
+                
+                if response.status_code != 200:
+                    self._log_api_call("POST", url, payload, None, response.status_code)
+                    if response.status_code == 401: self.token = None 
+                    return False
+                
+                try:
+                    data = response.json()
+                    self._log_api_call("POST", url, payload, data, response.status_code)
+                    return data.get("success", False)
+                except json.JSONDecodeError:
+                    self._log_api_call("POST", url, payload, {"raw": response.text}, response.status_code)
+                    return False
             except Exception as e:
                 print(f"Close Position Error: {e}")
                 return False
@@ -314,9 +367,19 @@ class TopStepClient:
         async with httpx.AsyncClient() as client:
             try:
                 response = await client.post(url, json=payload, headers=headers, timeout=10)
-                data = response.json()
-                self._log_api_call("POST", url, payload, data, response.status_code)
-                return data.get("success", False)
+                
+                if response.status_code != 200:
+                    self._log_api_call("POST", url, payload, None, response.status_code)
+                    if response.status_code == 401: self.token = None 
+                    return False
+                
+                try:
+                    data = response.json()
+                    self._log_api_call("POST", url, payload, data, response.status_code)
+                    return data.get("success", False)
+                except json.JSONDecodeError:
+                    self._log_api_call("POST", url, payload, {"raw": response.text}, response.status_code)
+                    return False
             except Exception as e:
                 print(f"Cancel Order Error: {e}")
                 return False
@@ -349,17 +412,27 @@ class TopStepClient:
                 # 2. Try Live
                 payload_live = {"live": True}
                 response = await client.post(url, json=payload_live, headers=headers, timeout=10)
-                data = response.json()
-                self._log_api_call("POST", url, payload_live, data, response.status_code)
-                if data.get("success") and data.get("contracts"):
-                    contracts = data["contracts"]
-                else:
+                
+                if response.status_code == 200:
+                    try:
+                        data = response.json()
+                        self._log_api_call("POST", url, payload_live, data, response.status_code)
+                        if data.get("success") and data.get("contracts"):
+                            contracts = data["contracts"]
+                    except json.JSONDecodeError:
+                        pass
+                
+                if not contracts:
                     # 2b. Fallback to Simulation
                     response = await client.post(url, json={"live": False}, headers=headers, timeout=10)
-                    data = response.json()
-                    self._log_api_call("POST", url, {"live": False}, data, response.status_code)
-                    if data.get("success") and data.get("contracts"):
-                        contracts = data["contracts"]
+                    if response.status_code == 200:
+                        try:
+                            data = response.json()
+                            self._log_api_call("POST", url, {"live": False}, data, response.status_code)
+                            if data.get("success") and data.get("contracts"):
+                                contracts = data["contracts"]
+                        except json.JSONDecodeError:
+                            pass
                 
                 # 3. Populate Cache
                 if contracts:
@@ -415,18 +488,26 @@ class TopStepClient:
             try:
                 # Try Live
                 response = await client.post(url, json={"live": True}, headers=headers, timeout=10)
-                data = response.json()
-                if data.get("success") and data.get("contracts"):
-                    return data["contracts"]
+                if response.status_code == 200:
+                    try:
+                        data = response.json()
+                        if data.get("success") and data.get("contracts"):
+                            return data["contracts"]
+                    except json.JSONDecodeError:
+                        pass
                 
                 # Fallback to Simulation
                 # print("Live contracts empty, trying simulation...")
                 response = await client.post(url, json={"live": False}, headers=headers, timeout=10)
-                data = response.json()
-                if data.get("success") and data.get("contracts"):
-                    return data["contracts"]
-
-                print(f"Get All Contracts Failed. Response: {data}")
+                if response.status_code == 200:
+                    try:
+                        data = response.json()
+                        if data.get("success") and data.get("contracts"):
+                            return data["contracts"]
+                    except json.JSONDecodeError:
+                        pass
+                
+                print(f"Get All Contracts Failed.")
                 return []
             except Exception as e:
                 print(f"Get All Contracts Error: {e}")
@@ -492,19 +573,27 @@ class TopStepClient:
             try:
                 # print(f"Placing order: {payload}")
                 response = await client.post(url, json=payload, headers=headers, timeout=10)
-                data = response.json()
-                self._log_api_call("POST", url, payload, data, response.status_code)
                 
-                if data.get("success"):
-                    return {
-                        "status": "filled", 
-                        "order_id": str(data["orderId"]), 
-                        "price": price, 
-                        "avg_fill_price": price 
-                    }
-                else:
-                    return {"status": "rejected", "reason": data.get("errorMessage", "Unknown Rejection")}
+                if response.status_code != 200:
+                    self._log_api_call("POST", url, payload, None, response.status_code)
+                    if response.status_code == 401: self.token = None 
+                    return {"status": "error", "message": f"HTTP Error {response.status_code}"}
 
+                try:
+                    data = response.json()
+                    self._log_api_call("POST", url, payload, data, response.status_code)
+                    
+                    if data.get("success"):
+                        return {
+                            "status": "filled", 
+                            "order_id": str(data["orderId"]), 
+                            "price": price, 
+                            "avg_fill_price": price 
+                        }
+                    else:
+                        return {"status": "rejected", "reason": data.get("errorMessage", "Unknown Rejection")}
+                except json.JSONDecodeError:
+                    return {"status": "error", "message": "Invalid JSON response"}
             except Exception as e:
                 return {"status": "error", "message": f"Order Exception: {e}"}
 
@@ -535,9 +624,18 @@ class TopStepClient:
         async with httpx.AsyncClient() as client:
             try:
                 response = await client.post(url, json=payload, headers=headers, timeout=10)
-                data = response.json()
-                self._log_api_call("POST", url, payload, data, response.status_code)
-                return data.get("success", False)
+                
+                if response.status_code != 200:
+                    self._log_api_call("POST", url, payload, None, response.status_code)
+                    if response.status_code == 401: self.token = None 
+                    return False
+                
+                try:
+                    data = response.json()
+                    self._log_api_call("POST", url, payload, data, response.status_code)
+                    return data.get("success", False)
+                except json.JSONDecodeError:
+                    return False
             except Exception as e:
                 print(f"Modify Order Error: {e}")
                 return False

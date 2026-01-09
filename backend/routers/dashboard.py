@@ -21,6 +21,16 @@ def get_connection_status():
     """Checks if the TopStepClient has a valid token."""
     return {"connected": bool(topstep_client.token)}
 
+@router.get("/dashboard/market-status")
+def get_market_status(db: Session = Depends(get_db)):
+    """Checks if the market is open using RiskEngine logic."""
+    risk_engine = RiskEngine(db)
+    is_open, reason = risk_engine.check_time_filters()
+    return {
+        "is_open": is_open,
+        "reason": reason
+    }
+
 @router.get("/dashboard/config", response_model=ConfigResponse)
 def get_config(db: Session = Depends(get_db)):
     risk_engine = RiskEngine(db)

@@ -32,13 +32,15 @@ export const useTopStep = () => {
         limit: 1000
     });
 
+    const [marketStatus, setMarketStatus] = useState<{ is_open: boolean; reason: string }>({ is_open: false, reason: 'Connecting...' });
+
     // History Filter: 'today' (1 day) or 'week' (7 days)
     const [historyFilter, setHistoryFilter] = useState<'today' | 'week'>('today');
 
     const fetchData = async () => {
         try {
             // 1. Fetch Basic Data
-            const [tradesRes, logsRes, statsRes, settingsRes, statusRes, configRes] = await Promise.all([
+            const [tradesRes, logsRes, statsRes, settingsRes, statusRes, configRes, marketRes] = await Promise.all([
                 axios.get(`${API_BASE}/dashboard/trades`),
                 axios.get(`${API_BASE}/dashboard/logs`, {
                     params: {
@@ -49,7 +51,8 @@ export const useTopStep = () => {
                 axios.get(`${API_BASE}/dashboard/stats`),
                 axios.get(`${API_BASE}/dashboard/settings`),
                 axios.get(`${API_BASE}/dashboard/status`),
-                axios.get(`${API_BASE}/dashboard/config`)
+                axios.get(`${API_BASE}/dashboard/config`),
+                axios.get(`${API_BASE}/dashboard/market-status`)
             ]);
 
             setTrades(tradesRes.data);
@@ -57,6 +60,7 @@ export const useTopStep = () => {
             setStats(statsRes.data);
             if (settingsRes.data) setSettings(settingsRes.data);
             if (configRes.data) setConfig(configRes.data);
+            if (marketRes.data) setMarketStatus(marketRes.data);
 
             // 2. Check & Update Connection Status
             const currentlyConnected = statusRes.data.connected;
@@ -229,6 +233,7 @@ export const useTopStep = () => {
         updateConfig,
         refresh: fetchData,
         historyFilter,
-        setHistoryFilter
+        setHistoryFilter,
+        marketStatus
     };
 };
