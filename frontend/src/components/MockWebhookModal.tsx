@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import axios from 'axios';
 import { X, Play, AlertTriangle, ChevronDown, Check } from 'lucide-react';
 import { toast } from 'sonner';
+import { API_BASE } from '../config';
 
 interface MockWebhookModalProps {
     isOpen: boolean;
@@ -86,7 +87,7 @@ export function MockWebhookModal({ isOpen, onClose }: MockWebhookModalProps) {
                 tp: tpVal
             };
 
-            await axios.post('http://localhost:8000/api/webhook', payload);
+            await axios.post(`${API_BASE}/webhook`, payload);
             toast.success("Webhook Sent Successfully!");
             onClose();
         } catch (err: any) {

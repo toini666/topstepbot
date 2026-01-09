@@ -220,7 +220,7 @@ async def execute_trade(trade_id: int, sl_ticks: int, tp_ticks: int, contract_id
             account_id=account_id,
             sl_ticks=sl_ticks,
             tp_ticks=tp_ticks,
-            contract_id=contract_id
+            contract_id=contract_id # Optimization: Use pre-resolved ID
         )
         
         if response.get("status") == "filled":

@@ -4,6 +4,7 @@ import { X, Save, Plus, Trash2, Clock, DollarSign, Settings } from 'lucide-react
 import { toast } from 'sonner';
 import type { Config, TimeBlock, TickerMap } from '../types';
 import { TickerMapping } from './TickerMapping';
+import { API_BASE } from '../config';
 
 interface ConfigModalProps {
     isOpen: boolean;
@@ -42,7 +43,7 @@ export function ConfigModal({
 
 
 
-    const API_BASE = "http://localhost:8000/api";
+
 
     const fetchMappings = async () => {
         try {

@@ -8,6 +8,7 @@ import { ConfirmationModal } from './components/ConfirmationModal';
 import { ConfigModal } from './components/ConfigModal';
 import { MockWebhookModal } from './components/MockWebhookModal';
 import { aggregateTrades } from './utils/tradeAggregator';
+import { API_BASE } from './config';
 
 function App() {
   const { trades, logs, accounts, positions, orders, historicalTrades, selectedAccountId, selectAccount, connect, logout, loadMoreLogs, isConnected, loading, settings, toggleTrading, config, updateConfig, historyFilter, setHistoryFilter } = useTopStep();
@@ -68,7 +69,7 @@ function App() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [accountDropdownOpen]);
 
-  const API_BASE = "http://localhost:8000/api";
+
 
   const handleClosePosition = async (contractId: string) => {
     setModalConfig({

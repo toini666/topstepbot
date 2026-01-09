@@ -1,80 +1,148 @@
-# TopStepX Auto-Trader
+# TopStepX Auto-Trader 🤖
 
-A robust, local automated trading bot designed to execute TradingView alerts on TopStepX with strict risk management.
+A robust, automated trading bot designed to execute TradingView alerts on TopStepX with professional-grade risk management and monitoring.
 
 ## 🌟 Features
-- **Automated Execution**: Webhook-based order placement.
-- **Risk Guardian**: 
-    - Daily Loss Limit.
-    - Configurable "No-Trade" Time Windows (Brussels Time).
-    - **Master Switch** to instantly pause trading.
-- **Dashboard**: Real-time monitoring of trades, P&L, and system logs.
-- **Secure**: Runs locally, keeping your API keys safe.
 
-## 🚀 Setup & Installation
+### ⚡ Execution & Automation
+- **Webhook Integration**: Executes trades instantly from TradingView alerts.
+- **Auto-Flatten**: Automatically closes all positions at a specific time (e.g., 20:55 UTC) to avoid holding overnight.
+- **Fail-Safe Startup**: Checks for missed backups on startup and performs them if necessary, ensuring your data is always safe even if your PC was off.
+- **Durable Persistence**: System state (open positions, tracking) is saved to disk, so you never lose track of a trade even if the bot restarts.
+- **Orphaned Order Detection**: Automatically detects and warns about orders that don't have a matching position.
+- **Telegram Control**: Monitor and control the bot remotely:
+  - `/switch`: Change active trading account instantly.
+  - `/flatten`: Close all positions and cancel orders.
+  - Real-time notifications for Fills, P&L, and Errors.
+  - Etc.
+
+### 🛡️ Risk Guardian
+- **Global Master Switch**: Instantly pause all trading with one click from the dashboard.
+- **Time filters**: Prevents trading during high-volatility windows (News, Open/Close).
+- **Position Sizing**: Calculates quantity based on risk settings.
+
+### 📊 Dashboard & Monitoring
+- **Real-Time Dashboard**: View open positions, P&L, contract mapping, and account stats live.
+- **Ticker Mapping**: Map TradingView tickers (e.g., `MNQ`) to TopStep contracts (e.g., `MNQH6`) easily via UI.
+- **System Logs**: Live logs of all actions, errors, and trade executions with 7-day auto-cleaning.
+- **Toast Notifications**: Instant visual feedback for all actions.
+
+---
+
+## 🚀 Installation & Setup
 
 ### Prerequisites
 - Python 3.9+
 - Node.js & npm
+- Git
+- Ngrok (for Webhook URL)
 
-### 1. Configuration
-Create a `.env` file in the root directory (copy from `.env.example`):
+### 1. Clone the Repository
+```bash
+git clone https://github.com/toini666/topstepbot.git
+cd topstepbot
+```
+
+### 2. Configure Environment
+Create a `.env` file in the root directory:
 ```bash
 cp .env.example .env
 ```
-Fill in your TopStepX credentials:
+Edit `.env` and fill in your credentials:
 ```env
+# TopStep / Tradovate Credentials
 TOPSTEP_USERNAME=your_username
 TOPSTEP_APIKEY=your_api_key
-TOPSTEP_URL=https://api.topstepx.com
-DATABASE_URL=sqlite:///./trading_bot.db
+
+# Telegram Notifications
+TELEGRAM_BOT_TOKEN=your_telegram_bot_token
+TELEGRAM_ID=your_chat_id
+
+# Database
+DATABASE_URL=sqlite:///./topstepbot.db
+
+# Optional: Ngrok Auth for persistent sessions
+NGROK_AUTHTOKEN=your_ngrok_auth_token
 ```
 
-### 2. Install Dependencies
+### 3. Install Dependencies
 **Backend**
 ```bash
 cd backend
 pip install -r requirements.txt
+# Run migrations to setup database
+alembic upgrade head
 ```
 
 **Frontend**
 ```bash
-cd frontend
+cd ../frontend
 npm install
 ```
+
+---
 
 ## 🖥️ Usage
 
 ### Start the Application
-Use the helper script to start both Backend and Frontend servers:
+Return to the root directory and use the main startup script:
 ```bash
-./start_dev.sh
+./start_bot.sh
 ```
-- **Dashboard**: Open [http://localhost:5173](http://localhost:5173) in your browser.
-- **API Docs**: Access Swagger UI at [http://localhost:8000/docs](http://localhost:8000/docs).
+This script handles everything:
+- Starts the Backend API.
+- Starts the Frontend Dashboard.
+- Checks/Starts Ngrok.
+- Prevents your PC from sleeping (MacOS).
 
-### Workflow
-1.  **Connect**: On the dashboard, click **"Connect TopStep"**.
-2.  **Select Account**: Choose your funded/challenge account from the list.
-3.  **Enable Trading**: Ensure the configuration status says **"TRADING ON"**.
-4.  **Send Signals**: Point your TradingView alerts to your webhook URL (e.g., via ngrok):
-    - URL: `https://your-ngrok-url.io/api/webhook`
-    - Payload:
-    ```json
-    {
-      "ticker": "MNQ",
-      "action": "BUY",
-      "entry_price": 18500,
-      "sl_offset": 20,
-      "tp_offset": 40
-    }
-    ```
+- **Dashboard**: [http://localhost:5173](http://localhost:5173)
+- **API Docs**: [http://localhost:8000/docs](http://localhost:8000/docs)
 
-## 🛡️ Risk Management
-- **Blocked Times**: Trading is disabled by default during high volatility windows (e.g. 15:25-15:45 Brussels Time). 
-- **Daily Loss**: Trading stops if daily P&L hits the limit (default -$1000).
+### 🌍 Ngrok & Webhook Setup
 
-## 📂 Project Structure
-- `backend/`: FastAPI application, database models, and trading logic.
-- `frontend/`: React + Vite dashboard application.
-- `docs/`: Detailed Product Requirements and Architecture validation.
+To receive alerts from TradingView, your local bot needs a public URL. This is handled by **Ngrok**.
+
+1. **Install Ngrok**: If not already installed, download it from [ngrok.com](https://ngrok.com).
+2. **Auth Token**: Run `ngrok config add-authtoken <your_token>` (get it from your Ngrok dashboard).
+3. **Automatic Start**: Where you run `./start_bot.sh`, it will automatically look for Ngrok and create a tunnel. 
+4. **Copy URL**: The script will print your Webhook URL in the terminal (e.g., `https://a1b2c3d4.ngrok-free.app/api/webhook`).
+
+**Use this URL in your TradingView Alert settings.**
+
+---
+
+## 📡 TradingView Alert Configuration
+
+Configure your TradingView alerts to send a JSON payload to your Webhook URL.
+
+**Webhook URL**: `https://your-ngrok-url.app/api/webhook`
+
+**Message (JSON Payload)**:
+```json
+{
+  "ticker": "MNQ1!",
+  "type": "SIGNAL",
+  "direction": "SELL",
+  "entry": 25955,
+  "stop": 25980,
+  "tp": 25920
+}
+```
+*Note: You can use TradingView placeholders like `{{close}}`, `{{plot("SL")}}`, etc. to make this dynamic.*
+
+---
+
+## 🛠️ Maintenance & Backup
+
+The bot handles maintenance automatically:
+- **Daily Backups**: Saved to `./backups` every day at 03:00 UTC.
+- **Startup Checks**: Checks if a backup exists for today on startup; if not, creates one.
+- **Log Cleaning**: Logs older than 7 days are auto-deleted.
+
+To manually restore, replace `topstepbot.db` with a file from `backups/`.
+
+---
+
+## ⚠️ Security Note
+This application runs locally. **Your credentials and database never leave your machine.**
+The `.gitignore` file ensures standard sensitive files (`.env`, `*.db`, `backups/`) are ignored by Git.

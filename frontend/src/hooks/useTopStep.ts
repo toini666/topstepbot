@@ -2,8 +2,7 @@ import { useState, useEffect } from 'react';
 import axios from 'axios';
 import { toast } from 'sonner';
 import type { Trade, Log, Account, Position, Order, HistoricalTrade, Config } from '../types';
-
-const API_BASE = "http://localhost:8000/api";
+import { API_BASE } from '../config';
 
 export const useTopStep = () => {
     const [trades, setTrades] = useState<Trade[]>([]);
