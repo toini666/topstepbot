@@ -99,11 +99,22 @@ class RiskEngine:
         Returns True if trading is ALLOWED.
         Checks against configurable blocked periods.
         """
+        now_bru_dt = datetime.now(BRUSSELS_TZ)
+        now_bru = now_bru_dt.time()
+        
+        # 0. Weekend Block (Sat=5, Sun=6) - MANDATORY CHECK
+        if now_bru_dt.weekday() >= 5:
+             day_name = now_bru_dt.strftime("%A")
+             return False, f"Market Closed (Weekend: {day_name})"
+
+        # 1. Daily Market Closed Block (22:00 - 00:00) - MANDATORY
+        # User confirmed market closed from 22:00 to midnight
+        if now_bru >= time(22, 0):
+             return False, "Market Closed (Daily: > 22:00)"
+
         # Feature Toggle Check
         if not self.settings.blocked_periods_enabled:
             return True, "OK"
-
-        now_bru = datetime.now(BRUSSELS_TZ).time()
         
         for block in self.settings.blocked_periods:
             try:

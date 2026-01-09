@@ -241,6 +241,10 @@ class TelegramBot:
             
             state = "🟢 ENABLED" if enable else "🔴 DISABLED"
             await self.reply(f"✅ Master Switch {state}")
+            
+            # Log Action
+            db.add(Log(level="WARNING", message=f"Telegram: Master Switch set to {val}"))
+            db.commit()
         except Exception as e:
             await self.reply(f"❌ Failed to toggle switch: {e}")
         finally:
@@ -297,6 +301,10 @@ class TelegramBot:
                 count += 1
             
             await self.reply(f"✅ Flatten Complete. Closed {count} positions and cancelled orders.")
+            
+            # Log Action
+            db.add(Log(level="WARNING", message=f"Telegram: Flatten Executed (Closed {count} pos, Cancelled Orders)"))
+            db.commit()
 
         except Exception as e:
             await self.reply(f"❌ Flatten Error: {e}")
@@ -313,7 +321,12 @@ class TelegramBot:
             account_id = int(setting.value)
             
             await topstep_client.cancel_all_orders(account_id)
+            await topstep_client.cancel_all_orders(account_id)
             await self.reply("✅ All working orders cancelled.")
+            
+            # Log Action
+            db.add(Log(level="WARNING", message="Telegram: All Orders Cancelled"))
+            db.commit()
         finally:
             db.close()
 
@@ -363,6 +376,10 @@ class TelegramBot:
                 topstep_client.account_id = new_id
                 
                 await self.reply(f"✅ Switched to Account ID: {new_id}")
+
+                # Log Action
+                db.add(Log(level="WARNING", message=f"Telegram: Switched to Account {new_id}"))
+                db.commit()
             finally:
                 db.close()
                 
