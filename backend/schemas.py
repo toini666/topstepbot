@@ -10,6 +10,7 @@ class TradingViewAlert(BaseModel):
     entry: float
     stop: float
     tp: float
+    strat: Optional[str] = "default" # Strategy Name
 
 # --- Trade Schemas ---
 class TradeBase(BaseModel):
@@ -29,6 +30,8 @@ class TradeResponse(TradeBase):
     pnl: Optional[float]
     timestamp: datetime
     rejection_reason: Optional[str] = None
+    strategy: Optional[str] = "default"
+    topstep_order_id: Optional[str] = None
 
     class Config:
         from_attributes = True

@@ -12,7 +12,9 @@ router = APIRouter()
 @router.post("/webhook")
 async def receive_webhook(alert: TradingViewAlert, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
     # 1. Log Reception
-    log_msg = f"Webhook Received: {alert.type} - {alert.ticker} {alert.direction} @ {alert.entry}"
+    strategy_name = alert.strat or "default"
+    log_msg = f"Webhook Received: {alert.type} - {alert.ticker} {alert.direction} @ {alert.entry} [{strategy_name}]"
+    
     # Use model_dump_json for Pydantic v2
     log = Log(level="INFO", message=log_msg, details=alert.model_dump_json(exclude_none=True))
     db.add(log)
@@ -35,7 +37,8 @@ async def receive_webhook(alert: TradingViewAlert, background_tasks: BackgroundT
             action=alert.direction,
             price=alert.entry,
             sl=alert.stop,
-            tp=alert.tp
+            tp=alert.tp,
+            strategy=strategy_name
         )
 
         # Global Switch
@@ -157,7 +160,8 @@ async def receive_webhook(alert: TradingViewAlert, background_tasks: BackgroundT
             sl=alert.stop,
             tp=alert.tp,
             quantity=qty,
-            status=TradeStatus.PENDING
+            status=TradeStatus.PENDING,
+            strategy=strategy_name
         )
         db.add(trade)
         db.commit()

@@ -27,8 +27,27 @@ function App() {
 
 
 
+  // Map Strategy from Local Trades
+  const strategyMap = useMemo(() => {
+    const map = new Map<string, string>();
+    trades.forEach(t => {
+      if (t.topstep_order_id && t.strategy) {
+        map.set(String(t.topstep_order_id), t.strategy);
+      }
+    });
+    return map;
+  }, [trades]);
+
+  // Enrich Historical Trades with Strategy
+  const enrichedHistory = useMemo(() => {
+    return historicalTrades.map(ht => ({
+      ...ht,
+      strategy: strategyMap.get(String(ht.orderId)) || 'RobReversal'
+    }));
+  }, [historicalTrades, strategyMap]);
+
   // Aggregate Trades for display
-  const aggregatedTrades = useMemo(() => aggregateTrades(historicalTrades), [historicalTrades]);
+  const aggregatedTrades = useMemo(() => aggregateTrades(enrichedHistory), [enrichedHistory]);
 
   const isMarketOpen = marketStatus.is_open;
   // Optional: We can also show marketStatus.reason if needed in UI
@@ -464,6 +483,7 @@ function App() {
                     <tr>
                       <th className="py-3 px-4">Entry Time</th>
                       <th className="py-3 px-4">Exit Time</th>
+                      <th className="py-3 px-4">Strategy</th>
                       <th className="py-3 px-4">Symbol</th>
                       <th className="py-3 px-4 text-center">Side</th>
                       <th className="py-3 px-4 text-center">Qty</th>
@@ -481,6 +501,9 @@ function App() {
                         </td>
                         <td className="py-3 px-4 text-slate-500 font-mono text-xs">
                           {format(new Date(trade.exitTime), 'HH:mm:ss')}
+                        </td>
+                        <td className="py-3 px-4 text-violet-300 font-mono text-xs">
+                          {trade.strategy || '-'}
                         </td>
                         <td className="py-3 px-4 font-bold text-white">{trade.symbol}</td>
                         <td className="py-3 px-4 text-center">

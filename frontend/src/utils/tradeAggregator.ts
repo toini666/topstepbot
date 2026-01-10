@@ -6,7 +6,7 @@ export const aggregateTrades = (trades: HistoricalTrade[]): AggregatedTrade[] =>
         new Date(a.creationTimestamp).getTime() - new Date(b.creationTimestamp).getTime()
     );
 
-    const openPositions: { [contractId: string]: HistoricalTrade[] } = {};
+    const openPositions: { [key: string]: HistoricalTrade[] } = {};
     const aggregated: AggregatedTrade[] = [];
 
     // Helper to normalize side (Handles '0', '1', 'Buy', 'Long' etc)
@@ -20,13 +20,17 @@ export const aggregateTrades = (trades: HistoricalTrade[]): AggregatedTrade[] =>
 
     for (const trade of sortedTrades) {
         const contractId = trade.contractId;
+        // const strategy = trade.strategy || 'default';
+        // const key = `${contractId}|${strategy}`;
+        // REVERT to Contract ID only grouping to better handle SL/TP exits which might lack strategy label
+        const key = contractId;
 
         // Ensure inventory exists
-        if (!openPositions[contractId]) {
-            openPositions[contractId] = [];
+        if (!openPositions[key]) {
+            openPositions[key] = [];
         }
 
-        const inventory = openPositions[contractId];
+        const inventory = openPositions[key];
 
         // Determine if this trade closes existing inventory
         // A trade is a CLOSE if there is inventory AND the side is opposite
@@ -43,6 +47,7 @@ export const aggregateTrades = (trades: HistoricalTrade[]): AggregatedTrade[] =>
             let totalEntrySize = 0;
             let firstEntryTime = new Date().toISOString();
             let entrySideLabel: 'LONG' | 'SHORT' = 'LONG'; // Default
+            let entryStrategy = 'default';
             let matchCount = 0;
 
             while (remainingCloseSize > 0 && inventory.length > 0) {
@@ -57,6 +62,7 @@ export const aggregateTrades = (trades: HistoricalTrade[]): AggregatedTrade[] =>
                     firstEntryTime = openTrade.creationTimestamp;
                     const normalizedSide = getSideStr(openTrade.side);
                     entrySideLabel = normalizedSide === 'BUY' ? 'LONG' : 'SHORT';
+                    entryStrategy = openTrade.strategy || 'default';
                 }
 
                 // Accumulate Cost
@@ -91,7 +97,8 @@ export const aggregateTrades = (trades: HistoricalTrade[]): AggregatedTrade[] =>
                     entryPrice: totalEntryCost / totalEntrySize,
                     exitPrice: trade.price,
                     pnl: trade.profitAndLoss || 0,
-                    fees: collectedFees
+                    fees: collectedFees,
+                    strategy: entryStrategy
                 });
             }
 

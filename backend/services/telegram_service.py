@@ -54,10 +54,11 @@ class TelegramService:
         msg = "🛑 <b>TopStep Bot Shutting Down</b>\nSystem is offline."
         await self.send_message(msg)
 
-    async def notify_signal(self, ticker: str, action: str, price: float, sl: float, tp: float):
+    async def notify_signal(self, ticker: str, action: str, price: float, sl: float, tp: float, strategy: str = "default"):
         emoji = "🟢" if action.upper() == "BUY" else "🔴"
+        strat_tag = f"[{strategy}] " if strategy != "default" else ""
         msg = (
-            f"⚡ <b>Signal Received</b>\n"
+            f"⚡ <b>{strat_tag}Signal Received</b>\n"
             f"{emoji} <b>{action.upper()} {ticker}</b>\n"
             f"Price: {price}\n"
             f"SL: {sl} | TP: {tp}"
@@ -66,6 +67,9 @@ class TelegramService:
 
     async def notify_order_submitted(self, ticker: str, action: str, quantity: int, price: float, order_id: str):
         # Notify that order was sent to broker (Price is Requested Price, not Fill)
+        # We could add strategy here too if passed, but typically signal is enough context.
+        # But 'Order Executed' log uses trade object, so we could theoretically pull it.
+        # For now, let's keep it simple as requested: "indiquer également dans les logs / notifs telegram cette info"
         amount_str = f"{action} {quantity}x {ticker}"
         msg = f"🚀 <b>Order Submitted</b>\n{amount_str} @ {price}\nOrder ID: {order_id}"
         await self.send_message(msg)

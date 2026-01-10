@@ -39,6 +39,7 @@ class Trade(Base):
     exit_time = Column(DateTime, nullable=True)
     topstep_order_id = Column(String, nullable=True)
     rejection_reason = Column(String, nullable=True)
+    strategy = Column(String, default="default", nullable=True)
 
 class TickerMap(Base):
     __tablename__ = "ticker_maps"

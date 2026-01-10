@@ -10,6 +10,8 @@ export interface Trade {
     pnl?: number;
     timestamp: string;
     rejection_reason?: string;
+    strategy?: string;
+    topstep_order_id?: string;
 }
 
 export interface Log {
@@ -66,6 +68,7 @@ export interface HistoricalTrade {
     size: number;
     voided: boolean;
     orderId: number;
+    strategy?: string;
 }
 
 export interface AggregatedTrade {
@@ -79,6 +82,7 @@ export interface AggregatedTrade {
     exitPrice: number;
     pnl: number;
     fees: number;
+    strategy?: string;
 }
 
 export interface TimeBlock {

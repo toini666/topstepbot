@@ -38,7 +38,8 @@ export function MockWebhookModal({ isOpen, onClose }: MockWebhookModalProps) {
         direction: 'BUY',
         entry: "20000",
         sl: "19950",
-        tp: "20050"
+        tp: "20050",
+        strategy_name: "RobReversal"
     });
 
     // Dropdown states
@@ -84,7 +85,8 @@ export function MockWebhookModal({ isOpen, onClose }: MockWebhookModalProps) {
                 direction: formData.direction, // "BUY" or "SELL"
                 entry: entryVal,
                 stop: slVal,
-                tp: tpVal
+                tp: tpVal,
+                strat: formData.strategy_name || "default"
             };
 
             await axios.post(`${API_BASE}/webhook`, payload);
@@ -231,6 +233,17 @@ export function MockWebhookModal({ isOpen, onClose }: MockWebhookModalProps) {
                                 placeholder="0.00"
                             />
                         </div>
+                    </div>
+
+                    <div>
+                        <label className="block text-xs font-bold text-slate-400 mb-1">Strategy (Optional)</label>
+                        <input
+                            type="text"
+                            value={formData.strategy_name}
+                            onChange={e => setFormData({ ...formData, strategy_name: e.target.value })}
+                            className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-violet-400 focus:outline-none focus:border-violet-500 font-mono"
+                            placeholder="RobReversal"
+                        />
                     </div>
 
 
