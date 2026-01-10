@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from backend.database import init_db, get_db, Setting
-from backend.routers import webhook, dashboard, mapping
+from backend.routers import webhook, dashboard, mapping, strategies
 from contextlib import asynccontextmanager
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from backend.services.risk_engine import RiskEngine
@@ -402,6 +402,7 @@ app.add_middleware(
 app.include_router(webhook.router, prefix="/api")
 app.include_router(dashboard.router, prefix="/api")
 app.include_router(mapping.router, prefix="/api")
+app.include_router(strategies.router, prefix="/api")
 
 @app.get("/")
 def read_root():

@@ -31,7 +31,7 @@ This document outlines the roadmap to evolve the current functional prototype in
 - [ ] **Equity Curve Plotting**: A chart in the dashboard showing P&L evolution over the day/week.
 - [x] **Real-time Daily PnL**: View realized P&L for the day directly in the header stats (Net PnL displayed in Telegram).
 - [ ] **Trade Reconciliation**: A nightly job that downloads all official trades from TopStep API and checks them against local DB to find discrepancies (slippage, missed fills).
-- [ ] **tagging System**: Add "Strategy Tags" to incoming webhooks (e.g., "Strategy A", "Strategy B") to analyze which strategies perform best in the dashboard.
+- [x] **Strategy Tagging**: **(COMPLETED)** Added "Strategy Tags" to incoming webhooks (e.g., "RobReversal") to label trades in the dashboard.
 - [ ] **Win/Loss & Expectancy Stats**: Auto-calculate Sharpe Ratio, Profit Factor, and Average Win/Loss on the Stats panel.
 
 ## 5. Infrastructure & DevOps

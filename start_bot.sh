@@ -16,8 +16,12 @@ fi
 
 # 1. Pre-start Cleanup
 echo "🧹 Cleaning up existing processes..."
+# Kill process occupying port 8000 (Backend)
+if lsof -t -i :8000 >/dev/null; then
+    echo "   -> Killing process on port 8000..."
+    lsof -t -i :8000 | xargs kill -9
+fi
 pkill -f "uvicorn backend.main:app" || true
-# pkill -f "ngrok" || true  <-- Removed to persist Ngrok
 pkill -f "vite" || true
 sleep 2
 

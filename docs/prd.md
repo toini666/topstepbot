@@ -15,6 +15,10 @@ The primary goal is to **automate execution** while preserving **account safety*
 - **Instrument Support**: Compatible with Futures contracts (e.g., MNQ, MES).
 - **Dynamic Sizing**: Automatically calculates position size based on Risk Amount ($) and Stop Loss distance.
 - **Contract Cache**: Optimizes performance by caching contract IDs to reduce API calls.
+- **Multi-Strategy Support**:
+    - Accepts `strat` parameter in webhook payload.
+    - Labels trades in Dashboard and Telegram with strategy name.
+    - Allows performance tracking per strategy (future scope).
 
 ### 2.2 Risk Management Engine (The "Guardian")
 Before any trade is sent to TopStep, it must pass the internal Risk Engine checks:
@@ -28,7 +32,7 @@ Before any trade is sent to TopStep, it must pass the internal Risk Engine check
 ### 2.3 Dashboard & Monitoring
 A real-time React-based dashboard provides visibility and control:
 - **Live Status**: Visual indication of connection status.
-- **Trade Feed**: Displays history of recent trades with "Today" (since local midnight) and "7 Days" (rolling) filters.
+- **Trade Feed**: Displays history of recent trades with "Today" (since local midnight) and "7 Days" (rolling) filters. Includes **Strategy Column** to identify source of trade.
 - **Daily PnL**: Real-time calculation of realized Profit & Loss.
 - **System Logs**: Detailed logs timestamped in local time.
 - **Account Selection**: Custom styled dropdown to select active trading account.

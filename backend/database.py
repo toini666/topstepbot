@@ -22,6 +22,16 @@ class TradeStatus(str, Enum):
     REJECTED = "REJECTED"
     PENDING = "PENDING"
 
+class Strategy(Base):
+    __tablename__ = "strategies"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, unique=True, index=True) # Display Name
+    tv_id = Column(String, unique=True, index=True) # ID sent in Webhook 'strat'
+    tv_id = Column(String, unique=True, index=True) # ID sent in Webhook 'strat'
+    risk_factor = Column(Float, default=1.0, nullable=False) # Multiplier of Global Risk (Default 1.0, Min 0.5)
+    created_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc))
+
 class Trade(Base):
     __tablename__ = "trades"
 

@@ -13,7 +13,23 @@ router = APIRouter()
 async def receive_webhook(alert: TradingViewAlert, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
     # 1. Log Reception
     strategy_name = alert.strat or "default"
-    log_msg = f"Webhook Received: {alert.type} - {alert.ticker} {alert.direction} @ {alert.entry} [{strategy_name}]"
+    
+    # 2. Determine Risk Amount (Strategy vs Global)
+    # Default to Global Settings
+    risk_engine = RiskEngine(db)
+    risk_to_use = risk_engine.settings.risk_per_trade
+    
+    # Check if Strategy exists in DB
+    from backend.database import Strategy
+    db_strat = db.query(Strategy).filter(Strategy.tv_id == strategy_name).first()
+    
+    if db_strat:
+        # Prioritize Strategy Factor
+        # Logic: Risk = Global Risk * Strategy Factor
+        if hasattr(db_strat, 'risk_factor'):
+             risk_to_use = risk_to_use * db_strat.risk_factor
+        
+    log_msg = f"Webhook Received: {alert.type} - {alert.ticker} {alert.direction} @ {alert.entry} [{strategy_name}] (Risk: ${risk_to_use:.2f} | Factor: {db_strat.risk_factor if db_strat else '1.0'})"
     
     # Use model_dump_json for Pydantic v2
     log = Log(level="INFO", message=log_msg, details=alert.model_dump_json(exclude_none=True))
@@ -121,7 +137,7 @@ async def receive_webhook(alert: TradingViewAlert, background_tasks: BackgroundT
         qty = risk_engine.calculate_position_size(
             entry_price=alert.entry, 
             sl_price=alert.stop, 
-            risk_amount=risk_engine.settings.risk_per_trade,
+            risk_amount=risk_to_use,
             tick_size=tick_size,
             tick_value=tick_value
         )

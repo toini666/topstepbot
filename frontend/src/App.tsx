@@ -1,19 +1,33 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useTopStep } from './hooks/useTopStep';
-import { Activity, CheckCircle, TrendingUp, DollarSign, Settings, AlertTriangle, X, Terminal, ChevronDown, ChevronRight, FileText, Copy } from 'lucide-react';
+import { Activity, CheckCircle, TrendingUp, DollarSign, Settings, AlertTriangle, X, Terminal, ChevronDown, ChevronRight, FileText, Copy, Layers } from 'lucide-react';
 import axios from 'axios';
 import { format } from 'date-fns';
 import { Toaster, toast } from 'sonner';
 import { ConfirmationModal } from './components/ConfirmationModal';
 import { ConfigModal } from './components/ConfigModal';
 import { MockWebhookModal } from './components/MockWebhookModal';
+import { StrategiesManager } from './components/StrategiesManager';
 import { aggregateTrades } from './utils/tradeAggregator';
 import { API_BASE } from './config';
 
 function App() {
   const { trades, logs, accounts, positions, orders, historicalTrades, selectedAccountId, selectAccount, connect, logout, loadMoreLogs, isConnected, loading, settings, toggleTrading, config, updateConfig, historyFilter, setHistoryFilter, marketStatus } = useTopStep();
-  const [activeTab, setActiveTab] = useState<'trading' | 'logs'>('trading');
+  const [activeTab, setActiveTab] = useState<'trading' | 'logs' | 'strategies'>('trading');
   const [expandedLogs, setExpandedLogs] = useState<Set<number>>(new Set());
+  const [selectedStrategyFilter, setSelectedStrategyFilter] = useState<string>('ALL');
+  const [strategyDropdownOpen, setStrategyDropdownOpen] = useState(false);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as HTMLElement;
+      if (strategyDropdownOpen && !target.closest('.group-strategy-selector')) {
+        setStrategyDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [strategyDropdownOpen]);
 
   const toggleLog = (id: number) => {
     const newSet = new Set(expandedLogs);
@@ -309,6 +323,16 @@ function App() {
           <FileText className="w-4 h-4" />
           Logs
         </button>
+        <button
+          onClick={() => setActiveTab('strategies')}
+          className={`px-6 py-3 rounded-xl font-bold text-sm flex items-center gap-2 transition-all ${activeTab === 'strategies'
+            ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/20'
+            : 'bg-slate-900/50 text-slate-400 hover:text-white hover:bg-slate-800'
+            }`}
+        >
+          <Layers className="w-4 h-4" />
+          Strategies
+        </button>
 
         <div className="ml-auto flex gap-4">
           <button
@@ -475,6 +499,54 @@ function App() {
                   >
                     7 Days
                   </button>
+
+                  <div className="w-px h-4 bg-slate-700 mx-2 self-center"></div>
+
+                  <div className="relative group-strategy-selector">
+                    <button
+                      onClick={() => setStrategyDropdownOpen(!strategyDropdownOpen)}
+                      className="flex items-center gap-2 bg-slate-800 text-slate-300 text-xs font-medium px-3 py-1.5 rounded-md border border-slate-700 hover:bg-slate-700 hover:text-white transition-colors"
+                    >
+                      <span>{selectedStrategyFilter === 'ALL' ? 'All Strategies' : selectedStrategyFilter}</span>
+                      <ChevronDown className={`w-3 h-3 transition-transform duration-200 ${strategyDropdownOpen ? 'rotate-180' : ''}`} />
+                    </button>
+
+                    {strategyDropdownOpen && (
+                      <div className="absolute top-full right-0 mt-2 w-48 bg-slate-800 border border-slate-700 rounded-xl shadow-xl overflow-hidden z-20 animate-fade-in-down">
+                        <div className="max-h-60 overflow-y-auto custom-scrollbar p-1">
+                          <button
+                            onClick={() => {
+                              setSelectedStrategyFilter('ALL');
+                              setStrategyDropdownOpen(false);
+                            }}
+                            className={`w-full text-left px-3 py-2 rounded-lg flex items-center justify-between transition-colors text-xs ${selectedStrategyFilter === 'ALL'
+                              ? 'bg-indigo-500/10 text-indigo-400'
+                              : 'text-slate-300 hover:bg-slate-700/50'
+                              }`}
+                          >
+                            <span>All Strategies</span>
+                            {selectedStrategyFilter === 'ALL' && <CheckCircle className="w-3 h-3" />}
+                          </button>
+                          {[...new Set(aggregatedTrades.map(t => t.strategy).filter(Boolean))].map(strat => (
+                            <button
+                              key={strat}
+                              onClick={() => {
+                                setSelectedStrategyFilter(strat || '');
+                                setStrategyDropdownOpen(false);
+                              }}
+                              className={`w-full text-left px-3 py-2 rounded-lg flex items-center justify-between transition-colors text-xs ${selectedStrategyFilter === strat
+                                ? 'bg-indigo-500/10 text-indigo-400'
+                                : 'text-slate-300 hover:bg-slate-700/50'
+                                }`}
+                            >
+                              <span>{strat}</span>
+                              {selectedStrategyFilter === strat && <CheckCircle className="w-3 h-3" />}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </h2>
               <div className="overflow-x-auto">
@@ -494,36 +566,38 @@ function App() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-800/50">
-                    {aggregatedTrades.map((trade) => (
-                      <tr key={trade.id} className="hover:bg-slate-800/30 transition-colors">
-                        <td className="py-3 px-4 text-slate-500 font-mono text-xs">
-                          {format(new Date(trade.entryTime), 'MM/dd HH:mm:ss')}
-                        </td>
-                        <td className="py-3 px-4 text-slate-500 font-mono text-xs">
-                          {format(new Date(trade.exitTime), 'HH:mm:ss')}
-                        </td>
-                        <td className="py-3 px-4 text-violet-300 font-mono text-xs">
-                          {trade.strategy || '-'}
-                        </td>
-                        <td className="py-3 px-4 font-bold text-white">{trade.symbol}</td>
-                        <td className="py-3 px-4 text-center">
-                          <span className={`px-2 py-1 rounded-md text-xs font-bold ${trade.side === 'LONG' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
-                            {trade.side}
-                          </span>
-                        </td>
-                        <td className="py-3 px-4 text-center font-mono">{trade.size}</td>
-                        <td className="py-3 px-4 text-right font-mono">{trade.entryPrice.toFixed(2)}</td>
-                        <td className="py-3 px-4 text-right font-mono">{trade.exitPrice.toFixed(2)}</td>
-                        <td className="py-3 px-4 text-right font-mono text-slate-400">
-                          {trade.fees ? `$${trade.fees.toFixed(2)}` : '-'}
-                        </td>
-                        <td className={`py-3 px-4 text-right font-mono font-bold ${trade.pnl > 0 ? 'text-green-400' :
-                          trade.pnl < 0 ? 'text-red-400' : 'text-slate-500'
-                          }`}>
-                          {trade.pnl ? `$${trade.pnl.toFixed(2)}` : '-'}
-                        </td>
-                      </tr>
-                    ))}
+                    {aggregatedTrades
+                      .filter(t => selectedStrategyFilter === 'ALL' || t.strategy === selectedStrategyFilter)
+                      .map((trade) => (
+                        <tr key={trade.id} className="hover:bg-slate-800/30 transition-colors">
+                          <td className="py-3 px-4 text-slate-500 font-mono text-xs">
+                            {format(new Date(trade.entryTime), 'MM/dd HH:mm:ss')}
+                          </td>
+                          <td className="py-3 px-4 text-slate-500 font-mono text-xs">
+                            {format(new Date(trade.exitTime), 'HH:mm:ss')}
+                          </td>
+                          <td className="py-3 px-4 text-violet-300 font-mono text-xs">
+                            {trade.strategy || '-'}
+                          </td>
+                          <td className="py-3 px-4 font-bold text-white">{trade.symbol}</td>
+                          <td className="py-3 px-4 text-center">
+                            <span className={`px-2 py-1 rounded-md text-xs font-bold ${trade.side === 'LONG' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
+                              {trade.side}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4 text-center font-mono">{trade.size}</td>
+                          <td className="py-3 px-4 text-right font-mono">{trade.entryPrice.toFixed(2)}</td>
+                          <td className="py-3 px-4 text-right font-mono">{trade.exitPrice.toFixed(2)}</td>
+                          <td className="py-3 px-4 text-right font-mono text-slate-400">
+                            {trade.fees ? `$${trade.fees.toFixed(2)}` : '-'}
+                          </td>
+                          <td className={`py-3 px-4 text-right font-mono font-bold ${trade.pnl > 0 ? 'text-green-400' :
+                            trade.pnl < 0 ? 'text-red-400' : 'text-slate-500'
+                            }`}>
+                            {trade.pnl ? `$${trade.pnl.toFixed(2)}` : '-'}
+                          </td>
+                        </tr>
+                      ))}
                     {aggregatedTrades.length === 0 && (
                       <tr>
                         <td colSpan={9} className="py-8 text-center text-slate-500 italic">No closed trades found.</td>
@@ -717,6 +791,9 @@ function App() {
             </div>
           )
         }
+
+        {/* STRATEGIES TAB */}
+        {activeTab === 'strategies' && <StrategiesManager />}
 
         {/* Confirmation Modal */}
         <ConfirmationModal

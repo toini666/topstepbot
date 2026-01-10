@@ -125,9 +125,13 @@ Configure your TradingView alerts to send a JSON payload to your Webhook URL.
   "direction": "SELL",
   "entry": 25955,
   "stop": 25980,
-  "tp": 25920
+  "entry": 25955,
+  "stop": 25980,
+  "tp": 25920,
+  "strat": "RobReversal"
 }
 ```
+*Note: The `strat` parameter is optional (defaults to "default" if omitted).*
 *Note: You can use TradingView placeholders like `{{close}}`, `{{plot("SL")}}`, etc. to make this dynamic.*
 
 ---

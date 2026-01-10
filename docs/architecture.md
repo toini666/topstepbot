@@ -57,6 +57,7 @@ graph TD
 ## 3. Data Flow: Trade Execution
 
 1.  **Trigger**: `routers/webhook.py` receives a POST request (Real or Mock).
+    - **Payload**: Now accepts optional `strat` parameter (e.g., "RobReversal").
 2.  **Validation (Type Check)**:
     - If `type == "SETUP"`: Logs the Setup event and exits (No Trade).
     - If `type == "SIGNAL"`: Proceeds to trade execution logic.

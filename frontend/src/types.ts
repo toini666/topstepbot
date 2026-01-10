@@ -106,3 +106,11 @@ export interface TickerMap {
     tick_size: number;
     tick_value: number;
 }
+
+export interface Strategy {
+    id: number;
+    name: string;
+    tv_id: string;
+    risk_factor: number;
+    created_at: string;
+}

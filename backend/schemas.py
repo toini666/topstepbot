@@ -12,6 +12,21 @@ class TradingViewAlert(BaseModel):
     tp: float
     strat: Optional[str] = "default" # Strategy Name
 
+# --- Strategy Schemas ---
+class StrategyBase(BaseModel):
+    name: str
+    tv_id: str
+    risk_factor: float = 1.0
+
+class StrategyCreate(StrategyBase):
+    pass
+
+class StrategyResponse(StrategyBase):
+    id: int
+    created_at: datetime
+    class Config:
+        from_attributes = True
+
 # --- Trade Schemas ---
 class TradeBase(BaseModel):
     ticker: str
