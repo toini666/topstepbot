@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useTopStep } from './hooks/useTopStep';
-import { Activity, CheckCircle, TrendingUp, DollarSign, Settings, AlertTriangle, X, Terminal, ChevronDown, ChevronRight, FileText, Copy, Layers } from 'lucide-react';
+import { Activity, CheckCircle, TrendingUp, DollarSign, Settings, AlertTriangle, X, Terminal, ChevronDown, ChevronRight, FileText, Copy, Layers, Power } from 'lucide-react';
 import axios from 'axios';
 import { format } from 'date-fns';
 import { Toaster, toast } from 'sonner';
@@ -8,11 +8,12 @@ import { ConfirmationModal } from './components/ConfirmationModal';
 import { ConfigModal } from './components/ConfigModal';
 import { MockWebhookModal } from './components/MockWebhookModal';
 import { StrategiesManager } from './components/StrategiesManager';
+import { RiskInput } from './components/RiskInput';
 import { aggregateTrades } from './utils/tradeAggregator';
 import { API_BASE } from './config';
 
 function App() {
-  const { trades, logs, accounts, positions, orders, historicalTrades, selectedAccountId, setSelectedAccountId, connect, logout, loadMoreLogs, isConnected, loading, selectedAccountSettings, toggleAccountTrading, config, updateConfig, historyFilter, setHistoryFilter, marketStatus, strategies, updateAccountSettings } = useTopStep();
+  const { trades, logs, accounts, positions, orders, historicalTrades, selectedAccountId, setSelectedAccountId, connect, logout, loadMoreLogs, isConnected, loading, selectedAccountSettings, toggleAccountTrading, config, updateConfig, historyFilter, setHistoryFilter, marketStatus, strategies, updateAccountSettings, accountSettings } = useTopStep();
   const [activeTab, setActiveTab] = useState<'trading' | 'logs' | 'strategies'>('trading');
   const [expandedLogs, setExpandedLogs] = useState<Set<number>>(new Set());
   const [selectedStrategyFilter, setSelectedStrategyFilter] = useState<string>('ALL');
@@ -230,8 +231,14 @@ function App() {
                             : 'text-slate-300'
                             }`}
                         >
-                          <span className="font-mono text-xs truncate">{acc.name} ({acc.id})</span>
-                          {acc.id === selectedAccountId && <CheckCircle className="w-3 h-3" />}
+                          <div className="flex items-center gap-2 truncate">
+                            {/* Trading Status Icon */}
+                            <div className={`p-0.5 rounded-full ${accountSettings[acc.id]?.trading_enabled ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-500'}`} title={accountSettings[acc.id]?.trading_enabled ? "Trading ON" : "Trading OFF"}>
+                              <Power className="w-3 h-3" />
+                            </div>
+                            <span className="font-mono text-xs truncate">{acc.name} ({acc.id})</span>
+                          </div>
+                          {acc.id === selectedAccountId && <CheckCircle className="w-3 h-3 flex-shrink-0" />}
                         </button>
                       ))}
                     </div>
@@ -487,22 +494,14 @@ function App() {
                     </div>
                     <div className="flex justify-between items-center">
                       <span className="text-slate-400 text-sm">Risk / Trade</span>
-                      <div className="flex items-center gap-2">
-                        <span className="text-slate-500">$</span>
-                        <input
-                          type="number"
-                          value={selectedAccountSettings?.risk_per_trade ?? 200}
-                          onChange={(e) => {
-                            const val = parseFloat(e.target.value) || 200;
-                            if (selectedAccountId) {
-                              updateAccountSettings(selectedAccountId, { risk_per_trade: val });
-                            }
-                          }}
-                          className="w-24 bg-slate-800 border border-slate-700 rounded px-2 py-1 text-white font-mono text-right focus:outline-none focus:border-blue-500"
-                          step="25"
-                          min="0"
-                        />
-                      </div>
+                      <RiskInput
+                        currentValue={selectedAccountSettings?.risk_per_trade ?? 200}
+                        onSave={(val) => {
+                          if (selectedAccountId) {
+                            updateAccountSettings(selectedAccountId, { risk_per_trade: val });
+                          }
+                        }}
+                      />
                     </div>
                     <div className="flex justify-between items-center border-t border-slate-800 pt-4 mt-auto">
                       <span className="text-slate-400 text-sm">Balance</span>
@@ -835,7 +834,7 @@ function App() {
         }
 
         {/* STRATEGIES TAB */}
-        {activeTab === 'strategies' && <StrategiesManager />}
+        {activeTab === 'strategies' && <StrategiesManager selectedAccountId={selectedAccountId} />}
 
         {/* Confirmation Modal */}
         <ConfirmationModal

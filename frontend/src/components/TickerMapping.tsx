@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Trash2, Plus, RefreshCw, Layers } from 'lucide-react';
+import { API_BASE } from '../config';
 import type { TickerMap } from '../types';
 
 interface TickerMappingProps {
@@ -18,13 +19,9 @@ export function TickerMapping({ mappings, onAdd, onDelete }: TickerMappingProps)
     const fetchContracts = async () => {
         setLoadingContracts(true);
         try {
-            const response = await fetch(`${import.meta.env.VITE_API_URL}/api/mappings/available-contracts`);
+            const response = await fetch(`${API_BASE}/settings/contracts/available`);
             if (response.ok) {
                 const data = await response.json();
-                // Filter or Sort?
-                // Group by similar names or just list all
-                // Let's just store top 100 or specific relevant ones if list is huge?
-                // For now store all.
                 setAvailableContracts(data || []);
             }
         } catch (error) {
@@ -55,9 +52,6 @@ export function TickerMapping({ mappings, onAdd, onDelete }: TickerMappingProps)
             setAdding(false);
         }
     };
-
-    // Group contracts for better display? maybe later.
-    // For now simple list.
 
     return (
         <div className="space-y-4">

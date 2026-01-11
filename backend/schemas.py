@@ -190,6 +190,7 @@ class LogResponse(BaseModel):
 class TimeBlock(BaseModel):
     start: str  # HH:MM
     end: str  # HH:MM
+    enabled: bool = True
 
 
 class GlobalSettingsResponse(BaseModel):

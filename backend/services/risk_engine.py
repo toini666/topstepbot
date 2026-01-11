@@ -206,6 +206,10 @@ class RiskEngine:
         now_bru = datetime.now(BRUSSELS_TZ).time()
         
         for block in settings.get("blocked_periods", []):
+            # Respect the 'enabled' flag added recently
+            if not block.get("enabled", True):
+                continue
+                
             try:
                 start_h, start_m = map(int, block["start"].split(':'))
                 end_h, end_m = map(int, block["end"].split(':'))

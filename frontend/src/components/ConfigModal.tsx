@@ -1,9 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import { X, Save, Plus, Trash2, Clock, Settings, Calendar } from 'lucide-react';
 import { toast } from 'sonner';
 import type { GlobalConfig, TimeBlock, TickerMap, TradingSession } from '../types';
 import { TickerMapping } from './TickerMapping';
+import { TimePicker } from './TimePicker';
 import { API_BASE } from '../config';
 
 interface ConfigModalProps {
@@ -26,14 +27,17 @@ export function ConfigModal({ isOpen, onClose, config, onSave }: ConfigModalProp
 
     // Sessions
     const [sessions, setSessions] = useState<TradingSession[]>([]);
+    const [sessionsModified, setSessionsModified] = useState<Record<number, TradingSession>>({});
 
     // Mappings
     const [mappings, setMappings] = useState<TickerMap[]>([]);
 
     const [saving, setSaving] = useState(false);
+    const initializedRef = useRef(false);
 
     useEffect(() => {
-        if (isOpen) {
+        if (isOpen && !initializedRef.current) {
+            // Only initialize state ONCE when opening
             setBlockedPeriodsEnabled(config.blocked_periods_enabled);
             setBlockedPeriods([...config.blocked_periods]);
             setAutoFlattenEnabled(config.auto_flatten_enabled ?? false);
@@ -42,6 +46,10 @@ export function ConfigModal({ isOpen, onClose, config, onSave }: ConfigModalProp
             setMarketCloseTime(config.market_close_time || "22:00");
             fetchSessions();
             fetchMappings();
+            initializedRef.current = true;
+        } else if (!isOpen) {
+            initializedRef.current = false;
+            setSessionsModified({});
         }
     }, [isOpen, config]);
 
@@ -95,20 +103,37 @@ export function ConfigModal({ isOpen, onClose, config, onSave }: ConfigModalProp
 
     const handleSave = async () => {
         setSaving(true);
-        await onSave({
-            blocked_periods_enabled: blockedPeriodsEnabled,
-            blocked_periods: blockedPeriods,
-            auto_flatten_enabled: autoFlattenEnabled,
-            auto_flatten_time: autoFlattenTime,
-            market_open_time: marketOpenTime,
-            market_close_time: marketCloseTime
-        });
-        setSaving(false);
-        onClose();
+        try {
+            // Save Global Config
+            await onSave({
+                blocked_periods_enabled: blockedPeriodsEnabled,
+                blocked_periods: blockedPeriods,
+                auto_flatten_enabled: autoFlattenEnabled,
+                auto_flatten_time: autoFlattenTime,
+                market_open_time: marketOpenTime,
+                market_close_time: marketCloseTime
+            });
+
+            // Save Sessions if modified
+            const promises = Object.values(sessionsModified).map(session =>
+                axios.put(`${API_BASE}/settings/sessions/${session.id}`, session)
+            );
+
+            if (promises.length > 0) {
+                await Promise.all(promises);
+                toast.success("Sessions Updated");
+            }
+
+        } catch (e) {
+            toast.error("Error saving changes");
+        } finally {
+            setSaving(false);
+            onClose();
+        }
     };
 
     const addTimeBlock = () => {
-        setBlockedPeriods([...blockedPeriods, { start: "00:00", end: "00:00" }]);
+        setBlockedPeriods([...blockedPeriods, { start: "00:00", end: "00:00", enabled: true }]);
     };
 
     const removeTimeBlock = (index: number) => {
@@ -117,10 +142,26 @@ export function ConfigModal({ isOpen, onClose, config, onSave }: ConfigModalProp
         setBlockedPeriods(newBlocks);
     };
 
-    const updateTimeBlock = (index: number, field: 'start' | 'end', value: string) => {
+    const updateTimeBlock = (index: number, field: keyof TimeBlock, value: any) => {
         const newBlocks = [...blockedPeriods];
         newBlocks[index] = { ...newBlocks[index], [field]: value };
         setBlockedPeriods(newBlocks);
+    };
+
+    const updateSession = (id: number, field: keyof TradingSession, value: any) => {
+        const session = sessions.find(s => s.id === id);
+        if (!session) return;
+
+        const updated = { ...session, [field]: value };
+
+        // Update local list
+        setSessions(sessions.map(s => s.id === id ? updated : s));
+
+        // Track modification
+        setSessionsModified(prev => ({
+            ...prev,
+            [id]: updated
+        }));
     };
 
     return (
@@ -167,18 +208,14 @@ export function ConfigModal({ isOpen, onClose, config, onSave }: ConfigModalProp
                                     Market Hours (Brussels TZ)
                                 </label>
                                 <div className="flex items-center gap-3">
-                                    <input
-                                        type="time"
+                                    <TimePicker
                                         value={marketOpenTime}
-                                        onChange={(e) => setMarketOpenTime(e.target.value)}
-                                        className="bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-white font-mono text-sm focus:outline-none focus:border-indigo-500"
+                                        onChange={setMarketOpenTime}
                                     />
                                     <span className="text-slate-500">to</span>
-                                    <input
-                                        type="time"
+                                    <TimePicker
                                         value={marketCloseTime}
-                                        onChange={(e) => setMarketCloseTime(e.target.value)}
-                                        className="bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-white font-mono text-sm focus:outline-none focus:border-indigo-500"
+                                        onChange={setMarketCloseTime}
                                     />
                                 </div>
                             </div>
@@ -208,21 +245,23 @@ export function ConfigModal({ isOpen, onClose, config, onSave }: ConfigModalProp
                                     </button>
                                 </div>
 
-                                <div className="space-y-2 max-h-[150px] overflow-y-auto">
+                                <div className="space-y-2 pr-2">
                                     {blockedPeriods.map((block, index) => (
-                                        <div key={index} className="flex items-center gap-2 bg-slate-950 p-2 rounded-xl border border-slate-800">
-                                            <input
-                                                type="time"
+                                        <div key={index} className={`flex items-center gap-2 bg-slate-950 p-2 rounded-xl border ${block.enabled ? 'border-indigo-500/30' : 'border-slate-800 opacity-60'}`}>
+                                            <button
+                                                onClick={() => updateTimeBlock(index, 'enabled', !block.enabled)}
+                                                className={`relative inline-flex h-4 w-7 items-center rounded-full transition-colors ${block.enabled ? 'bg-indigo-500' : 'bg-slate-700'}`}
+                                            >
+                                                <span className={`${block.enabled ? 'translate-x-3.5' : 'translate-x-0.5'} inline-block h-3 w-3 transform rounded-full bg-white transition-transform`} />
+                                            </button>
+                                            <TimePicker
                                                 value={block.start}
-                                                onChange={(e) => updateTimeBlock(index, 'start', e.target.value)}
-                                                className="bg-transparent text-white font-mono text-sm focus:outline-none w-20"
+                                                onChange={(val) => updateTimeBlock(index, 'start', val)}
                                             />
                                             <span className="text-slate-500">-</span>
-                                            <input
-                                                type="time"
+                                            <TimePicker
                                                 value={block.end}
-                                                onChange={(e) => updateTimeBlock(index, 'end', e.target.value)}
-                                                className="bg-transparent text-white font-mono text-sm focus:outline-none w-20"
+                                                onChange={(val) => updateTimeBlock(index, 'end', val)}
                                             />
                                             <div className="flex-1" />
                                             <button
@@ -233,6 +272,9 @@ export function ConfigModal({ isOpen, onClose, config, onSave }: ConfigModalProp
                                             </button>
                                         </div>
                                     ))}
+                                    {blockedPeriods.length === 0 && (
+                                        <p className="text-xs text-slate-500 italic text-center py-2">No blocked periods</p>
+                                    )}
                                 </div>
                             </div>
 
@@ -249,12 +291,10 @@ export function ConfigModal({ isOpen, onClose, config, onSave }: ConfigModalProp
                                             <span className={`${autoFlattenEnabled ? 'translate-x-5' : 'translate-x-1'} inline-block h-3 w-3 transform rounded-full bg-white transition-transform`} />
                                         </button>
                                     </div>
-                                    <input
-                                        type="time"
+                                    <TimePicker
                                         value={autoFlattenTime}
-                                        onChange={(e) => setAutoFlattenTime(e.target.value)}
+                                        onChange={setAutoFlattenTime}
                                         disabled={!autoFlattenEnabled}
-                                        className="bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-white font-mono text-sm disabled:opacity-50"
                                     />
                                 </div>
                                 <p className="text-[10px] text-slate-500 italic">
@@ -267,23 +307,41 @@ export function ConfigModal({ isOpen, onClose, config, onSave }: ConfigModalProp
                     {activeTab === 'sessions' && (
                         <div className="space-y-4">
                             <p className="text-sm text-slate-400">
-                                Trading sessions define time windows when strategies can execute.
+                                Configure market sessions times. Active sessions are used for strategy filtering.
                             </p>
 
                             {sessions.map(session => (
-                                <div key={session.id} className="bg-slate-950 border border-slate-800 rounded-xl p-4">
+                                <div key={session.id} className="bg-slate-950 border border-slate-800 rounded-xl p-4 space-y-3">
                                     <div className="flex justify-between items-center">
                                         <div>
                                             <span className="font-bold text-white">{session.display_name}</span>
                                             <span className="text-slate-500 text-sm ml-2">({session.name})</span>
                                         </div>
-                                        <div className="flex items-center gap-4">
-                                            <span className="font-mono text-sm text-slate-300">
-                                                {session.start_time} - {session.end_time}
-                                            </span>
-                                            <span className={`text-xs px-2 py-0.5 rounded ${session.is_active ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-700 text-slate-400'}`}>
-                                                {session.is_active ? 'Active' : 'Inactive'}
-                                            </span>
+                                        <button
+                                            onClick={() => updateSession(session.id, 'is_active', !session.is_active)}
+                                            className={`text-xs px-2 py-0.5 rounded transition-colors ${session.is_active
+                                                ? 'bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30'
+                                                : 'bg-slate-700 text-slate-400 hover:bg-slate-600'
+                                                }`}
+                                        >
+                                            {session.is_active ? 'Active' : 'Inactive'}
+                                        </button>
+                                    </div>
+
+                                    <div className="flex items-center gap-3">
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-xs text-slate-500 uppercase font-bold">Start</span>
+                                            <TimePicker
+                                                value={session.start_time}
+                                                onChange={(val) => updateSession(session.id, 'start_time', val)}
+                                            />
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-xs text-slate-500 uppercase font-bold">End</span>
+                                            <TimePicker
+                                                value={session.end_time}
+                                                onChange={(val) => updateSession(session.id, 'end_time', val)}
+                                            />
                                         </div>
                                     </div>
                                 </div>
@@ -305,7 +363,7 @@ export function ConfigModal({ isOpen, onClose, config, onSave }: ConfigModalProp
                     <button onClick={onClose} className="px-4 py-2 rounded-xl text-slate-300 hover:text-white hover:bg-slate-800 font-medium text-sm">
                         Cancel
                     </button>
-                    {activeTab === 'general' && (
+                    {(activeTab === 'general' || activeTab === 'sessions') && (
                         <button
                             onClick={handleSave}
                             disabled={saving}
@@ -314,7 +372,7 @@ export function ConfigModal({ isOpen, onClose, config, onSave }: ConfigModalProp
                             <Save size={16} /> {saving ? 'Saving...' : 'Save Changes'}
                         </button>
                     )}
-                    {activeTab !== 'general' && (
+                    {activeTab === 'mappings' && (
                         <button onClick={onClose} className="px-6 py-2 rounded-xl font-bold text-sm bg-indigo-600 hover:bg-indigo-700 text-white">
                             Done
                         </button>

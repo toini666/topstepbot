@@ -27,7 +27,12 @@ from backend.schemas import (
     TickerMapCreate, TickerMapResponse,
     AccountSettingsResponse, AccountSettingsUpdate,
     AccountStrategyConfigResponse, AccountStrategyConfigCreate, AccountStrategyConfigUpdate,
-    TradingSessionResponse, TradingSessionCreate
+    TradingSessionResponse, TradingSessionCreate,
+    AccountResponse,
+    PositionResponse,
+    OrderResponse,
+    TradeResponse,
+    LogResponse
 )
 from backend.services.topstep_client import topstep_client
 from backend.services.risk_engine import RiskEngine
@@ -113,6 +118,8 @@ def update_global_config(req: GlobalSettingsUpdate, db: Session = Depends(get_db
     if req.market_close_time is not None:
         set_setting("market_close_time", req.market_close_time)
     
+    # Log the change
+    db.add(Log(level="INFO", message="Global Settings Updated", details=json.dumps(req.model_dump(), default=str)))
     db.commit()
     return {"status": "updated"}
 
@@ -128,24 +135,48 @@ def get_trading_sessions(db: Session = Depends(get_db)):
 
 
 @router.post("/settings/sessions", response_model=TradingSessionResponse)
-def create_or_update_session(session: TradingSessionCreate, db: Session = Depends(get_db)):
-    """Create or update a trading session."""
+def create_session(session: TradingSessionCreate, db: Session = Depends(get_db)):
+    """Create a new trading session."""
+    # Check if exists by name
     existing = db.query(TradingSession).filter(TradingSession.name == session.name).first()
-    
     if existing:
-        existing.display_name = session.display_name
-        existing.start_time = session.start_time
-        existing.end_time = session.end_time
-        existing.is_active = session.is_active
-        db.commit()
-        db.refresh(existing)
-        return existing
+        raise HTTPException(status_code=400, detail="Session with this name already exists")
     
     new_session = TradingSession(**session.model_dump())
     db.add(new_session)
     db.commit()
     db.refresh(new_session)
+    
+    db.add(Log(level="INFO", message=f"Created new session: {new_session.name}"))
+    db.commit()
+    
     return new_session
+
+
+@router.put("/settings/sessions/{session_id}", response_model=TradingSessionResponse)
+def update_session(session_id: int, session: TradingSessionCreate, db: Session = Depends(get_db)):
+    """Update an existing trading session."""
+    existing = db.query(TradingSession).filter(TradingSession.id == session_id).first()
+    if not existing:
+        raise HTTPException(status_code=404, detail="Session not found")
+    
+    # Update fields
+    # Note: We might want to prevent name changes if used by strategies, but for now allow it.
+    existing.name = session.name
+    existing.display_name = session.display_name
+    existing.start_time = session.start_time
+    existing.end_time = session.end_time
+    existing.is_active = session.is_active
+    
+    db.add(Log(
+        level="INFO", 
+        message=f"Updated session {existing.name} (Active: {existing.is_active})",
+        details=json.dumps(session.model_dump(), default=str)
+    ))
+    
+    db.commit()
+    db.refresh(existing)
+    return existing
 
 
 @router.delete("/settings/sessions/{session_id}")
@@ -190,8 +221,10 @@ def update_account_settings(account_id: int, req: AccountSettingsUpdate, db: Ses
     
     if req.trading_enabled is not None:
         settings.trading_enabled = req.trading_enabled
-    if req.risk_per_trade is not None:
+    if req.risk_per_trade is not None and req.risk_per_trade != settings.risk_per_trade:
+        old_val = settings.risk_per_trade
         settings.risk_per_trade = req.risk_per_trade
+        db.add(Log(level="INFO", message=f"Risk per trade updated for account {account_id}: ${old_val} -> ${req.risk_per_trade}"))
     if req.account_name is not None:
         settings.account_name = req.account_name
     
@@ -315,6 +348,13 @@ def add_strategy_to_account(
         created_at=new_config.created_at,
         updated_at=new_config.updated_at
     )
+
+
+@router.get("/settings/contracts/available")
+async def get_available_contracts():
+    """Get all available contracts from TopStep."""
+    contracts = await topstep_client.get_all_computable_contracts()
+    return contracts
 
 
 @router.delete("/settings/accounts/{account_id}/strategies/{strategy_id}")

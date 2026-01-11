@@ -3,16 +3,19 @@ import axios from 'axios';
 import { Trash2, Plus, Layers, Pencil, X, Save, Clock } from 'lucide-react';
 import { toast } from 'sonner';
 import { API_BASE } from '../config';
-import { useTopStep } from '../hooks/useTopStep';
+
 import type { Strategy, AccountStrategyConfig } from '../types';
+
+interface StrategiesManagerProps {
+    selectedAccountId: number | null;
+}
 
 /**
  * Strategies Manager Component
  * - Manages global strategy templates
  * - Configures per-account strategy settings (when account selected)
  */
-export function StrategiesManager() {
-    const { selectedAccountId } = useTopStep();
+export function StrategiesManager({ selectedAccountId }: StrategiesManagerProps) {
 
     // Global Strategies (Templates)
     const [strategies, setStrategies] = useState<Strategy[]>([]);
@@ -36,7 +39,10 @@ export function StrategiesManager() {
 
     useEffect(() => {
         if (selectedAccountId) {
+            setAccountConfigs([]); // Clear previous state to prevent ghosting
             fetchAccountConfigs(selectedAccountId);
+        } else {
+            setAccountConfigs([]);
         }
     }, [selectedAccountId]);
 

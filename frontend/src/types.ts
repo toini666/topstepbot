@@ -105,6 +105,7 @@ export interface AggregatedTrade {
 export interface TimeBlock {
     start: string;
     end: string;
+    enabled: boolean;
 }
 
 export interface GlobalConfig {
