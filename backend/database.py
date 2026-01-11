@@ -1,6 +1,6 @@
-from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, Enum, Text
+from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, Boolean, ForeignKey, UniqueConstraint, Text
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import sessionmaker, relationship
 import datetime
 import os
 from dotenv import load_dotenv
@@ -16,52 +16,165 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 Base = declarative_base()
 
-class TradeStatus(str, Enum):
+
+class TradeStatus(str):
     OPEN = "OPEN"
     CLOSED = "CLOSED"
     REJECTED = "REJECTED"
     PENDING = "PENDING"
 
-class Strategy(Base):
-    __tablename__ = "strategies"
+
+# =============================================================================
+# GLOBAL SETTINGS
+# =============================================================================
+
+class Setting(Base):
+    """Global key-value settings store."""
+    __tablename__ = "settings"
+
+    key = Column(String, primary_key=True, index=True)
+    value = Column(String)  # Stored as JSON string or raw value
+
+
+class TradingSession(Base):
+    """Global trading session definitions (Asia, UK, US)."""
+    __tablename__ = "trading_sessions"
 
     id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, unique=True, index=True) # Display Name
-    tv_id = Column(String, unique=True, index=True) # ID sent in Webhook 'strat'
-    tv_id = Column(String, unique=True, index=True) # ID sent in Webhook 'strat'
-    risk_factor = Column(Float, default=1.0, nullable=False) # Multiplier of Global Risk (Default 1.0, Min 0.5)
+    name = Column(String, unique=True, index=True)  # E.g., "ASIA", "UK", "US"
+    display_name = Column(String)  # E.g., "Asian Session"
+    start_time = Column(String)  # HH:MM format (Brussels TZ)
+    end_time = Column(String)  # HH:MM format (Brussels TZ)
+    is_active = Column(Boolean, default=True)  # Can disable a session
     created_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc))
 
-class Trade(Base):
-    __tablename__ = "trades"
-
-    id = Column(Integer, primary_key=True, index=True)
-    ticker = Column(String, index=True)
-    action = Column(String)  # BUY / SELL
-    entry_price = Column(Float)
-    sl = Column(Float)
-    tp = Column(Float)
-    quantity = Column(Integer)
-    status = Column(String, default="PENDING")
-    pnl = Column(Float, nullable=True)
-    pnl = Column(Float, nullable=True)
-    timestamp = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc))
-    exit_time = Column(DateTime, nullable=True)
-    topstep_order_id = Column(String, nullable=True)
-    rejection_reason = Column(String, nullable=True)
-    strategy = Column(String, default="default", nullable=True)
 
 class TickerMap(Base):
+    """Global ticker mapping table (TV ticker -> TopStep contract)."""
     __tablename__ = "ticker_maps"
 
     id = Column(Integer, primary_key=True, index=True)
     tv_ticker = Column(String, unique=True, index=True)
     ts_contract_id = Column(String)
-    ts_ticker = Column(String) # Human readable name mapping (e.g. MNQH6)
+    ts_ticker = Column(String)  # Human readable name mapping (e.g. MNQH6)
     tick_size = Column(Float)
     tick_value = Column(Float)
 
+
+# =============================================================================
+# STRATEGY TEMPLATES (Global definitions)
+# =============================================================================
+
+class Strategy(Base):
+    """Global strategy template - can be configured per-account."""
+    __tablename__ = "strategies"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, unique=True, index=True)  # Display Name
+    tv_id = Column(String, unique=True, index=True)  # ID sent in Webhook 'strat'
+    
+    # Default values (can be overridden per-account in AccountStrategyConfig)
+    default_risk_factor = Column(Float, default=1.0)  # Default multiplier
+    default_allowed_sessions = Column(String, default="ASIA,UK,US")  # Comma-separated
+    default_partial_tp_percent = Column(Float, default=50.0)  # % to reduce on partial
+    default_move_sl_to_entry = Column(Boolean, default=True)  # Move SL to BE after partial
+    
+    created_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc))
+    
+    # Relationship to account configs
+    account_configs = relationship("AccountStrategyConfig", back_populates="strategy", cascade="all, delete-orphan")
+
+
+# =============================================================================
+# ACCOUNT SETTINGS (Per-account configuration)
+# =============================================================================
+
+class AccountSettings(Base):
+    """Per-account trading settings."""
+    __tablename__ = "account_settings"
+
+    id = Column(Integer, primary_key=True, index=True)
+    account_id = Column(Integer, unique=True, index=True)  # TopStep account ID
+    account_name = Column(String, nullable=True)  # Cached account name for display
+    trading_enabled = Column(Boolean, default=True)  # Master switch per account
+    risk_per_trade = Column(Float, default=200.0)  # Account-specific risk amount ($)
+    
+    created_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc))
+    updated_at = Column(DateTime, onupdate=lambda: datetime.datetime.now(datetime.timezone.utc))
+    
+    # Relationship to strategy configs
+    strategy_configs = relationship("AccountStrategyConfig", back_populates="account", cascade="all, delete-orphan")
+
+
+class AccountStrategyConfig(Base):
+    """Per-account strategy configuration with session restrictions."""
+    __tablename__ = "account_strategy_configs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    account_id = Column(Integer, ForeignKey('account_settings.account_id'), index=True)
+    strategy_id = Column(Integer, ForeignKey('strategies.id'), index=True)
+    
+    enabled = Column(Boolean, default=True)  # Strategy enabled on this account
+    risk_factor = Column(Float, default=1.0)  # Override factor for this account
+    allowed_sessions = Column(String, default="ASIA,UK,US")  # Comma-separated session names
+    partial_tp_percent = Column(Float, default=50.0)  # % to reduce on partial TP
+    move_sl_to_entry = Column(Boolean, default=True)  # Move SL to BE after partial
+    
+    created_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc))
+    updated_at = Column(DateTime, onupdate=lambda: datetime.datetime.now(datetime.timezone.utc))
+    
+    # Relationships
+    account = relationship("AccountSettings", back_populates="strategy_configs")
+    strategy = relationship("Strategy", back_populates="account_configs")
+    
+    # Constraints: unique combo of account + strategy
+    __table_args__ = (
+        UniqueConstraint('account_id', 'strategy_id', name='uq_account_strategy'),
+    )
+
+
+# =============================================================================
+# TRADE TRACKING
+# =============================================================================
+
+class Trade(Base):
+    """Local trade records for tracking positions opened by the bot."""
+    __tablename__ = "trades"
+
+    id = Column(Integer, primary_key=True, index=True)
+    account_id = Column(Integer, index=True)  # Which TopStep account
+    ticker = Column(String, index=True)
+    action = Column(String)  # BUY / SELL
+    entry_price = Column(Float)
+    exit_price = Column(Float, nullable=True)  # NEW: Exit price for analytics
+    sl = Column(Float)
+    tp = Column(Float)
+    quantity = Column(Integer)
+    status = Column(String, default="PENDING")
+    pnl = Column(Float, nullable=True)
+    fees = Column(Float, nullable=True)  # NEW: Trading fees
+    
+    # Timeframe & Session tracking
+    timeframe = Column(String, nullable=True)  # E.g., "M5", "H1", "D1"
+    session = Column(String, nullable=True)  # NEW: Session at trade time (ASIA, UK, US)
+    
+    # Timestamps
+    timestamp = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc))
+    exit_time = Column(DateTime, nullable=True)
+    duration_seconds = Column(Integer, nullable=True)  # NEW: Trade duration for stats
+    
+    # Order tracking
+    topstep_order_id = Column(String, nullable=True)
+    rejection_reason = Column(String, nullable=True)
+    strategy = Column(String, default="default", nullable=True, index=True)
+
+
+# =============================================================================
+# LOGGING
+# =============================================================================
+
 class Log(Base):
+    """System logs stored in database."""
     __tablename__ = "logs"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -70,16 +183,34 @@ class Log(Base):
     details = Column(Text, nullable=True)
     timestamp = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc))
 
-class Setting(Base):
-    __tablename__ = "settings"
 
-    key = Column(String, primary_key=True, index=True)
-    value = Column(String) # Stored as JSON string or raw value
+# =============================================================================
+# DATABASE INITIALIZATION
+# =============================================================================
 
 def init_db():
+    """Create all tables."""
     Base.metadata.create_all(bind=engine)
 
+
+def seed_default_sessions(db_session):
+    """Seed default trading sessions if they don't exist."""
+    default_sessions = [
+        {"name": "ASIA", "display_name": "Asian Session", "start_time": "00:00", "end_time": "08:59"},
+        {"name": "UK", "display_name": "UK Session", "start_time": "09:00", "end_time": "15:29"},
+        {"name": "US", "display_name": "US Session", "start_time": "15:30", "end_time": "21:59"},
+    ]
+    
+    for session_data in default_sessions:
+        existing = db_session.query(TradingSession).filter(TradingSession.name == session_data["name"]).first()
+        if not existing:
+            db_session.add(TradingSession(**session_data))
+    
+    db_session.commit()
+
+
 def get_db():
+    """Dependency for FastAPI endpoints."""
     db = SessionLocal()
     try:
         yield db

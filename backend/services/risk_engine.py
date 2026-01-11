@@ -1,230 +1,386 @@
+"""
+Risk Engine - Hierarchical Settings Management & Trade Validation
+
+Validation Flow (Per Account):
+1. check_market_hours()            → Is market open? (Mon-Fri 00:00-22:00)
+2. check_blocked_periods()         → Global blocked periods
+3. check_account_enabled()         → Is account trading ON?
+4. check_strategy_enabled()        → Is strategy active on account?
+5. check_session_allowed()         → Is current session allowed for strategy?
+6. check_open_position()           → No duplicate positions on this account
+7. check_cross_account_direction() → No opposing positions on other accounts
+"""
+
 import json
 from datetime import datetime, timezone, time
+from typing import Optional, Tuple, List, Dict, Any
 import pytz
 from sqlalchemy.orm import Session
-from backend.database import Setting, Trade, TradeStatus
-from backend.schemas import RiskSettings, TimeBlock
 
-# Define Brussels Timezone
+from backend.database import (
+    Setting, Trade, TradeStatus, 
+    AccountSettings, AccountStrategyConfig, 
+    TradingSession, Strategy
+)
+
+# Brussels Timezone for all time calculations
 BRUSSELS_TZ = pytz.timezone("Europe/Brussels")
 
+
 class RiskEngine:
+    """Manages hierarchical settings and trade validation."""
+    
     def __init__(self, db: Session):
         self.db = db
-        self.settings = self._load_settings()
-
-    def _load_settings(self) -> RiskSettings:
-        # 1. Master Switch
-        switch_setting = self.db.query(Setting).filter(Setting.key == "master_switch").first()
-        enabled = True
-        if switch_setting and switch_setting.value == "OFF":
-            enabled = False
-            
-        # 2. Risk Amount ($)
-        risk_amt_setting = self.db.query(Setting).filter(Setting.key == "risk_amount").first()
-        risk_amt = float(risk_amt_setting.value) if risk_amt_setting else 200.0
+    
+    # =========================================================================
+    # GLOBAL SETTINGS
+    # =========================================================================
+    
+    def get_global_settings(self) -> Dict[str, Any]:
+        """Load all global settings from database."""
+        settings = {}
         
-        # 3. Blocked Periods Enabled
-        bp_enabled_setting = self.db.query(Setting).filter(Setting.key == "blocked_periods_enabled").first()
-        bp_enabled = True
-        if bp_enabled_setting and bp_enabled_setting.value == "false":
-            bp_enabled = False
-
-        # 4. Blocked Periods (JSON)
-        blocked_setting = self.db.query(Setting).filter(Setting.key == "blocked_periods").first()
-        blocked = [
-            TimeBlock(start="08:55", end="09:15"),
-            TimeBlock(start="15:25", end="15:45"),
-            TimeBlock(start="21:30", end="00:15")
-        ]
+        # Blocked periods enabled
+        bp_enabled = self._get_setting("blocked_periods_enabled", "true")
+        settings["blocked_periods_enabled"] = bp_enabled.lower() == "true"
         
-        if blocked_setting:
-            try:
-                data = json.loads(blocked_setting.value)
-                blocked = [TimeBlock(**b) for b in data]
-            except Exception as e:
-                print(f"Error parsing blocked_periods: {e}")
-
-        # 5. Auto Flatten Settings
-        af_enabled_setting = self.db.query(Setting).filter(Setting.key == "auto_flatten_enabled").first()
-        af_enabled = False
-        if af_enabled_setting and af_enabled_setting.value == "true":
-            af_enabled = True
-
-        af_time_setting = self.db.query(Setting).filter(Setting.key == "auto_flatten_time").first()
-        af_time = af_time_setting.value if af_time_setting else "21:55"
+        # Blocked periods (JSON)
+        bp_json = self._get_setting("blocked_periods", "[]")
+        try:
+            settings["blocked_periods"] = json.loads(bp_json)
+        except Exception:
+            settings["blocked_periods"] = []
+        
+        # Auto flatten
+        settings["auto_flatten_enabled"] = self._get_setting("auto_flatten_enabled", "false").lower() == "true"
+        settings["auto_flatten_time"] = self._get_setting("auto_flatten_time", "21:55")
+        
+        # Market hours
+        settings["market_open_time"] = self._get_setting("market_open_time", "00:00")
+        settings["market_close_time"] = self._get_setting("market_close_time", "22:00")
+        
+        return settings
+    
+    def _get_setting(self, key: str, default: str = "") -> str:
+        """Get a single setting value."""
+        setting = self.db.query(Setting).filter(Setting.key == key).first()
+        return setting.value if setting else default
+    
+    def _set_setting(self, key: str, value: str):
+        """Set a setting value."""
+        setting = self.db.query(Setting).filter(Setting.key == key).first()
+        if setting:
+            setting.value = value
+        else:
+            self.db.add(Setting(key=key, value=value))
+        self.db.commit()
+    
+    # =========================================================================
+    # TRADING SESSIONS
+    # =========================================================================
+    
+    def get_trading_sessions(self) -> List[TradingSession]:
+        """Get all configured trading sessions."""
+        return self.db.query(TradingSession).all()
+    
+    def get_current_session(self) -> Optional[str]:
+        """Returns the name of the current active session, or None if outside all sessions."""
+        now_bru = datetime.now(BRUSSELS_TZ).time()
+        
+        sessions = self.get_trading_sessions()
+        for session in sessions:
+            if not session.is_active:
+                continue
                 
-        return RiskSettings(
-            trading_enabled=enabled,
-            risk_per_trade=risk_amt,
-            blocked_periods_enabled=bp_enabled,
-            blocked_periods=blocked,
-            auto_flatten_enabled=af_enabled,
-            auto_flatten_time=af_time
-        )
-
-    def check_global_switch(self) -> tuple[bool, str]:
-        if not self.settings.trading_enabled:
-             return False, "Trading Disabled by Master Switch"
-        return True, "OK"
-
-    async def check_open_position(self, account_id: int, ticker: str, topstep_client) -> tuple[bool, str]:
+            try:
+                start_h, start_m = map(int, session.start_time.split(':'))
+                end_h, end_m = map(int, session.end_time.split(':'))
+                t_start = time(start_h, start_m)
+                t_end = time(end_h, end_m)
+                
+                # Handle midnight crossing
+                if t_start > t_end:
+                    if now_bru >= t_start or now_bru <= t_end:
+                        return session.name
+                else:
+                    if t_start <= now_bru <= t_end:
+                        return session.name
+            except Exception as e:
+                print(f"Session parse error for {session.name}: {e}")
+                continue
+        
+        return None
+    
+    # =========================================================================
+    # ACCOUNT SETTINGS
+    # =========================================================================
+    
+    def get_account_settings(self, account_id: int) -> Optional[AccountSettings]:
+        """Get settings for a specific account."""
+        return self.db.query(AccountSettings).filter(
+            AccountSettings.account_id == account_id
+        ).first()
+    
+    def ensure_account_settings(self, account_id: int, account_name: str = None) -> AccountSettings:
+        """Get or create account settings with defaults."""
+        settings = self.get_account_settings(account_id)
+        if not settings:
+            settings = AccountSettings(
+                account_id=account_id,
+                account_name=account_name,
+                trading_enabled=False,  # Default: PAUSED for safety
+                risk_per_trade=200.0
+            )
+            self.db.add(settings)
+            self.db.commit()
+            self.db.refresh(settings)
+        return settings
+    
+    # =========================================================================
+    # STRATEGY CONFIG (Per Account)
+    # =========================================================================
+    
+    def get_strategy_config(self, account_id: int, strategy_tv_id: str) -> Optional[AccountStrategyConfig]:
+        """Get strategy configuration for a specific account."""
+        strategy = self.db.query(Strategy).filter(Strategy.tv_id == strategy_tv_id).first()
+        if not strategy:
+            return None
+        
+        return self.db.query(AccountStrategyConfig).filter(
+            AccountStrategyConfig.account_id == account_id,
+            AccountStrategyConfig.strategy_id == strategy.id
+        ).first()
+    
+    def get_strategy_by_tv_id(self, tv_id: str) -> Optional[Strategy]:
+        """Get strategy template by TradingView ID."""
+        return self.db.query(Strategy).filter(Strategy.tv_id == tv_id).first()
+    
+    # =========================================================================
+    # VALIDATION CHECKS
+    # =========================================================================
+    
+    def check_market_hours(self) -> Tuple[bool, str]:
         """
-        Ensures no open position exists for this ticker.
-        Requires TopStepClient instance to fetch positions.
+        Check if market is open (Mon-Fri, within configured hours).
+        Returns (allowed, reason).
+        """
+        now_bru = datetime.now(BRUSSELS_TZ)
+        now_time = now_bru.time()
+        
+        # Weekend check (Sat=5, Sun=6)
+        if now_bru.weekday() >= 5:
+            day_name = now_bru.strftime("%A")
+            return False, f"Market Closed (Weekend: {day_name})"
+        
+        # Get market hours from settings
+        settings = self.get_global_settings()
+        try:
+            open_h, open_m = map(int, settings["market_open_time"].split(':'))
+            close_h, close_m = map(int, settings["market_close_time"].split(':'))
+            market_open = time(open_h, open_m)
+            market_close = time(close_h, close_m)
+            
+            if now_time < market_open:
+                return False, f"Market Closed (Before {settings['market_open_time']})"
+            if now_time >= market_close:
+                return False, f"Market Closed (After {settings['market_close_time']})"
+        except Exception as e:
+            print(f"Market hours parse error: {e}")
+            # Default: closed after 22:00
+            if now_time >= time(22, 0):
+                return False, "Market Closed (> 22:00)"
+        
+        return True, "OK"
+    
+    def check_blocked_periods(self) -> Tuple[bool, str]:
+        """
+        Check if current time is in a blocked period.
+        Returns (allowed, reason).
+        """
+        settings = self.get_global_settings()
+        
+        if not settings.get("blocked_periods_enabled", True):
+            return True, "OK"
+        
+        now_bru = datetime.now(BRUSSELS_TZ).time()
+        
+        for block in settings.get("blocked_periods", []):
+            try:
+                start_h, start_m = map(int, block["start"].split(':'))
+                end_h, end_m = map(int, block["end"].split(':'))
+                t_start = time(start_h, start_m)
+                t_end = time(end_h, end_m)
+                
+                # Handle midnight crossing
+                if t_start > t_end:
+                    if now_bru >= t_start or now_bru <= t_end:
+                        return False, f"Blocked Time ({block['start']}-{block['end']})"
+                else:
+                    if t_start <= now_bru <= t_end:
+                        return False, f"Blocked Time ({block['start']}-{block['end']})"
+            except Exception as e:
+                print(f"Block parse error: {e}")
+                continue
+        
+        return True, "OK"
+    
+    def check_account_enabled(self, account_id: int) -> Tuple[bool, str]:
+        """
+        Check if account has trading enabled.
+        Returns (allowed, reason).
+        """
+        settings = self.get_account_settings(account_id)
+        if not settings:
+            # No settings = not configured = reject
+            return False, f"Account {account_id} not configured"
+        
+        if not settings.trading_enabled:
+            return False, f"Trading disabled for account {account_id}"
+        
+        return True, "OK"
+    
+    def check_strategy_enabled(self, account_id: int, strategy_tv_id: str) -> Tuple[bool, str]:
+        """
+        Check if strategy is configured and enabled for this account.
+        Returns (allowed, reason).
+        """
+        config = self.get_strategy_config(account_id, strategy_tv_id)
+        if not config:
+            return False, f"Strategy '{strategy_tv_id}' not configured for account {account_id}"
+        
+        if not config.enabled:
+            return False, f"Strategy '{strategy_tv_id}' disabled for account {account_id}"
+        
+        return True, "OK"
+    
+    def check_session_allowed(self, account_id: int, strategy_tv_id: str) -> Tuple[bool, str]:
+        """
+        Check if current trading session is allowed for this strategy.
+        Returns (allowed, reason).
+        """
+        current_session = self.get_current_session()
+        if not current_session:
+            return False, "Outside trading sessions"
+        
+        config = self.get_strategy_config(account_id, strategy_tv_id)
+        if not config:
+            return False, f"Strategy not configured"
+        
+        allowed_sessions = [s.strip().upper() for s in config.allowed_sessions.split(',')]
+        
+        if current_session.upper() not in allowed_sessions:
+            return False, f"Session {current_session} not allowed (enabled: {', '.join(allowed_sessions)})"
+        
+        return True, "OK"
+    
+    async def check_open_position(self, account_id: int, ticker: str, topstep_client) -> Tuple[bool, str]:
+        """
+        Check if there's already an open position for this ticker on this account.
+        Returns (allowed, reason).
         """
         try:
             positions = await topstep_client.get_open_positions(account_id)
             
-            # Normalize Ticker (e.g. MNQ1! -> MNQ)
+            # Normalize ticker (e.g. MNQ1! -> MNQ)
             clean_ticker = ticker.replace("1!", "").replace("2!", "")
-
-            # print(f"Checking Positions for {ticker} (clean: {clean_ticker}) in {len(positions)} open positions.")
             
             for pos in positions:
-                contract_name = pos.get('contractId', '') # e.g. "CON.F.US.MNQ.H26" or "MNQH6"
-                
-                # Check for substring match (e.g. MNQ in CON.F.US.MNQ.H26)
-                # Case insensitive check
+                contract_name = pos.get('contractId', '')
                 if clean_ticker.upper() in contract_name.upper():
-                    # print(f"MATCH: {clean_ticker} found in {contract_name}")
-                    return False, f"Position already open for {ticker} ({contract_name})"
-                    
+                    return False, f"Position already open for {ticker} on account {account_id}"
+            
             return True, "OK"
         except Exception as e:
-             return False, f"Failed to check positions: {e}"
-
-    def check_time_filters(self) -> tuple[bool, str]:
+            return False, f"Failed to check positions: {e}"
+    
+    async def check_cross_account_direction(
+        self, 
+        ticker: str, 
+        direction: str,  # BUY or SELL
+        exclude_account_id: int,
+        topstep_client
+    ) -> Tuple[bool, str]:
         """
-        Returns True if trading is ALLOWED.
-        Checks against configurable blocked periods.
+        Check if any other account has an opposing position on this ticker.
+        This prevents long/short conflicts across accounts.
+        Returns (allowed, reason).
         """
-        now_bru_dt = datetime.now(BRUSSELS_TZ)
-        now_bru = now_bru_dt.time()
-        
-        # 0. Weekend Block (Sat=5, Sun=6) - MANDATORY CHECK
-        if now_bru_dt.weekday() >= 5:
-             day_name = now_bru_dt.strftime("%A")
-             return False, f"Market Closed (Weekend: {day_name})"
-
-        # 1. Daily Market Closed Block (22:00 - 00:00) - MANDATORY
-        # User confirmed market closed from 22:00 to midnight
-        if now_bru >= time(22, 0):
-             return False, "Market Closed (Daily: > 22:00)"
-
-        # Feature Toggle Check
-        if not self.settings.blocked_periods_enabled:
-            return True, "OK"
-        
-        for block in self.settings.blocked_periods:
-            try:
-                # Parse strings "HH:MM" to time objects
-                start_h, start_m = map(int, block.start.split(':'))
-                end_h, end_m = map(int, block.end.split(':'))
-                t_start = time(start_h, start_m)
-                t_end = time(end_h, end_m)
+        try:
+            # Get all accounts we know about
+            all_accounts = self.db.query(AccountSettings).all()
+            clean_ticker = ticker.replace("1!", "").replace("2!", "").upper()
+            
+            # Determine our side (1=Long, 2=Short in TopStep API)
+            our_side = 1 if direction.upper() in ["BUY", "LONG"] else 2
+            
+            for account in all_accounts:
+                if account.account_id == exclude_account_id:
+                    continue
                 
-                # Check if block crosses midnight (e.g. 21:30 to 00:15)
-                if t_start > t_end:
-                    # Block is [Start -> Midnight] OR [Midnight -> End]
-                    if now_bru >= t_start or now_bru <= t_end:
-                         return False, f"Blocked Time ({block.start}-{block.end})"
-                else:
-                    # Standard block within one day
-                    if t_start <= now_bru <= t_end:
-                        return False, f"Blocked Time ({block.start}-{block.end})"
+                positions = await topstep_client.get_open_positions(account.account_id)
+                for pos in positions:
+                    contract_name = pos.get('contractId', '').upper()
+                    if clean_ticker in contract_name:
+                        pos_side = pos.get('type', 0)  # 1=Long, 2=Short
                         
-            except Exception as e:
-                print(f"Time Filter Error parsing block {block}: {e}")
-                continue
-                
-        return True, "OK"
-
-    def calculate_position_size(self, entry_price: float, sl_price: float, risk_amount: float, tick_size: float, tick_value: float) -> int:
+                        # Check for opposing direction
+                        if pos_side != our_side and pos_side in [1, 2]:
+                            side_name = "LONG" if pos_side == 1 else "SHORT"
+                            return False, f"Conflicting {side_name} position on {ticker} in account {account.account_id}"
+            
+            return True, "OK"
+        except Exception as e:
+            return False, f"Failed to check cross-account positions: {e}"
+    
+    # =========================================================================
+    # POSITION SIZING
+    # =========================================================================
+    
+    def calculate_position_size(
+        self, 
+        entry_price: float, 
+        sl_price: float, 
+        risk_amount: float, 
+        tick_size: float, 
+        tick_value: float
+    ) -> int:
         """
-        Calc lots based on risk amount using exact Contract Specifications.
-        Risk Per Contract = (Distance / Tick_Size) * Tick_Value.
+        Calculate lot size based on risk amount and stop distance.
+        Risk Per Contract = (Distance / Tick_Size) * Tick_Value
         """
         stop_distance = abs(entry_price - sl_price)
         if stop_distance == 0 or tick_size == 0:
             return 0
         
-        # Calculate Risk Per Contract
         ticks_at_risk = stop_distance / tick_size
         risk_per_contract = ticks_at_risk * tick_value
         
         if risk_per_contract == 0:
             return 0
-            
+        
         qty = int(risk_amount // risk_per_contract)
+        return max(1, qty) if qty > 0 else 0
+    
+    def get_risk_amount(self, account_id: int, strategy_tv_id: str) -> float:
+        """
+        Calculate effective risk amount for a trade.
+        Risk = Account Base Risk * Strategy Risk Factor
+        """
+        account_settings = self.get_account_settings(account_id)
+        base_risk = account_settings.risk_per_trade if account_settings else 200.0
         
-        return max(1, qty) # Always return at least 1 if valid, or handle 0
-
+        config = self.get_strategy_config(account_id, strategy_tv_id)
+        factor = config.risk_factor if config else 1.0
+        
+        return base_risk * factor
+    
+    # =========================================================================
+    # UTILITY
+    # =========================================================================
+    
     def log(self, message: str, level: str = "INFO"):
-        """Adds a log entry."""
-        # Logs are typically handled by DB now, this might be legacy or for internal class usage?
-        # Preserving interface but effectively this class uses return values for logic.
-        pass
-
-    async def check_auto_flatten(self):
-        """
-        Checks if the current time matches the auto-flatten schedule.
-        If matched (within 1-minute window), it closes all positions.
-        """
-        if not self.settings.auto_flatten_enabled or not self.settings.auto_flatten_time:
-            return
-
-        now_bru = datetime.now(BRUSSELS_TZ).strftime("%H:%M")
-        
-        # Check simple equality. Since the job runs every minute, this should hit.
-        # Ideally we might checking if we are PAST the time but haven't run today, 
-        # but stateless minute-check is simple and accepted for this MVP.
-        if now_bru == self.settings.auto_flatten_time:
-            print(f"⏰ Auto-Flatten Time Reached ({now_bru}). Flattening Account...")
-            
-            # Find selected account
-            # Note: RiskEngine normally doesn't hold topstep_client instance, 
-            # we need to import it or pass it. 
-            # But main.py calls this. RiskEngine logic usually is pure or checks state.
-            # However this method is distinct: it performs action. 
-            # We will import topstep_client here to break circular deps if any.
-            from backend.services.topstep_client import topstep_client
-            from backend.database import Setting, Log
-            
-            # Get Account
-            acct_setting = self.db.query(Setting).filter(Setting.key == "selected_account_id").first()
-            if not acct_setting:
-                print("Auto-Flatten Skipped: No Account Selected")
-                return
-            
-            account_id = int(acct_setting.value)
-            
-            # Flatten
-            try:
-                # 1. Close Positions
-                # We reuse the logic from dashboard.flatten_account_endpoint partially or calls API directly
-                # Implementation: Close all positions.
-                positions = await topstep_client.get_open_positions(account_id)
-                if positions:
-                    for pos in positions:
-                        await topstep_client.close_position(account_id, pos['contractId'])
-                    
-                    self.db.add(Log(level="WARNING", message=f"AUTO-FLATTEN Triggered: Closed {len(positions)} positions."))
-                    
-                # 2. Cancel Orders
-                orders = await topstep_client.get_orders(account_id, days=1)
-                for order in orders:
-                    if str(order.get('status')).upper() in ["WORKING", "ACCEPTED", "1", "6"]:
-                         await topstep_client.cancel_order(account_id, order.get('id') or order.get('orderId'))
-                
-                self.db.add(Log(level="WARNING", message="AUTO-FLATTEN: Orders Cancelled."))
-                self.db.commit()
-                
-                # Notify Telegram?
-                from backend.services.telegram_service import telegram_service
-                await telegram_service.send_message(f"⏰ <b>Auto-Flatten Executed</b>\nTarget time: {self.settings.auto_flatten_time}")
-                
-            except Exception as e:
-                print(f"Auto-Flatten Failed: {e}")
-                self.db.add(Log(level="ERROR", message=f"Auto-Flatten Failed: {e}"))
-                self.db.commit()
+        """Add a log entry to database."""
+        from backend.database import Log
+        self.db.add(Log(level=level, message=message))
+        self.db.commit()

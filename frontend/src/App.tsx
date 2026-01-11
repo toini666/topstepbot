@@ -12,7 +12,7 @@ import { aggregateTrades } from './utils/tradeAggregator';
 import { API_BASE } from './config';
 
 function App() {
-  const { trades, logs, accounts, positions, orders, historicalTrades, selectedAccountId, selectAccount, connect, logout, loadMoreLogs, isConnected, loading, settings, toggleTrading, config, updateConfig, historyFilter, setHistoryFilter, marketStatus } = useTopStep();
+  const { trades, logs, accounts, positions, orders, historicalTrades, selectedAccountId, setSelectedAccountId, connect, logout, loadMoreLogs, isConnected, loading, selectedAccountSettings, toggleAccountTrading, config, updateConfig, historyFilter, setHistoryFilter, marketStatus, strategies, updateAccountSettings } = useTopStep();
   const [activeTab, setActiveTab] = useState<'trading' | 'logs' | 'strategies'>('trading');
   const [expandedLogs, setExpandedLogs] = useState<Set<number>>(new Set());
   const [selectedStrategyFilter, setSelectedStrategyFilter] = useState<string>('ALL');
@@ -137,7 +137,7 @@ function App() {
       action: async () => {
         try {
           if (!selectedAccountId) return;
-          const res = await axios.post(`${API_BASE}/dashboard/account/flatten`);
+          const res = await axios.post(`${API_BASE}/dashboard/account/${selectedAccountId}/flatten`);
           if (!res.data.success) {
             toast.error("Failed: " + res.data.message);
           } else {
@@ -180,6 +180,12 @@ function App() {
               Status: <span className={`font-mono font-bold ${isConnected ? 'text-green-400' : 'text-orange-400'}`}>{isConnected ? 'ONLINE' : 'DISCONNECTED'}</span>
               <span className="mx-2 text-slate-600">|</span>
               Market: <span className={`font-mono font-bold ${isMarketOpen ? 'text-blue-400' : 'text-slate-500'}`}>{isMarketOpen ? 'OPEN' : 'CLOSED'}</span>
+              {isMarketOpen && marketStatus.current_session && (
+                <>
+                  <span className="mx-2 text-slate-600">|</span>
+                  Session: <span className="font-mono font-bold text-amber-400">{marketStatus.current_session}</span>
+                </>
+              )}
             </p>
           </div>
         </div>
@@ -216,7 +222,7 @@ function App() {
                         <button
                           key={acc.id}
                           onClick={() => {
-                            selectAccount(acc.id);
+                            setSelectedAccountId(acc.id);
                             setAccountDropdownOpen(false);
                           }}
                           className={`w-full text-left px-4 py-2 flex items-center justify-between transition-colors hover:bg-slate-700/50 ${acc.id === selectedAccountId
@@ -383,6 +389,7 @@ function App() {
                     <thead className="text-slate-500 border-b border-slate-800 uppercase text-xs">
                       <tr>
                         <th className="py-3 px-4">Contract</th>
+                        <th className="py-3 px-4">Strategy</th>
                         <th className="py-3 px-4 text-center">Side</th>
                         <th className="py-3 px-4 text-center">Qty</th>
                         <th className="py-3 px-4 text-right">Price</th>
@@ -390,30 +397,45 @@ function App() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-800/50">
-                      {positions.map((pos) => (
-                        <tr key={pos.id} className="hover:bg-slate-800/30 transition-colors">
-                          <td className="py-3 px-4 font-bold text-white">{pos.contractId}</td>
-                          <td className="py-3 px-4 text-center">
-                            <span className={`px-2 py-1 rounded-md text-xs font-bold ${pos.type === 1 ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
-                              {pos.type === 1 ? 'LONG' : 'SHORT'}
-                            </span>
-                          </td>
-                          <td className="py-3 px-4 text-center font-mono">{pos.size}</td>
-                          <td className="py-3 px-4 text-right font-mono">{pos.averagePrice.toFixed(2)}</td>
-                          <td className="py-3 px-4 text-center">
-                            <button
-                              onClick={() => handleClosePosition(pos.contractId)}
-                              className="p-1 hover:bg-red-500/20 text-red-400 rounded transition-colors"
-                              title="Close Position"
-                            >
-                              <X className="w-4 h-4" />
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
+                      {positions.map((pos) => {
+                        // Find matching trade for strategy info
+                        const matchingTrade = trades.find(t =>
+                          t.ticker && pos.contractId &&
+                          pos.contractId.toUpperCase().includes(t.ticker.replace('1!', '').replace('2!', '').toUpperCase()) &&
+                          t.status === 'OPEN'
+                        );
+                        const strat = matchingTrade ? strategies.find(s => s.tv_id === matchingTrade.strategy) : null;
+                        const stratDisplay = strat?.name || matchingTrade?.strategy || '-';
+                        const tf = matchingTrade?.timeframe;
+
+                        return (
+                          <tr key={pos.id} className="hover:bg-slate-800/30 transition-colors">
+                            <td className="py-3 px-4 font-bold text-white">{pos.contractId}</td>
+                            <td className="py-3 px-4 text-violet-300 font-mono text-xs">
+                              {tf ? `${stratDisplay} (${tf})` : stratDisplay}
+                            </td>
+                            <td className="py-3 px-4 text-center">
+                              <span className={`px-2 py-1 rounded-md text-xs font-bold ${pos.type === 1 ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
+                                {pos.type === 1 ? 'LONG' : 'SHORT'}
+                              </span>
+                            </td>
+                            <td className="py-3 px-4 text-center font-mono">{pos.size}</td>
+                            <td className="py-3 px-4 text-right font-mono">{pos.averagePrice.toFixed(2)}</td>
+                            <td className="py-3 px-4 text-center">
+                              <button
+                                onClick={() => handleClosePosition(pos.contractId)}
+                                className="p-1 hover:bg-red-500/20 text-red-400 rounded transition-colors"
+                                title="Close Position"
+                              >
+                                <X className="w-4 h-4" />
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
                       {positions.length === 0 && (
                         <tr>
-                          <td colSpan={5} className="py-8 text-center text-slate-500 italic">No open positions.</td>
+                          <td colSpan={6} className="py-8 text-center text-slate-500 italic">No open positions.</td>
                         </tr>
                       )}
                     </tbody>
@@ -430,13 +452,13 @@ function App() {
                   </h3>
                   <div className="flex gap-2">
                     <button
-                      onClick={toggleTrading}
+                      onClick={() => selectedAccountId && toggleAccountTrading(selectedAccountId)}
                       disabled={!isConnected}
                       className={`text-xs font-bold px-3 py-1.5 rounded-lg transition-all ${!isConnected ? 'bg-slate-800 text-slate-500 cursor-not-allowed' :
-                        settings?.trading_enabled ? 'bg-green-500/20 text-green-400 hover:bg-green-500/30' : 'bg-red-500/20 text-red-400 hover:bg-red-500/30'
+                        selectedAccountSettings?.trading_enabled ? 'bg-green-500/20 text-green-400 hover:bg-green-500/30' : 'bg-red-500/20 text-red-400 hover:bg-red-500/30'
                         }`}
                     >
-                      {settings?.trading_enabled ? 'TRADING ON' : 'TRADING PAUSED'}
+                      {selectedAccountSettings?.trading_enabled ? 'TRADING ON' : 'TRADING PAUSED'}
                     </button>
                   </div>
                 </div>
@@ -465,7 +487,22 @@ function App() {
                     </div>
                     <div className="flex justify-between items-center">
                       <span className="text-slate-400 text-sm">Risk / Trade</span>
-                      <span className="font-mono text-white">${config ? config.risk_per_trade.toFixed(2) : "200.00"}</span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-slate-500">$</span>
+                        <input
+                          type="number"
+                          value={selectedAccountSettings?.risk_per_trade ?? 200}
+                          onChange={(e) => {
+                            const val = parseFloat(e.target.value) || 200;
+                            if (selectedAccountId) {
+                              updateAccountSettings(selectedAccountId, { risk_per_trade: val });
+                            }
+                          }}
+                          className="w-24 bg-slate-800 border border-slate-700 rounded px-2 py-1 text-white font-mono text-right focus:outline-none focus:border-blue-500"
+                          step="25"
+                          min="0"
+                        />
+                      </div>
                     </div>
                     <div className="flex justify-between items-center border-t border-slate-800 pt-4 mt-auto">
                       <span className="text-slate-400 text-sm">Balance</span>
@@ -577,7 +614,12 @@ function App() {
                             {format(new Date(trade.exitTime), 'HH:mm:ss')}
                           </td>
                           <td className="py-3 px-4 text-violet-300 font-mono text-xs">
-                            {trade.strategy || '-'}
+                            {(() => {
+                              const strat = strategies.find(s => s.tv_id === trade.strategy);
+                              const displayName = strat?.name || trade.strategy || '-';
+                              const tf = (trade as any).timeframe;
+                              return tf ? `${displayName} (${tf})` : displayName;
+                            })()}
                           </td>
                           <td className="py-3 px-4 font-bold text-white">{trade.symbol}</td>
                           <td className="py-3 px-4 text-center">
@@ -689,7 +731,7 @@ function App() {
                 </table>
               </div>
             </section>
-          </div>
+          </div >
         )
         }
 

@@ -1,75 +1,182 @@
-# Product Requirements Document (PRD) - TopStepX Trading Bot
+# TopStep Trading Bot - Product Requirements Document
 
-## 1. Overview
-The **TopStepX Trading Bot** is an automated trading interface designed to bridge **TradingView** alerts with the **TopStepX** trading platform. It acts as a middleware that executes trades based on external signals while enforcing strict, locally managed risk management rules.
+## Executive Summary
 
-The primary goal is to **automate execution** while preserving **account safety** through rigid, pre-defined constraints that override any incoming signal if necessary.
+TopStep Bot is an automated trading system that bridges TradingView alerts with TopStepX trading accounts. It enables rule-based trade execution with comprehensive risk management, multi-account support, and real-time monitoring through a modern web dashboard and Telegram notifications.
 
-## 2. Core Business Features
+---
 
-### 2.1 Automated Order Execution
-- **Signal Source**: Receives JSON payloads via HTTP Webhooks.
-    - **SETUP**: Logged for analysis only (No Trade).
-    - **SIGNAL**: Triggers risk checks and trade execution.
-- **Protocol**: Translates generic signals into TopStepX API orders.
-- **Instrument Support**: Compatible with Futures contracts (e.g., MNQ, MES).
-- **Dynamic Sizing**: Automatically calculates position size based on Risk Amount ($) and Stop Loss distance.
-- **Contract Cache**: Optimizes performance by caching contract IDs to reduce API calls.
-- **Multi-Strategy Support**:
-    - Accepts `strat` parameter in webhook payload.
-    - Labels trades in Dashboard and Telegram with strategy name.
-    - Allows performance tracking per strategy (future scope).
+## Product Vision
 
-### 2.2 Risk Management Engine (The "Guardian")
-Before any trade is sent to TopStep, it must pass the internal Risk Engine checks:
-- **Single Position Limit**: **Prevents** opening a new trade if a position is already open for the same ticker (No Stacking).
-- **Time filters**: Blocks trading during specific high-volatility windows.
-    - *Configurable*: Users can Add/Remove blocks via UI.
-    - *Toggleable*: Global "Enable/Disable" switch for time filters.
-- **Daily Loss Limit**: *Removed* (Managed manually or via TopStep settings).
-- **Master Switch**: A global "Kill Switch" to instantly pause all new trading.
+**For** discretionary traders using TradingView strategies  
+**Who** need automated execution on TopStepX prop firm accounts  
+**TopStep Bot** is an automation platform  
+**That** executes trades with built-in risk controls and multi-account management  
+**Unlike** manual order entry or basic webhook bots  
+**Our product** provides hierarchical settings, session-aware trading, and comprehensive analytics
 
-### 2.3 Dashboard & Monitoring
-A real-time React-based dashboard provides visibility and control:
-- **Live Status**: Visual indication of connection status.
-- **Trade Feed**: Displays history of recent trades with "Today" (since local midnight) and "7 Days" (rolling) filters. Includes **Strategy Column** to identify source of trade.
-- **Daily PnL**: Real-time calculation of realized Profit & Loss.
-- **System Logs**: Detailed logs timestamped in local time.
-- **Account Selection**: Custom styled dropdown to select active trading account.
-- **Configuration View**: **Editable** panel to configure Risk Amount ($) and Blocked Time Periods.
+---
 
-### 2.4 Manual Controls
-- **Connect/Disconnect**: Manual initiation and termination of the API session.
-- **Select Account**: Dropdown to choose which specific TopStep account to use for execution.
-- **Toggle Trading**: Button to globally Enable/Pause the trading bot.
-- **Close Position**: "X" button on each open position to manually close a specific contract. **Automatically cancels** any working orders (SL/TP) associated with that contract to prevent orphaned orders.
-- **Flatten & Cancel All**: A "Panic" button to immediately close all positions and cancel all pending orders for the account (Protected by Confirmation Modal).
-- **Mock Trading Interface**: A built-in testing tool to simulate TradingView webhooks with custom payloads (Entry, SL, TP) directly from the UI, verifying the entire execution pipeline without waiting for real market signals.
+## Core Features
 
-### 2.5 Telegram Remote Control (2-Way)
-The bot includes a robust Telegram interface for remote management:
-- **Architecture**: Long Polling (Secure, no open ports needed).
-- **Security**: ID verification (Whitelist).
-- **Commands**:
-    - `/status`: System "Health Check" (Connection, Balance, Net PnL, Open Positions).
-    - `/flatten`: **Remote Panic Button** (Closes all positions, cancels all orders).
-    - `/cancel_orders`: Orphan cleanup.
-    - `/switch <id>`: Changes active trading account remotely.
-    - `/on` / `/off`: Toggles Master Switch.
-    - `/login` / `/logout`: Manages TopStep API connection state manually.
+### 1. Automated Trade Execution
 
-## 3. User Flow
-1.  **Initialization**: User starts the application via `start_dev.sh`.
-2.  **Connection**: User clicks "Connect TopStep" in the dashboard. The system authenticates with API Keys.
-3.  **Account Selection**: User selects the active trading account from the dropdown.
-4.  **Signal Reception**: A webhook sends a signal (e.g., `{"ticker": "MNQ", "action": "BUY", "entry_price": 18000}`).
-5.  **Validation**:
-    *   Is Master Switch ON?
-    *   Is Time within allowed hours?
-    *   Is Daily Loss Limit respected?
-6.  **execution**: If VALID, the bot calculates size and sends the order to TopStepX.
-7.  **Feedback**: The dashboard updates immediately with the new trade status or rejection reason.
+| Feature | Description |
+|---------|-------------|
+| **TradingView Webhooks** | Receives 4 alert types: SETUP, SIGNAL, PARTIAL, CLOSE |
+| **Market Orders with Brackets** | Places market orders with automatic SL/TP brackets |
+| **Position Sizing** | Auto-calculates quantity based on risk amount and stop distance |
+| **Contract Resolution** | Automatically maps TV tickers (MNQ1!) to TopStep contracts |
 
-## 4. Technical Constraints
-- **Local Execution**: The system runs locally to keep API keys secure/private.
-- **Polling Architecture**: Frontend updates via polling (2s interval) rather than websockets for simplicity and robustness.
+### 2. Multi-Account Trading
+
+| Feature | Description |
+|---------|-------------|
+| **Simultaneous Execution** | Signals execute on ALL configured accounts |
+| **Per-Account Settings** | Independent risk amount, trading enabled status |
+| **Cross-Account Protection** | Prevents opposing positions on same asset across accounts |
+| **Account-Specific Strategies** | Different strategies enabled per account |
+
+### 3. Hierarchical Settings System
+
+```
+Global Settings (all accounts)
+├── Market Hours (open/close times)
+├── Blocked Trading Periods
+├── Auto-Flatten Time
+└── Trading Sessions (ASIA, UK, US)
+
+Account Settings (per account)
+├── Trading Enabled (pause/resume)
+├── Risk Per Trade ($)
+└── Strategy Configurations
+    ├── Risk Factor (multiplier)
+    ├── Allowed Sessions
+    ├── Partial TP %
+    └── Move SL to Breakeven
+```
+
+### 4. Risk Management
+
+| Control | Description |
+|---------|-------------|
+| **Single Position Rule** | Maximum 1 position per ticker per account |
+| **Cross-Account Direction** | Cannot hold opposing positions across accounts |
+| **Session Restrictions** | Strategies only execute during allowed sessions |
+| **Market Hours Filter** | Blocks trades outside configured hours |
+| **Blocked Periods** | Custom time blocks where trading is disabled |
+| **Force Flatten** | Manual and scheduled flatten-all capability |
+
+### 5. Alert Types
+
+#### SETUP
+- **Purpose**: Informational only, logged for reference
+- **Action**: No trade execution
+- **Use Case**: Record price levels or pattern formations
+
+#### SIGNAL
+- **Purpose**: Open new position
+- **Required Fields**: ticker, side (BUY/SELL), entry, stop, tp, timeframe, strat
+- **Action**: Opens position with SL/TP on all eligible accounts
+
+#### PARTIAL
+- **Purpose**: Take partial profits
+- **Matching**: By ticker + timeframe + strategy
+- **Action**: Reduces position by configured %, optionally moves SL to entry
+
+#### CLOSE
+- **Purpose**: Close entire position
+- **Matching**: By ticker + timeframe + strategy
+- **Action**: Closes position and cancels related orders
+
+### 6. Dashboard Interface
+
+| Section | Features |
+|---------|----------|
+| **Header** | Connection status, market status, current session |
+| **Account Selector** | Switch between accounts, trading toggle |
+| **Open Positions** | Live positions with strategy/timeframe, close button |
+| **Account Details** | Balance, risk per trade (editable), trading status |
+| **Trade History** | Aggregated trades with strategy filter, PnL display |
+| **Order History** | Working and filled orders |
+| **System Logs** | Timestamped logs with load more pagination |
+
+### 7. Telegram Integration
+
+| Notification Type | Content |
+|-------------------|---------|
+| **Signal Received** | Ticker, action, prices, strategy, timeframe |
+| **Order Submitted** | Ticker, quantity, account name |
+| **Position Opened** | Entry price, side, quantity |
+| **Position Closed** | PnL, fees, duration |
+| **Partial Executed** | Reduced qty, remaining, SL moved status |
+| **Trade Rejection** | Ticker, reason, account |
+| **Orphaned Orders** | Warning for orders without positions |
+
+### 8. Data & Analytics
+
+| Feature | Description |
+|---------|-------------|
+| **Trade Recording** | All trades stored with full metadata |
+| **Export Endpoint** | JSON/CSV export with filters |
+| **Statistics API** | Win rate, profit factor, avg PnL, duration |
+| **Filter Options** | By strategy, timeframe, ticker, account, session, date |
+
+### 9. Maintenance & Reliability
+
+| Feature | Description |
+|---------|-------------|
+| **Daily Backups** | Automatic at 03:00 UTC, keeps last 7 |
+| **Startup Backup** | Creates backup if none exists for today |
+| **Log Cleaning** | Removes logs older than 7 days at 04:00 UTC |
+| **Position Monitoring** | Detects closed positions for notifications |
+| **Orphan Detection** | Alerts for orders without matching positions |
+
+---
+
+## User Personas
+
+### Primary: Discretionary Prop Trader
+- Uses TradingView for chart analysis and alerts
+- Trades multiple TopStepX accounts (evaluation + funded)
+- Needs consistent execution across accounts
+- Values risk management and position sizing
+
+### Secondary: Strategy Developer
+- Tests multiple strategies simultaneously
+- Needs per-strategy performance tracking
+- Exports data for optimization analysis
+
+---
+
+## Non-Functional Requirements
+
+| Requirement | Target |
+|-------------|--------|
+| **Latency** | < 500ms from webhook to order submission |
+| **Uptime** | Designed for 24/5 operation (market hours) |
+| **Data Retention** | Trades: indefinite, Logs: 7 days |
+| **Concurrent Accounts** | Tested up to 5 accounts |
+| **API Compatibility** | TopStepX ProjectX Gateway API |
+
+---
+
+## Technology Stack
+
+| Layer | Technology |
+|-------|------------|
+| **Backend** | Python 3.9+, FastAPI, SQLAlchemy, SQLite |
+| **Frontend** | React 18, TypeScript, Vite, TailwindCSS |
+| **Scheduling** | APScheduler |
+| **Notifications** | Telegram Bot API |
+| **External API** | TopStepX REST API |
+
+---
+
+## Future Roadmap
+
+1. **Performance Dashboard** - Visual charts for PnL curves, drawdown analysis
+2. **Automated Exports** - Scheduled CSV exports to cloud storage
+3. **Strategy Backtesting** - Historical replay of signals
+4. **Multi-Broker Support** - Extend beyond TopStepX
+5. **Mobile App** - Native iOS/Android dashboard

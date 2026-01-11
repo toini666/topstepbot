@@ -98,7 +98,7 @@ def _log_maintenance(message, level="INFO"):
     try:
         db.add(Log(level=level, message=message))
         db.commit()
-    except:
+    except Exception:
         pass # If logging fails, just ignore to avoid loops
     finally:
         db.close()

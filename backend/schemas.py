@@ -2,32 +2,143 @@ from pydantic import BaseModel
 from typing import Optional, List
 from datetime import datetime
 
-# --- Webhook Schemas ---
-class TradingViewAlert(BaseModel):
-    ticker: str
-    type: str  # SETUP / SIGNAL
-    direction: str  # LONG/SHORT or BUY/SELL
-    entry: float
-    stop: float
-    tp: float
-    strat: Optional[str] = "default" # Strategy Name
 
-# --- Strategy Schemas ---
+# =============================================================================
+# WEBHOOK SCHEMAS
+# =============================================================================
+
+class TradingViewAlert(BaseModel):
+    """Alert payload from TradingView webhooks."""
+    ticker: str
+    type: str  # SETUP, SIGNAL, PARTIAL, CLOSE
+    side: str  # BUY, SELL (renamed from 'direction')
+    entry: float
+    stop: Optional[float] = None  # Optional for PARTIAL/CLOSE
+    tp: Optional[float] = None  # Optional for PARTIAL/CLOSE
+    strat: Optional[str] = "default"  # Strategy identifier
+    timeframe: str  # Required: M1, M5, M15, H1, H4, D1, etc.
+
+
+# =============================================================================
+# TRADING SESSION SCHEMAS
+# =============================================================================
+
+class TradingSessionBase(BaseModel):
+    name: str
+    display_name: str
+    start_time: str  # HH:MM
+    end_time: str  # HH:MM
+    is_active: bool = True
+
+
+class TradingSessionCreate(TradingSessionBase):
+    pass
+
+
+class TradingSessionResponse(TradingSessionBase):
+    id: int
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+# =============================================================================
+# STRATEGY SCHEMAS (Global templates)
+# =============================================================================
+
 class StrategyBase(BaseModel):
     name: str
     tv_id: str
-    risk_factor: float = 1.0
+    default_risk_factor: float = 1.0
+    default_allowed_sessions: str = "ASIA,UK,US"
+    default_partial_tp_percent: float = 50.0
+    default_move_sl_to_entry: bool = True
+
 
 class StrategyCreate(StrategyBase):
     pass
 
+
 class StrategyResponse(StrategyBase):
     id: int
     created_at: datetime
+
     class Config:
         from_attributes = True
 
-# --- Trade Schemas ---
+
+# =============================================================================
+# ACCOUNT SETTINGS SCHEMAS
+# =============================================================================
+
+class AccountSettingsBase(BaseModel):
+    account_id: int
+    account_name: Optional[str] = None
+    trading_enabled: bool = True
+    risk_per_trade: float = 200.0
+
+
+class AccountSettingsCreate(AccountSettingsBase):
+    pass
+
+
+class AccountSettingsUpdate(BaseModel):
+    trading_enabled: Optional[bool] = None
+    risk_per_trade: Optional[float] = None
+    account_name: Optional[str] = None
+
+
+class AccountSettingsResponse(AccountSettingsBase):
+    id: int
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+# =============================================================================
+# ACCOUNT STRATEGY CONFIG SCHEMAS
+# =============================================================================
+
+class AccountStrategyConfigBase(BaseModel):
+    strategy_id: int
+    enabled: bool = True
+    risk_factor: float = 1.0
+    allowed_sessions: str = "ASIA,UK,US"
+    partial_tp_percent: float = 50.0
+    move_sl_to_entry: bool = True
+
+
+class AccountStrategyConfigCreate(AccountStrategyConfigBase):
+    pass
+
+
+class AccountStrategyConfigUpdate(BaseModel):
+    enabled: Optional[bool] = None
+    risk_factor: Optional[float] = None
+    allowed_sessions: Optional[str] = None
+    partial_tp_percent: Optional[float] = None
+    move_sl_to_entry: Optional[bool] = None
+
+
+class AccountStrategyConfigResponse(AccountStrategyConfigBase):
+    id: int
+    account_id: int
+    strategy_name: Optional[str] = None  # Populated from join
+    strategy_tv_id: Optional[str] = None  # Populated from join
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+# =============================================================================
+# TRADE SCHEMAS
+# =============================================================================
+
 class TradeBase(BaseModel):
     ticker: str
     action: str
@@ -35,15 +146,20 @@ class TradeBase(BaseModel):
     quantity: int
     status: str
 
+
 class TradeCreate(TradeBase):
     pass
 
+
 class TradeResponse(TradeBase):
     id: int
-    sl: Optional[float]
-    tp: Optional[float]
-    pnl: Optional[float]
+    account_id: Optional[int] = None
+    sl: Optional[float] = None
+    tp: Optional[float] = None
+    pnl: Optional[float] = None
+    timeframe: Optional[str] = None  # NEW
     timestamp: datetime
+    exit_time: Optional[datetime] = None
     rejection_reason: Optional[str] = None
     strategy: Optional[str] = "default"
     topstep_order_id: Optional[str] = None
@@ -51,7 +167,11 @@ class TradeResponse(TradeBase):
     class Config:
         from_attributes = True
 
-# --- Log Schemas ---
+
+# =============================================================================
+# LOG SCHEMAS
+# =============================================================================
+
 class LogResponse(BaseModel):
     id: int
     level: str
@@ -62,31 +182,48 @@ class LogResponse(BaseModel):
     class Config:
         from_attributes = True
 
-# --- Settings Schemas ---
-class TimeBlock(BaseModel):
-    start: str # HH:MM
-    end: str   # HH:MM
 
-class RiskSettings(BaseModel):
-    risk_per_trade: float = 200.0
-    trading_enabled: bool = True
+# =============================================================================
+# GLOBAL SETTINGS SCHEMAS
+# =============================================================================
+
+class TimeBlock(BaseModel):
+    start: str  # HH:MM
+    end: str  # HH:MM
+
+
+class GlobalSettingsResponse(BaseModel):
+    """All global settings combined."""
     blocked_periods_enabled: bool = True
-    blocked_periods: List[TimeBlock] = [
-        TimeBlock(start="08:55", end="09:15"),
-        TimeBlock(start="15:25", end="15:45"),
-        TimeBlock(start="21:30", end="00:15")
-    ]
+    blocked_periods: List[TimeBlock] = []
     auto_flatten_enabled: bool = False
     auto_flatten_time: str = "21:55"
+    market_open_time: str = "00:00"
+    market_close_time: str = "22:00"
+
+
+class GlobalSettingsUpdate(BaseModel):
+    blocked_periods_enabled: Optional[bool] = None
+    blocked_periods: Optional[List[TimeBlock]] = None
+    auto_flatten_enabled: Optional[bool] = None
+    auto_flatten_time: Optional[str] = None
+    market_open_time: Optional[str] = None
+    market_close_time: Optional[str] = None
+
+
+# =============================================================================
+# TOPSTEP API RESPONSE SCHEMAS
+# =============================================================================
 
 class PositionResponse(BaseModel):
     id: int
     accountId: int
     contractId: str
     creationTimestamp: datetime
-    type: int # 1=Long, 2=Short
+    type: int  # 1=Long, 2=Short
     size: int
     averagePrice: float
+
 
 class OrderResponse(BaseModel):
     id: int
@@ -101,7 +238,7 @@ class OrderResponse(BaseModel):
     limitPrice: Optional[float] = None
     stopPrice: Optional[float] = None
     filledPrice: Optional[float] = None
-    time_in_force: Optional[str] = "DAY" # Placeholder if not in API but good to have
+
 
 class HistoricalTradeResponse(BaseModel):
     id: int
@@ -116,22 +253,6 @@ class HistoricalTradeResponse(BaseModel):
     voided: bool
     orderId: int
 
-class ClosePositionRequest(BaseModel):
-    contract_id: str
-
-class OrderResponse(BaseModel):
-    id: int
-    accountId: int
-    contractId: str
-    symbolId: str
-    creationTimestamp: datetime
-    status: int
-    type: int
-    side: int
-    size: int
-    limitPrice: Optional[float] = None
-    stopPrice: Optional[float] = None
-    filledPrice: Optional[float] = None
 
 class AccountResponse(BaseModel):
     id: int
@@ -141,28 +262,23 @@ class AccountResponse(BaseModel):
     balance: float
     simulated: bool
 
-class AccountSelectRequest(BaseModel):
-    account_id: int
 
-class SettingsRequest(BaseModel):
+# =============================================================================
+# REQUEST SCHEMAS
+# =============================================================================
+
+class ClosePositionRequest(BaseModel):
+    contract_id: str
+
+
+class SettingsToggleRequest(BaseModel):
     trading_enabled: bool
 
-# --- Configuration Schemas ---
-class ConfigResponse(BaseModel):
-    risk_per_trade: float
-    blocked_periods_enabled: bool
-    blocked_periods: List[TimeBlock]
-    auto_flatten_enabled: bool
-    auto_flatten_time: str
 
-class UpdateConfigRequest(BaseModel):
-    risk_per_trade: Optional[float] = None
-    blocked_periods_enabled: Optional[bool] = None
-    blocked_periods: Optional[List[TimeBlock]] = None
-    auto_flatten_enabled: Optional[bool] = None
-    auto_flatten_time: Optional[str] = None
+# =============================================================================
+# TICKER MAPPING SCHEMAS
+# =============================================================================
 
-# --- Ticker Mapping Schemas ---
 class TickerMapBase(BaseModel):
     tv_ticker: str
     ts_contract_id: str
@@ -170,8 +286,10 @@ class TickerMapBase(BaseModel):
     tick_size: float
     tick_value: float
 
+
 class TickerMapCreate(TickerMapBase):
     pass
+
 
 class TickerMapResponse(TickerMapBase):
     id: int

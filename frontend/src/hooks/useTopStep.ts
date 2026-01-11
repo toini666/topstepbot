@@ -1,70 +1,84 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { toast } from 'sonner';
-import type { Trade, Log, Account, Position, Order, HistoricalTrade, Config } from '../types';
+import type {
+    Trade, Log, Account, Position, Order, HistoricalTrade,
+    GlobalConfig, MarketStatus, AccountSettings, TradingSession, Strategy
+} from '../types';
 import { API_BASE } from '../config';
 
+/**
+ * Main hook for TopStep Trading Bot.
+ * Handles multi-account data fetching and settings management.
+ */
 export const useTopStep = () => {
+    // Core Data
     const [trades, setTrades] = useState<Trade[]>([]);
     const [logs, setLogs] = useState<Log[]>([]);
     const [stats, setStats] = useState({ daily_pnl: 0, active_trades: 0 });
+
+    // TopStep Connection
     const [accounts, setAccounts] = useState<Account[]>([]);
-    const [positions, setPositions] = useState<Position[]>([]);
-    const [orders, setOrders] = useState<Order[]>([]);
-    const [historicalTrades, setHistoricalTrades] = useState<HistoricalTrade[]>([]);
-    const [selectedAccountId, setSelectedAccountId] = useState<number | null>(null);
+    const [isConnected, setIsConnected] = useState(false);
     const [loading, setLoading] = useState(true);
 
-    const [isConnected, setIsConnected] = useState(false);
+    // Per-Account Data (indexed by account_id)
+    const [positionsByAccount, setPositionsByAccount] = useState<Record<number, Position[]>>({});
+    const [ordersByAccount, setOrdersByAccount] = useState<Record<number, Order[]>>({});
+    const [tradesByAccount, setTradesByAccount] = useState<Record<number, HistoricalTrade[]>>({});
 
-    const [settings, setSettings] = useState({ trading_enabled: true });
-    const [config, setConfig] = useState<Config>({
-        risk_per_trade: 200,
+    // Settings
+    const [globalConfig, setGlobalConfig] = useState<GlobalConfig>({
         blocked_periods_enabled: true,
         blocked_periods: [],
         auto_flatten_enabled: false,
-        auto_flatten_time: "21:55"
-    }); // Default
+        auto_flatten_time: "21:55",
+        market_open_time: "00:00",
+        market_close_time: "22:00"
+    });
+    const [accountSettings, setAccountSettings] = useState<Record<number, AccountSettings>>({});
+    const [tradingSessions, setTradingSessions] = useState<TradingSession[]>([]);
+    const [strategies, setStrategies] = useState<Strategy[]>([]);
+    const [marketStatus, setMarketStatus] = useState<MarketStatus>({ is_open: false, reason: 'Connecting...' });
 
-    // Log Fetch Params
+    // UI State
+    const [selectedAccountId, setSelectedAccountId] = useState<number | null>(null);
+    const [historyFilter, setHistoryFilter] = useState<'today' | 'week'>('today');
     const [logParams, setLogParams] = useState<{ min_timestamp: string | null; limit: number }>({
         min_timestamp: new Date(new Date().setHours(0, 0, 0, 0)).toISOString(),
         limit: 1000
     });
 
-    const [marketStatus, setMarketStatus] = useState<{ is_open: boolean; reason: string }>({ is_open: false, reason: 'Connecting...' });
+    // ==========================================================================
+    // DATA FETCHING
+    // ==========================================================================
 
-    // History Filter: 'today' (1 day) or 'week' (7 days)
-    const [historyFilter, setHistoryFilter] = useState<'today' | 'week'>('today');
-
-    const fetchData = async () => {
+    const fetchData = useCallback(async () => {
         try {
-            // 1. Fetch Basic Data
-            const [tradesRes, logsRes, statsRes, settingsRes, statusRes, configRes, marketRes] = await Promise.all([
+            // 1. Fetch Basic Data (always)
+            const [tradesRes, logsRes, statsRes, statusRes, configRes, marketRes, sessionsRes, strategiesRes] = await Promise.all([
                 axios.get(`${API_BASE}/dashboard/trades`),
                 axios.get(`${API_BASE}/dashboard/logs`, {
-                    params: {
-                        limit: logParams.limit,
-                        min_timestamp: logParams.min_timestamp
-                    }
+                    params: { limit: logParams.limit, min_timestamp: logParams.min_timestamp }
                 }),
                 axios.get(`${API_BASE}/dashboard/stats`),
-                axios.get(`${API_BASE}/dashboard/settings`),
                 axios.get(`${API_BASE}/dashboard/status`),
                 axios.get(`${API_BASE}/dashboard/config`),
-                axios.get(`${API_BASE}/dashboard/market-status`)
+                axios.get(`${API_BASE}/dashboard/market-status`),
+                axios.get(`${API_BASE}/settings/sessions`),
+                axios.get(`${API_BASE}/strategies`)
             ]);
 
             setTrades(tradesRes.data);
             setLogs(logsRes.data);
             setStats(statsRes.data);
-            if (settingsRes.data) setSettings(settingsRes.data);
-            if (configRes.data) setConfig(configRes.data);
+            if (configRes.data) setGlobalConfig(configRes.data);
             if (marketRes.data) setMarketStatus(marketRes.data);
+            if (sessionsRes.data) setTradingSessions(sessionsRes.data);
+            if (strategiesRes.data) setStrategies(strategiesRes.data);
 
-            // 2. Check & Update Connection Status
+            // 2. Check Connection Status
             const currentlyConnected = statusRes.data.connected;
-
             if (currentlyConnected !== isConnected) {
                 setIsConnected(currentlyConnected);
             }
@@ -75,52 +89,56 @@ export const useTopStep = () => {
                     const accountsRes = await axios.get(`${API_BASE}/dashboard/accounts`);
                     setAccounts(accountsRes.data);
 
-                    // Sync Selected Account from Backend (always check for external updates)
-                    try {
-                        const selectedRes = await axios.get(`${API_BASE}/dashboard/accounts/selected`);
-                        const remoteId = selectedRes.data.account_id;
-
-                        if (remoteId !== selectedAccountId) {
-                            setSelectedAccountId(remoteId);
-                        }
-
-                        // Fallback: If no account selected on backend but accounts exist, select first
-                        if (!remoteId && accountsRes.data.length > 0 && selectedAccountId === null) {
-                            // Optional: Auto-select logic if desired, or leave null
-                            // For now, let's respect backend state. 
-                            // If backend is null, we stay null unless we want to force auto-select.
-                        }
-                    } catch (e) {
-                        console.warn("Error syncing selected account:", e);
+                    // Fetch account settings
+                    const settingsRes = await axios.get(`${API_BASE}/settings/accounts`);
+                    const settingsMap: Record<number, AccountSettings> = {};
+                    for (const s of settingsRes.data) {
+                        settingsMap[s.account_id] = s;
                     }
+                    setAccountSettings(settingsMap);
+
+                    // Auto-select first account if none selected
+                    if (!selectedAccountId && accountsRes.data.length > 0) {
+                        setSelectedAccountId(accountsRes.data[0].id);
+                    }
+
+                    // Fetch per-account data for ALL accounts
+                    const days = historyFilter === 'today' ? 1 : 7;
+                    const newPositions: Record<number, Position[]> = {};
+                    const newOrders: Record<number, Order[]> = {};
+                    const newTrades: Record<number, HistoricalTrade[]> = {};
+
+                    for (const account of accountsRes.data) {
+                        const aid = account.id;
+                        try {
+                            const [posRes, ordRes, histRes] = await Promise.all([
+                                axios.get(`${API_BASE}/dashboard/positions/${aid}`),
+                                axios.get(`${API_BASE}/dashboard/orders/${aid}`, { params: { days } }),
+                                axios.get(`${API_BASE}/dashboard/trades-history/${aid}`, { params: { days } })
+                            ]);
+                            newPositions[aid] = posRes.data;
+                            newOrders[aid] = ordRes.data;
+                            newTrades[aid] = histRes.data;
+                        } catch (e) {
+                            console.warn(`Error fetching data for account ${aid}:`, e);
+                            newPositions[aid] = [];
+                            newOrders[aid] = [];
+                            newTrades[aid] = [];
+                        }
+                    }
+
+                    setPositionsByAccount(newPositions);
+                    setOrdersByAccount(newOrders);
+                    setTradesByAccount(newTrades);
 
                 } catch (e) {
-                    console.warn("Error fetching accounts despite being connected:", e);
-                }
-
-                // If account is selected, fetch deep data
-                if (selectedAccountId) {
-                    try {
-                        const days = historyFilter === 'today' ? 1 : 7;
-
-                        const [posRes, ordersRes, histTradesRes] = await Promise.all([
-                            axios.get(`${API_BASE}/dashboard/positions`),
-                            axios.get(`${API_BASE}/dashboard/orders`, { params: { days } }),
-                            axios.get(`${API_BASE}/dashboard/trades-history`, { params: { days } })
-                        ]);
-                        setPositions(posRes.data);
-                        setOrders(ordersRes.data);
-                        setHistoricalTrades(histTradesRes.data);
-                    } catch (e) {
-                        console.warn("Error fetching account details:", e);
-                    }
-                } else {
-                    setPositions([]);
-                    setOrders([]);
-                    setHistoricalTrades([]);
+                    console.warn("Error fetching accounts:", e);
                 }
             } else {
-                if (isConnected) setIsConnected(false); // Double check fallback
+                setAccounts([]);
+                setPositionsByAccount({});
+                setOrdersByAccount({});
+                setTradesByAccount({});
             }
 
         } catch (error) {
@@ -128,7 +146,11 @@ export const useTopStep = () => {
         } finally {
             setLoading(false);
         }
-    };
+    }, [isConnected, selectedAccountId, logParams, historyFilter]);
+
+    // ==========================================================================
+    // ACTIONS
+    // ==========================================================================
 
     const loadMoreLogs = () => {
         setLogParams({
@@ -137,28 +159,32 @@ export const useTopStep = () => {
         });
     };
 
-    const toggleTrading = async () => {
-        try {
-            const newState = !settings.trading_enabled;
-            await axios.post(`${API_BASE}/dashboard/settings/switch`, { trading_enabled: newState });
-            setSettings({ ...settings, trading_enabled: newState });
-            toast.success(`Trading ${newState ? 'Enabled' : 'Disabled'} Successfully`);
-        } catch (error) {
-            console.error("Failed to toggle settings:", error);
-            toast.error("Failed to toggle trading status");
-        }
-    };
-
-    const updateConfig = async (newConfig: Partial<Config>) => {
+    const updateGlobalConfig = async (newConfig: Partial<GlobalConfig>) => {
         try {
             await axios.post(`${API_BASE}/dashboard/config`, newConfig);
             toast.success("Settings Saved Successfully");
-            // Optimistic update or refresh? Refresh is safer.
             fetchData();
         } catch (error) {
             console.error("Failed to update config:", error);
             toast.error("Failed to save settings");
         }
+    };
+
+    const updateAccountSettings = async (accountId: number, updates: Partial<AccountSettings>) => {
+        try {
+            await axios.post(`${API_BASE}/settings/accounts/${accountId}`, updates);
+            toast.success("Account Settings Updated");
+            fetchData();
+        } catch (error) {
+            console.error("Failed to update account settings:", error);
+            toast.error("Failed to update account settings");
+        }
+    };
+
+    const toggleAccountTrading = async (accountId: number) => {
+        const current = accountSettings[accountId];
+        const newState = current ? !current.trading_enabled : false;
+        await updateAccountSettings(accountId, { trading_enabled: newState });
     };
 
     const connect = async () => {
@@ -168,14 +194,10 @@ export const useTopStep = () => {
             if (accountsRes.data && accountsRes.data.length > 0) {
                 setAccounts(accountsRes.data);
                 setIsConnected(true);
+                setSelectedAccountId(accountsRes.data[0].id);
                 toast.success("Connected to TopStep Successfully");
-                const selectedRes = await axios.get(`${API_BASE}/dashboard/accounts/selected`);
-                if (selectedRes.data.account_id) {
-                    setSelectedAccountId(selectedRes.data.account_id);
-                }
             } else {
-                console.warn("No accounts returned from TopStep.");
-                toast.error("Connected to Backend, but no TopStep accounts found.");
+                toast.error("Connected but no accounts found");
                 setIsConnected(false);
             }
         } catch (e) {
@@ -191,9 +213,10 @@ export const useTopStep = () => {
             await axios.post(`${API_BASE}/dashboard/logout`);
             setIsConnected(false);
             setAccounts([]);
-            setPositions([]);
-            setOrders([]);
-            setHistoricalTrades([]);
+            setPositionsByAccount({});
+            setOrdersByAccount({});
+            setTradesByAccount({});
+            setSelectedAccountId(null);
             toast.success("Disconnected Successfully");
         } catch (error) {
             console.error("Failed to logout", error);
@@ -201,39 +224,122 @@ export const useTopStep = () => {
         }
     };
 
-    const selectAccount = async (id: number) => {
+    const closePosition = async (accountId: number, contractId: string) => {
         try {
-            await axios.post(`${API_BASE}/dashboard/accounts/select`, { account_id: id });
-            setSelectedAccountId(id);
-            toast.success("Account Selected");
+            await axios.post(`${API_BASE}/dashboard/positions/${accountId}/close`, { contract_id: contractId });
+            toast.success("Position Closed");
+            fetchData();
         } catch (error) {
-            console.error("Failed to select account:", error);
-            toast.error("Failed to select account");
+            console.error("Failed to close position:", error);
+            toast.error("Failed to close position");
         }
     };
 
+    const flattenAccount = async (accountId: number) => {
+        try {
+            await axios.post(`${API_BASE}/dashboard/account/${accountId}/flatten`);
+            toast.success("Account Flattened");
+            fetchData();
+        } catch (error) {
+            console.error("Failed to flatten account:", error);
+            toast.error("Failed to flatten account");
+        }
+    };
+
+    const flattenAllAccounts = async () => {
+        try {
+            await axios.post(`${API_BASE}/dashboard/flatten-all`);
+            toast.success("All Accounts Flattened");
+            fetchData();
+        } catch (error) {
+            console.error("Failed to flatten all accounts:", error);
+            toast.error("Failed to flatten all accounts");
+        }
+    };
+
+    // ==========================================================================
+    // COMPUTED VALUES
+    // ==========================================================================
+
+    // Get data for currently selected account
+    const positions = selectedAccountId ? positionsByAccount[selectedAccountId] || [] : [];
+    const orders = selectedAccountId ? ordersByAccount[selectedAccountId] || [] : [];
+    const historicalTrades = selectedAccountId ? tradesByAccount[selectedAccountId] || [] : [];
+    const selectedAccountSettings = selectedAccountId ? accountSettings[selectedAccountId] : null;
+
+    // Get all positions across all accounts (for orphan detection, etc.)
+    const allPositions = Object.values(positionsByAccount).flat();
+    const allOrders = Object.values(ordersByAccount).flat();
+
+    // ==========================================================================
+    // EFFECTS
+    // ==========================================================================
+
     useEffect(() => {
-        fetchData(); // Initial fetch
-        const interval = setInterval(fetchData, 5000); // Poll every 5 seconds
+        fetchData();
+        const interval = setInterval(fetchData, 5000);
         return () => clearInterval(interval);
-    }, [isConnected, selectedAccountId, logParams, historyFilter]);
+    }, [fetchData]);
+
+    // ==========================================================================
+    // RETURN
+    // ==========================================================================
 
     return {
-        trades, logs, stats, accounts, positions, orders, historicalTrades,
-        selectedAccountId,
-        selectAccount,
-        connect,
-        logout,
-        loadMoreLogs,
+        // Core Data
+        trades,
+        logs,
+        stats,
+
+        // Connection
+        accounts,
         isConnected,
         loading,
-        settings,
-        toggleTrading,
-        config,
-        updateConfig,
+        connect,
+        logout,
+
+        // Per-Account Data
+        positionsByAccount,
+        ordersByAccount,
+        tradesByAccount,
+
+        // Current Selection (for backward compatibility)
+        positions,
+        orders,
+        historicalTrades,
+        selectedAccountId,
+        setSelectedAccountId,
+        selectedAccountSettings,
+
+        // Aggregated Data
+        allPositions,
+        allOrders,
+
+        // Settings
+        globalConfig,
+        updateGlobalConfig,
+        accountSettings,
+        updateAccountSettings,
+        toggleAccountTrading,
+        tradingSessions,
+        strategies,
+        marketStatus,
+
+        // Actions
+        closePosition,
+        flattenAccount,
+        flattenAllAccounts,
+        loadMoreLogs,
         refresh: fetchData,
+
+        // UI State
         historyFilter,
         setHistoryFilter,
-        marketStatus
+
+        // Legacy compatibility
+        config: globalConfig,
+        updateConfig: updateGlobalConfig,
+        settings: { trading_enabled: true }, // Legacy - now per-account
+        toggleTrading: () => { }, // Legacy - use toggleAccountTrading
     };
 };

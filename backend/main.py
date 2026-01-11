@@ -1,7 +1,16 @@
+"""
+TopStepBot Main Application - Multi-Account Trading Bot
+
+Key Features:
+- Multi-account position monitoring
+- Global force flatten (all accounts)
+- Trading session awareness
+"""
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from backend.database import init_db, get_db, Setting
-from backend.routers import webhook, dashboard, mapping, strategies
+from backend.database import init_db, get_db, Setting, AccountSettings, seed_default_sessions
+from backend.routers import webhook, dashboard, strategies, export
 from contextlib import asynccontextmanager
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from backend.services.risk_engine import RiskEngine
@@ -11,289 +20,190 @@ from backend.services.telegram_bot import telegram_bot
 from backend.services.maintenance_service import backup_database, clean_logs, check_and_run_startup_backup
 from backend.services.persistence_service import save_state, load_state
 import asyncio
+import json
+from datetime import datetime, time
+import pytz
 
 # Scheduler Setup
 scheduler = AsyncIOScheduler()
 
-# Global State for Position Monitoring
-# Key: contractId, Value: quantity (snapshot)
+# Brussels Timezone
+BRUSSELS_TZ = pytz.timezone("Europe/Brussels")
+
+# Global State for Position Monitoring (per-account)
+# Key: account_id, Value: { contractId: position_data }
 _last_open_positions = {}
 _last_orphans_ids = set()
 
+
 async def monitor_closed_positions_job():
     """
-    Polls TopStep API for open positions.
+    Polls TopStep API for open positions on ALL accounts.
     Detects if a previously open position is missing (closed).
     Triggers Telegram Notification for valid closed trades.
     """
-    global _last_open_positions
+    global _last_open_positions, _last_orphans_ids
     from backend.database import SessionLocal, Log
     db = SessionLocal()
     
     try:
-        # 1. Get Selected Account
-        setting = db.query(Setting).filter(Setting.key == "selected_account_id").first()
-        if not setting:
-            return # No account active, nothing to monitor
-
-        account_id = int(setting.value)
+        # Get all accounts from TopStep
+        all_accounts = await topstep_client.get_accounts()
         
-        # 2. Fetch Current Positions
-        # Note: If API fails, we should skip update to avoid false "closures"
-        current_positions = await topstep_client.get_open_positions(account_id)
+        if not all_accounts:
+            return
         
-        # Convert to Dictionary for easy lookup: { 'MNQH6': 1, 'ESM5': -2 }
-        # Should we use contractId or symbol? get_open_positions returns dicts.
-        current_map = {}
-        for pos in current_positions:
-            # pos structure from TopStep: { 'contractId': '...', 'side': 'Buy'/'Sell', 'size': 1, ... }
-            cid = str(pos.get('contractId'))
-            current_map[cid] = pos
-
-        # DEBUG: Trace Position State
-        # if _last_open_positions or current_map:
-        #     print(f"DEBUG: Monitor | Last: {list(_last_open_positions.keys())} | Curr: {list(current_map.keys())}")
-
-        # 3. Detect Missing Keys (Closures)
-        # Iterate over LAST known snapshot
-        if _last_open_positions: # Only check if we had state before
-            for prev_cid, prev_pos in _last_open_positions.items():
-                if prev_cid not in current_map:
-                    # Position CLOSED!
-                    print(f"💰 DETECTED CLOSURE FOR {prev_cid}")
-                    
-                    # 4. Fetch Details of Closed Trade (PnL)
-                    # We need to find the trade that just happened.
-                    # Fetch last 24h trades and look for matching symbol + high timestamp
-                    recent_trades = await topstep_client.get_historical_trades(account_id, days=1)
-                    
-                    # Filter for this symbol and sort by time desc
-                    # Note: API trade symbol might differ slightly from contractId? Usually they match or contain.
-                    # 'prev_pos' has 'symbolId' or 'contractId'. 
-                    target_symbol = prev_pos.get('symbolId') or prev_cid
-                    
-                    # Find the EXIT trade (usually Side is opposite to Pos Side, or just latest trade on symbol)
-                    # TopStep 'search' returns individual fills or aggregated half-turns? 
-                    # Documentation says "Historical Trades" usually means closed trades (round turn) or legs.
-                    # If it returns round-turn trades with PnL, that's perfect.
-                    # Let's assume the list contains objects with 'pnl'.
-                    
-                    matching_trade = None
-                    if recent_trades:
-                        for t in recent_trades:
-                            # Check symbol match. strict or fuzzy?
-                            # Also check if it looks recent (optional)
-                            if str(t.get('symbol')) == str(target_symbol) or str(t.get('contractId')) == str(prev_cid):
-                                matching_trade = t
-                                break
-                    
-                    if matching_trade:
-                        print(f"   -> Found History Trade: {matching_trade.get('pnl')}")
-                        # Notify
-                        # Fills (Historical Trades) have 'price' (Exit Price) but not 'entryPrice'
-                        exit_px = matching_trade.get('price') or matching_trade.get('fillPrice') or 0
-                        entry_px = 0 # Not available in single fill object
-                        
-                        raw_pnl = matching_trade.get('pnl') or matching_trade.get('profitAndLoss')
-                        fees = matching_trade.get('fees')
-                        
-                        # Handle None values safely
-                        # The PnL returned by TopStep (on a Close) usually matches the Dashboard PnL column.
-                        # Do not add fees manually unless we are sure it's Net vs Gross mismatch.
-                        # User feedback suggests adding fees made it wrong (-159 vs -160).
-                        pnl_val = raw_pnl if raw_pnl is not None else 0.0
-                        
-                        # Map Side (Int -> Str)
-                        # API: 1=Buy, 2=Sell (Usually). If 0 or missing, rely on PnL or keep as is?
-                        # Let's map explicit values if known.
-                        # Map Side (Int -> Str) and Normalize
-                        raw_side = matching_trade.get('side')
-                        side_str = "UNK"
-                        
-                        raw_side_upper = str(raw_side).upper().strip()
-                        is_buy = raw_side_upper in ["0", "BUY", "LONG"]
-                        is_sell = raw_side_upper in ["1", "2", "SELL", "SHORT"]
-                        
-                        if is_buy: side_str = "SHORT"
-                        elif is_sell: side_str = "LONG"
-                        else: side_str = str(raw_side)
-                        
-                        # Calculate Total Fees (Entry + Exit)
-                        exit_fees = matching_trade.get('fees') or 0.0
-                        total_fees = exit_fees
-                        
-                        potential_entries = []
-                        for t in recent_trades:
-                            t_side = str(t.get('side')).upper().strip()
-                            t_sym = str(t.get('symbol'))
-                            t_cid = str(t.get('contractId'))
+        all_orphans = []
+        
+        for account in all_accounts:
+            account_id = account.get('id')
+            account_name = account.get('name', str(account_id))
+            
+            try:
+                # Fetch Current Positions for this account
+                current_positions = await topstep_client.get_open_positions(account_id)
+                
+                # Convert to Dictionary: { 'contractId': position_data }
+                current_map = {}
+                for pos in current_positions:
+                    cid = str(pos.get('contractId'))
+                    current_map[cid] = pos
+                
+                # Get last known state for this account
+                last_map = _last_open_positions.get(account_id, {})
+                
+                # Detect Closures
+                if last_map:
+                    for prev_cid, prev_pos in last_map.items():
+                        if prev_cid not in current_map:
+                            # Position CLOSED!
+                            print(f"💰 DETECTED CLOSURE: {prev_cid} on Account {account_name}")
                             
-                            is_target_entry = False
-                            if is_buy: 
-                                # Exit=Buy -> Entry=Sell (or Short)
-                                if t_side in ["1", "2", "SELL", "SHORT"]: is_target_entry = True
-                            elif is_sell:
-                                # Exit=Sell -> Entry=Buy (or Long)
-                                if t_side in ["0", "BUY", "LONG"]: is_target_entry = True
+                            # Fetch Details of Closed Trade (PnL)
+                            recent_trades = await topstep_client.get_historical_trades(account_id, days=1)
+                            target_symbol = prev_pos.get('symbolId') or prev_cid
+                            
+                            matching_trade = None
+                            if recent_trades:
+                                for t in recent_trades:
+                                    if str(t.get('symbol')) == str(target_symbol) or str(t.get('contractId')) == str(prev_cid):
+                                        matching_trade = t
+                                        break
+                            
+                            if matching_trade:
+                                exit_px = matching_trade.get('price') or matching_trade.get('fillPrice') or 0
+                                raw_pnl = matching_trade.get('pnl') or matching_trade.get('profitAndLoss')
+                                pnl_val = raw_pnl if raw_pnl is not None else 0.0
                                 
-                            if is_target_entry:
-                                # Loose Symbol Match
-                                if t_sym == str(target_symbol) or t_cid == str(prev_cid) or prev_cid in t_cid:
-                                    # Must be OLDER than the Exit
-                                    if t.get('creationTimestamp') < matching_trade.get('creationTimestamp'):
-                                        potential_entries.append(t)
-                        
-                        if potential_entries:
-                            # Use the one closest in time (last one before exit)?
-                            # List is usually sorted? No guarantee.
-                            # Sort potential entries by timestamp, NEWEST first (closest to exit)
-                            potential_entries.sort(key=lambda x: x.get('creationTimestamp'), reverse=True)
-                            
-                            # The most recent opposite trade is likely the entry
-                            entry_trade = potential_entries[0] 
-                            entry_fees = entry_trade.get('fees') or 0.0
-                            
-                            # Scaling fees: If exit qty != entry qty, pro-rate?
-                            # User wants "Total Fees". 
-                            # If we partially close, we should pro-rate the entry fee.
-                            entry_qty = entry_trade.get('size') or entry_trade.get('qty') or 1
-                            exit_qty = matching_trade.get('size') or matching_trade.get('qty') or 1
-                            
-                            if float(entry_qty) > 0:
-                                ratio = float(exit_qty) / float(entry_qty)
-                                if ratio > 1: ratio = 1.0 # Cap at 100%
-                                total_fees += (entry_fees * ratio)
+                                # Map Side
+                                raw_side = matching_trade.get('side')
+                                raw_side_upper = str(raw_side).upper().strip()
+                                
+                                if raw_side_upper in ["0", "BUY", "LONG"]:
+                                    side_str = "SHORT"  # Exit buy = was short
+                                elif raw_side_upper in ["1", "2", "SELL", "SHORT"]:
+                                    side_str = "LONG"  # Exit sell = was long
+                                else:
+                                    side_str = str(raw_side)
+                                
+                                # Calculate Total Fees
+                                exit_fees = matching_trade.get('fees') or 0.0
+                                total_fees = exit_fees
+                                
+                                # Find entry trade for fee calculation
+                                is_buy = raw_side_upper in ["0", "BUY", "LONG"]
+                                for t in recent_trades:
+                                    t_side = str(t.get('side')).upper().strip()
+                                    t_sym = str(t.get('symbol'))
+                                    t_cid = str(t.get('contractId'))
+                                    
+                                    is_target_entry = False
+                                    if is_buy and t_side in ["1", "2", "SELL", "SHORT"]:
+                                        is_target_entry = True
+                                    elif not is_buy and t_side in ["0", "BUY", "LONG"]:
+                                        is_target_entry = True
+                                    
+                                    if is_target_entry and (t_sym == str(target_symbol) or t_cid == str(prev_cid)):
+                                        if t.get('creationTimestamp') < matching_trade.get('creationTimestamp'):
+                                            entry_fees = t.get('fees') or 0.0
+                                            total_fees += entry_fees
+                                            break
+                                
+                                await telegram_service.notify_position_closed(
+                                    symbol=f"{matching_trade.get('symbol', prev_cid)} ({account_name})",
+                                    side=side_str,
+                                    entry_price=0,
+                                    exit_price=exit_px,
+                                    pnl=pnl_val,
+                                    fees=total_fees,
+                                    quantity=matching_trade.get('size', 0)
+                                )
                             else:
-                                total_fees += entry_fees
-
-                        await telegram_service.notify_position_closed(
-                            symbol=matching_trade.get('symbol', prev_cid),
-                            side=side_str,
-                            entry_price=entry_px,
-                            exit_price=exit_px,
-                            pnl=pnl_val,
-                            fees=total_fees,
-                            quantity=matching_trade.get('size', matching_trade.get('qty', 0))
-                        )
-                    else:
-                        print("   -> History Trade NOT Found")
-                        await telegram_service.send_message(f"💰 <b>Position Closed: {target_symbol}</b> (PnL data delayed)")
-
-        # 4b. Detect NEW Positions (Opens / Fills)
-        # Iterate over CURRENT map
-        if _last_open_positions is not None: # Ensure we had a state (not first run)
-            for curr_cid, curr_pos in current_map.items():
-                if curr_cid not in _last_open_positions:
-                    # New Position Detected!
-                    print(f"🔵 DETECTED OPEN FOR {curr_cid}")
-                    
-                    # Fetch Entry Price (Fill)
-                    # Use same get_historical_trades logic but look for ENTRY
-                    recent_trades = await topstep_client.get_historical_trades(account_id, days=1)
-                    target_symbol = curr_pos.get('symbolId') or curr_cid
-                    
-                    matching_fill = None
-                    if recent_trades:
-                        for t in recent_trades:
-                             # Look for trade with same symbol and recent time
-                             # Side should match the position side code?
-                             # Position Side: "Buy" or 1? `curr_pos` has `side`.
-                             # Trade Side: 1 or 2.
-                             # Let's just find the latest fill for this symbol.
-                             if str(t.get('symbol')) == str(target_symbol) or str(t.get('contractId')) == str(curr_cid):
-                                 matching_fill = t
-                                 break
-                    
-                    if matching_fill:
-                         # Get Fill Price
-                         fill_price = matching_fill.get('price') or matching_fill.get('fillPrice') or 0
-                         
-                         fill_side = matching_fill.get('side')
-                         # Robust Side Mapping with fallback to Position Snapshot side
-                         side_upper = str(fill_side).upper().strip()
-                         
-                         if side_upper in ["0", "BUY", "LONG"]:
-                             side_str = "BUY"
-                         elif side_upper in ["1", "2", "SELL", "SHORT"]:
-                             side_str = "SELL"
-                         else:
-                             # Fallback to the Position's side (which detected the Open)
-                             # pos['side'] is usually "Buy"/"Sell"
-                             pos_side = str(curr_pos.get('side')).upper().strip()
-                             if "BUY" in pos_side or "LONG" in pos_side:
-                                 side_str = "BUY"
-                             elif "SELL" in pos_side or "SHORT" in pos_side:
-                                 side_str = "SELL"
-                             else:
-                                 side_str = "UNK" # Give up
-
-                         await telegram_service.notify_position_opened(
-                             symbol=matching_fill.get('symbol', curr_cid),
-                             side=side_str,
-                             quantity=matching_fill.get('size', 1),
-                             price=fill_price,
-                             order_id=str(matching_fill.get('orderId', ''))
-                         )
-        
-        # 5. Update State
-        _last_open_positions = current_map
-
-        # --- ORPHANED ORDER CHECK ---
-        # 6. Fetch Active Orders
-        # We need to fetch orders to see if any are working without a position
-        recent_orders = await topstep_client.get_orders(account_id, days=1)
-        
-        # Filter for Working/Accepted
-        # Status: 1=Working, 6=Pending? 
-        # Or string 'Working', 'Accepted'. TopStepClient might normalize or return raw.
-        # Assuming raw from previous debug or similar to webhook logic.
-        # Let's handle both int and str to be safe.
-        active_orders = []
-        for o in recent_orders:
-            st = o.get('status')
-            # Check for "Working" (1) or "Accepted" ? 
-            # Usually we care about Working (1).
-            if str(st).upper() in ["WORKING", "ACCEPTED", "1", "6"]:
-                active_orders.append(o)
+                                await telegram_service.send_message(
+                                    f"💰 <b>Position Closed: {target_symbol}</b> ({account_name})"
+                                )
                 
-        # 7. Identify Orphans
-        # An order is orphaned if its contractId/symbol is NOT in _last_open_positions keys
-        orphans = []
-        for o in active_orders:
-            cid = str(o.get('contractId'))
-            sym = str(o.get('symbol'))
-            
-            # Check if we have a position for this contract
-            # keys in current_map are contractIds
-            has_pos = (cid in current_map)
-            
-            # If false, check symbol match (sometimes IDs vary slightly?)
-            if not has_pos:
-                # Fallback check values
-                for k, v in current_map.items():
-                    if str(v.get('symbol')) == sym:
-                        has_pos = True
-                        break
-            
-            if not has_pos:
-                orphans.append(o)
+                # Detect New Positions (Opens)
+                if last_map is not None:
+                    for curr_cid, curr_pos in current_map.items():
+                        if curr_cid not in last_map:
+                            print(f"🔵 DETECTED OPEN: {curr_cid} on Account {account_name}")
+                            
+                            recent_trades = await topstep_client.get_historical_trades(account_id, days=1)
+                            matching_fill = None
+                            
+                            if recent_trades:
+                                for t in recent_trades:
+                                    if str(t.get('contractId')) == str(curr_cid):
+                                        matching_fill = t
+                                        break
+                            
+                            if matching_fill:
+                                fill_price = matching_fill.get('price') or 0
+                                fill_side = str(matching_fill.get('side')).upper().strip()
+                                
+                                if fill_side in ["0", "BUY", "LONG"]:
+                                    side_str = "BUY"
+                                elif fill_side in ["1", "2", "SELL", "SHORT"]:
+                                    side_str = "SELL"
+                                else:
+                                    side_str = "UNK"
+                                
+                                await telegram_service.notify_position_opened(
+                                    symbol=f"{matching_fill.get('symbol', curr_cid)} ({account_name})",
+                                    side=side_str,
+                                    quantity=matching_fill.get('size', 1),
+                                    price=fill_price,
+                                    order_id=str(matching_fill.get('orderId', ''))
+                                )
                 
-        # 8. Notify if new Orphans found
-        # We need a global state for orphans to avoid spamming every 30s
-        global _last_orphans_ids
-        current_orphan_ids = set(str(o.get('orderId') or o.get('id')) for o in orphans)
+                # Update state for this account
+                _last_open_positions[account_id] = current_map
+                
+                # Check for orphaned orders on this account
+                recent_orders = await topstep_client.get_orders(account_id, days=1)
+                for o in recent_orders:
+                    st = o.get('status')
+                    if str(st).upper() in ["WORKING", "ACCEPTED", "1", "6"]:
+                        cid = str(o.get('contractId'))
+                        if cid not in current_map:
+                            o['_account_name'] = account_name
+                            all_orphans.append(o)
+            
+            except Exception as e:
+                print(f"Monitor error for account {account_id}: {e}")
+                continue
         
-        # Logic: Notify if there are any orphans AND the set is different from last time
-        # Or active reminders? Let's just notify on NEW orphans or full set if changed.
-        if orphans and current_orphan_ids != _last_orphans_ids:
+        # Notify orphans (globally)
+        current_orphan_ids = set(str(o.get('orderId') or o.get('id')) for o in all_orphans)
+        
+        if all_orphans and current_orphan_ids != _last_orphans_ids:
             print(f"⚠️ Orphaned Orders Detected: {current_orphan_ids}")
-            await telegram_service.notify_orphaned_orders(orphans)
-            
+            await telegram_service.notify_orphaned_orders(all_orphans)
+        
         _last_orphans_ids = current_orphan_ids
         
     except Exception as e:
-        # db.add(Log(level="ERROR", message=f"Monitor Job Error: {e}"))
-        # db.commit()
         print(f"Monitor Job Failed: {e}")
         import traceback
         traceback.print_exc()
@@ -302,23 +212,84 @@ async def monitor_closed_positions_job():
 
 
 async def auto_flatten_job():
-    # Create a new session for the job
-    from backend.database import SessionLocal
+    """
+    Global force flatten at scheduled time.
+    Affects ALL accounts regardless of trading_enabled setting.
+    """
+    from backend.database import SessionLocal, Log
     db = SessionLocal()
+    
     try:
         risk_engine = RiskEngine(db)
-        await risk_engine.check_auto_flatten()
+        settings = risk_engine.get_global_settings()
+        
+        if not settings.get("auto_flatten_enabled", False):
+            return
+        
+        flatten_time = settings.get("auto_flatten_time", "21:55")
+        now_bru = datetime.now(BRUSSELS_TZ)
+        
+        try:
+            flatten_h, flatten_m = map(int, flatten_time.split(':'))
+            target = time(flatten_h, flatten_m)
+            
+            # Check if within 1 minute window (since job runs every minute)
+            current_time = now_bru.time()
+            if current_time.hour == target.hour and current_time.minute == target.minute:
+                print("⏰ Auto-Flatten Triggered!")
+                
+                # Get all accounts and flatten each
+                all_accounts = await topstep_client.get_accounts()
+                
+                for account in all_accounts:
+                    account_id = account.get('id')
+                    account_name = account.get('name', str(account_id))
+                    
+                    try:
+                        # Cancel all orders
+                        orders = await topstep_client.get_orders(account_id)
+                        for order in orders:
+                            if order.get('status') in [1, 6]:
+                                await topstep_client.cancel_order(account_id, order.get('id'))
+                        
+                        # Close all positions
+                        positions = await topstep_client.get_open_positions(account_id)
+                        for pos in positions:
+                            await topstep_client.close_position(account_id, pos.get('contractId'))
+                        
+                        db.add(Log(level="WARNING", message=f"Auto-Flatten: Account {account_name} flattened"))
+                        
+                    except Exception as e:
+                        db.add(Log(level="ERROR", message=f"Auto-Flatten failed for {account_name}: {e}"))
+                
+                db.commit()
+                await telegram_service.send_message("⏰ <b>Auto-Flatten Complete</b> - All accounts flattened")
+        
+        except ValueError:
+            print(f"Invalid auto_flatten_time format: {flatten_time}")
+    
     except Exception as e:
         print(f"Auto-flatten job error: {e}")
     finally:
         db.close()
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
     init_db()
     
-    # Check & Run Startup Backup (Fail-safe for missed cron jobs)
+    # Seed default trading sessions
+    from backend.database import SessionLocal
+    db = SessionLocal()
+    try:
+        seed_default_sessions(db)
+    except Exception as e:
+        print(f"Session seeding error: {e}")
+    finally:
+        db.close()
+    
+    # Check & Run Startup Backup
     check_and_run_startup_backup()
     
     # Load Persistence State
@@ -326,12 +297,12 @@ async def lifespan(app: FastAPI):
     state = load_state()
     if "last_open_positions" in state:
         _last_open_positions = state["last_open_positions"]
-        print(f"Loaded {len(_last_open_positions)} positions from persistence.")
+        print(f"Loaded position state for {len(_last_open_positions)} accounts from persistence.")
     
     # Log System Restart
-    from backend.database import SessionLocal, Log
     db = SessionLocal()
     try:
+        from backend.database import Log
         db.add(Log(level="WARNING", message="System Restarted: Connection Reset"))
         db.commit()
     except Exception as e:
@@ -342,28 +313,16 @@ async def lifespan(app: FastAPI):
     # Auto-Connect to TopStep
     try:
         await topstep_client.login()
-        # Initialize Position Snapshot to avoid false alerts on startup
-        # But wait, if we restart, we lose state. 
-        # If we have open positions on startup, we should just record them, not alert "Closed" (obviously).
-        # We start with empty dict, and fetch immediately to fill it. 
-        # Then next poll checks diff. Correct.
         await telegram_service.notify_startup()
-        
     except Exception as e:
         print(f"Auto-login failed: {e}")
 
-    # Add Jobs
+    # Add Scheduled Jobs
     scheduler.add_job(auto_flatten_job, 'interval', minutes=1)
-    
-    # Monitor for Closures (Every 30s)
-    # Monitor for Closures (Every 30s)
     scheduler.add_job(monitor_closed_positions_job, 'interval', seconds=30)
     
     # Maintenance Jobs
-    # Backup Database daily at 03:00 UTC
     scheduler.add_job(backup_database, 'cron', hour=3, minute=0)
-    
-    # Clean Logs daily at 03:15 UTC (keep 7 days)
     scheduler.add_job(clean_logs, 'cron', hour=3, minute=15, kwargs={'days': 7})
 
     scheduler.start()
@@ -373,6 +332,7 @@ async def lifespan(app: FastAPI):
     polling_task = asyncio.create_task(telegram_bot.start_polling())
     
     yield
+    
     # Shutdown
     telegram_bot.stop_polling()
     
@@ -383,30 +343,35 @@ async def lifespan(app: FastAPI):
     
     await telegram_service.notify_shutdown()
     scheduler.shutdown()
+    
     try:
         await polling_task
     except asyncio.CancelledError:
         pass
 
-app = FastAPI(title="TopStep Trading Bot", version="0.1.0", lifespan=lifespan)
+
+app = FastAPI(title="TopStep Trading Bot", version="2.0.0", lifespan=lifespan)
 
 # CORS Setup (for Frontend)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:5174"],  # Vite default ports
+    allow_origins=["http://localhost:5173", "http://localhost:5174"],
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization"],
 )
 
+# Include Routers
 app.include_router(webhook.router, prefix="/api")
 app.include_router(dashboard.router, prefix="/api")
-app.include_router(mapping.router, prefix="/api")
 app.include_router(strategies.router, prefix="/api")
+app.include_router(export.router, prefix="/api")
+
 
 @app.get("/")
 def read_root():
-    return {"status": "online", "service": "TopStep Trading Bot"}
+    return {"status": "online", "service": "TopStep Trading Bot", "version": "2.0.0"}
+
 
 @app.get("/health")
 def health_check():

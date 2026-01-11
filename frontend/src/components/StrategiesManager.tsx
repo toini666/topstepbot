@@ -1,25 +1,44 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Trash2, Plus, DollarSign, Layers, Hash, Info, Pencil, X, Save } from 'lucide-react';
+import { Trash2, Plus, Layers, Pencil, X, Save, Clock } from 'lucide-react';
 import { toast } from 'sonner';
 import { API_BASE } from '../config';
 import { useTopStep } from '../hooks/useTopStep';
-import type { Strategy } from '../types';
+import type { Strategy, AccountStrategyConfig } from '../types';
 
+/**
+ * Strategies Manager Component
+ * - Manages global strategy templates
+ * - Configures per-account strategy settings (when account selected)
+ */
 export function StrategiesManager() {
-    const { config } = useTopStep();
+    const { selectedAccountId } = useTopStep();
+
+    // Global Strategies (Templates)
     const [strategies, setStrategies] = useState<Strategy[]>([]);
     const [loading, setLoading] = useState(false);
+
+    // Account-Specific Configs
+    const [accountConfigs, setAccountConfigs] = useState<AccountStrategyConfig[]>([]);
 
     // Form State
     const [editingId, setEditingId] = useState<number | null>(null);
     const [name, setName] = useState('');
     const [tvId, setTvId] = useState('');
-    const [factor, setFactor] = useState<number>(1.0); // Default 1.0
+    const [defaultFactor, setDefaultFactor] = useState<number>(1.0);
+    const [defaultSessions, setDefaultSessions] = useState<string[]>(['ASIA', 'UK', 'US']);
+    const [defaultPartialPercent, setDefaultPartialPercent] = useState<number>(50);
+    const [defaultMoveSlToEntry, setDefaultMoveSlToEntry] = useState<boolean>(true);
 
     useEffect(() => {
         fetchStrategies();
     }, []);
+
+    useEffect(() => {
+        if (selectedAccountId) {
+            fetchAccountConfigs(selectedAccountId);
+        }
+    }, [selectedAccountId]);
 
     const fetchStrategies = async () => {
         try {
@@ -27,10 +46,19 @@ export function StrategiesManager() {
             const res = await axios.get(`${API_BASE}/strategies/`);
             setStrategies(res.data);
         } catch (e) {
-            console.error(e);
             toast.error('Failed to load strategies');
         } finally {
             setLoading(false);
+        }
+    };
+
+    const fetchAccountConfigs = async (accountId: number) => {
+        try {
+            const res = await axios.get(`${API_BASE}/settings/accounts/${accountId}/strategies`);
+            setAccountConfigs(res.data);
+        } catch (e) {
+            console.error('Failed to load account configs:', e);
+            setAccountConfigs([]);
         }
     };
 
@@ -38,16 +66,20 @@ export function StrategiesManager() {
         setEditingId(null);
         setName('');
         setTvId('');
-        setFactor(1.0);
+        setDefaultFactor(1.0);
+        setDefaultSessions(['ASIA', 'UK', 'US']);
+        setDefaultPartialPercent(50);
+        setDefaultMoveSlToEntry(true);
     };
 
     const handleEdit = (strat: Strategy) => {
         setEditingId(strat.id);
         setName(strat.name);
         setTvId(strat.tv_id);
-        setFactor(strat.risk_factor);
-        // Scroll to top
-        window.scrollTo({ top: 0, behavior: 'smooth' });
+        setDefaultFactor(strat.default_risk_factor);
+        setDefaultSessions(strat.default_allowed_sessions.split(',').map(s => s.trim()));
+        setDefaultPartialPercent(strat.default_partial_tp_percent);
+        setDefaultMoveSlToEntry(strat.default_move_sl_to_entry);
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -56,7 +88,10 @@ export function StrategiesManager() {
             const payload = {
                 name,
                 tv_id: tvId,
-                risk_factor: factor
+                default_risk_factor: defaultFactor,
+                default_allowed_sessions: defaultSessions.join(','),
+                default_partial_tp_percent: defaultPartialPercent,
+                default_move_sl_to_entry: defaultMoveSlToEntry
             };
 
             if (editingId) {
@@ -75,7 +110,7 @@ export function StrategiesManager() {
     };
 
     const handleDelete = async (id: number) => {
-        if (!confirm('Are you sure you want to delete this strategy?')) return;
+        if (!confirm('Delete this strategy?')) return;
         try {
             await axios.delete(`${API_BASE}/strategies/${id}`);
             toast.success('Strategy Deleted');
@@ -86,122 +121,191 @@ export function StrategiesManager() {
         }
     };
 
+    const toggleSession = (session: string) => {
+        if (defaultSessions.includes(session)) {
+            setDefaultSessions(defaultSessions.filter(s => s !== session));
+        } else {
+            setDefaultSessions([...defaultSessions, session]);
+        }
+    };
+
+    const addStrategyToAccount = async (strategyId: number) => {
+        if (!selectedAccountId) {
+            toast.error('Select an account first');
+            return;
+        }
+
+        const strategy = strategies.find(s => s.id === strategyId);
+        if (!strategy) return;
+
+        try {
+            await axios.post(`${API_BASE}/settings/accounts/${selectedAccountId}/strategies`, {
+                strategy_id: strategyId,
+                enabled: true,
+                risk_factor: strategy.default_risk_factor,
+                allowed_sessions: strategy.default_allowed_sessions,
+                partial_tp_percent: strategy.default_partial_tp_percent,
+                move_sl_to_entry: strategy.default_move_sl_to_entry
+            });
+            toast.success('Strategy added to account');
+            fetchAccountConfigs(selectedAccountId);
+        } catch (e) {
+            toast.error('Failed to add strategy to account');
+        }
+    };
+
+    const removeStrategyFromAccount = async (strategyId: number) => {
+        if (!selectedAccountId) return;
+        try {
+            await axios.delete(`${API_BASE}/settings/accounts/${selectedAccountId}/strategies/${strategyId}`);
+            toast.success('Strategy removed from account');
+            fetchAccountConfigs(selectedAccountId);
+        } catch (e) {
+            toast.error('Failed to remove strategy');
+        }
+    };
+
+    const isStrategyOnAccount = (strategyId: number) => {
+        return accountConfigs.some(c => c.strategy_id === strategyId);
+    };
+
     return (
         <div className="space-y-8 animate-fade-in">
-            {/* Create/Edit Section */}
+            {/* Create/Edit Strategy Template */}
             <section className={`border rounded-2xl p-6 transition-all ${editingId ? 'bg-indigo-500/5 border-indigo-500/30' : 'bg-slate-900/50 border-slate-800'}`}>
                 <div className="flex justify-between items-center mb-6">
                     <h2 className="text-xl font-semibold flex items-center gap-2">
                         {editingId ? <Pencil className="w-5 h-5 text-indigo-400" /> : <Plus className="w-5 h-5 text-indigo-400" />}
-                        {editingId ? 'Edit Strategy' : 'Add New Strategy'}
+                        {editingId ? 'Edit Strategy Template' : 'New Strategy Template'}
                     </h2>
                     {editingId && (
-                        <button
-                            onClick={resetForm}
-                            className="text-slate-400 hover:text-white text-xs flex items-center gap-1 bg-slate-800 px-3 py-1 rounded-lg"
-                        >
-                            <X className="w-3 h-3" /> Cancel Edit
+                        <button onClick={resetForm} className="text-slate-400 hover:text-white text-xs flex items-center gap-1 bg-slate-800 px-3 py-1 rounded-lg">
+                            <X className="w-3 h-3" /> Cancel
                         </button>
                     )}
                 </div>
 
-                <form onSubmit={handleSubmit} className="flex flex-col md:flex-row gap-6 items-end">
-                    <div className="flex-1 w-full">
-                        <label className="block text-slate-400 text-xs uppercase mb-2 font-bold tracking-wider">Display Name</label>
-                        <div className="relative group">
-                            <Layers className="absolute left-3 top-3 w-4 h-4 text-slate-500 group-focus-within:text-indigo-400 transition-colors" />
+                <form onSubmit={handleSubmit} className="space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        {/* Name */}
+                        <div>
+                            <label className="block text-slate-400 text-xs uppercase mb-2 font-bold">Display Name</label>
                             <input
                                 type="text"
                                 required
-                                className="w-full bg-slate-950 border border-slate-800 rounded-xl py-2.5 pl-10 pr-4 text-white focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all placeholder:text-slate-600"
-                                placeholder="e.g. Scalp Alpha"
+                                className="w-full bg-slate-950 border border-slate-800 rounded-xl py-2.5 px-4 text-white focus:outline-none focus:border-indigo-500"
+                                placeholder="Scalp Alpha"
                                 value={name}
                                 onChange={e => setName(e.target.value)}
                             />
                         </div>
-                    </div>
 
-                    <div className="flex-1 w-full">
-                        <div className="flex items-center gap-2 mb-2">
-                            <label className="block text-slate-400 text-xs uppercase font-bold tracking-wider">Webhook ID (tv_id)</label>
-                            <div className="relative group cursor-help">
-                                <Info className="w-3.5 h-3.5 text-slate-500 hover:text-indigo-400 transition-colors" />
-                                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 p-3 bg-slate-800 text-slate-200 text-xs rounded-lg shadow-xl border border-slate-700 opacity-0 group-hover:opacity-100 pointer-events-none transition-all z-10 text-center leading-relaxed">
-                                    Referenced in your TradingView alert JSON as <code className="bg-slate-950 px-1 py-0.5 rounded text-indigo-300">"strat": "your_id"</code>
-                                    <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-slate-800 rotate-45 border-r border-b border-slate-700"></div>
-                                </div>
-                            </div>
-                        </div>
-                        <div className="relative group">
-                            <Hash className="absolute left-3 top-3 w-4 h-4 text-slate-500 group-focus-within:text-violet-400 transition-colors" />
+                        {/* TV ID */}
+                        <div>
+                            <label className="block text-slate-400 text-xs uppercase mb-2 font-bold">Webhook ID (tv_id)</label>
                             <input
                                 type="text"
                                 required
-                                className="w-full bg-slate-950 border border-slate-800 rounded-xl py-2.5 pl-10 pr-4 text-white focus:outline-none focus:border-violet-500 focus:ring-1 focus:ring-violet-500 transition-all font-mono text-sm placeholder:text-slate-600"
-                                placeholder="e.g. scalp_v1"
+                                className="w-full bg-slate-950 border border-slate-800 rounded-xl py-2.5 px-4 text-white font-mono text-sm focus:outline-none focus:border-violet-500"
+                                placeholder="scalp_v1"
                                 value={tvId}
                                 onChange={e => setTvId(e.target.value)}
                             />
                         </div>
-                    </div>
 
-                    <div className="w-full md:w-64">
-                        <div className="flex items-center justify-between mb-2">
-                            <div className="flex items-center gap-2">
-                                <label className="block text-slate-400 text-xs uppercase font-bold tracking-wider">Risk Factor</label>
-                                <div className="relative group cursor-help">
-                                    <Info className="w-3.5 h-3.5 text-slate-500 hover:text-indigo-400 transition-colors" />
-                                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 p-2 bg-slate-800 text-slate-200 text-[10px] rounded-lg shadow-xl border border-slate-700 opacity-0 group-hover:opacity-100 pointer-events-none transition-all z-10 text-center">
-                                        Min: 0.5 | Increment: 0.1
-                                        <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-slate-800 rotate-45 border-r border-b border-slate-700"></div>
-                                    </div>
-                                </div>
-                            </div>
-                            <span className="text-[10px] text-emerald-400 font-mono">
-                                ≈ ${(config?.risk_per_trade * factor).toFixed(2)}
-                            </span>
-                        </div>
-                        <div className="relative group">
-                            <DollarSign className="absolute left-3 top-3 w-4 h-4 text-slate-500 group-focus-within:text-emerald-400 transition-colors" />
+                        {/* Risk Factor */}
+                        <div>
+                            <label className="block text-slate-400 text-xs uppercase mb-2 font-bold">Default Risk Factor</label>
                             <input
                                 type="number"
-                                min="0.5"
+                                min="0.1"
                                 step="0.1"
-                                className="w-full bg-slate-950 border border-slate-800 rounded-xl py-2.5 pl-10 pr-4 text-white focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all font-mono placeholder:text-slate-700"
-                                placeholder="1.0"
-                                value={factor}
-                                onChange={e => setFactor(parseFloat(e.target.value))}
+                                className="w-full bg-slate-950 border border-slate-800 rounded-xl py-2.5 px-4 text-white font-mono focus:outline-none focus:border-emerald-500"
+                                value={defaultFactor}
+                                onChange={e => setDefaultFactor(parseFloat(e.target.value))}
                             />
+                        </div>
+                    </div>
+
+                    {/* Sessions */}
+                    <div>
+                        <label className="block text-slate-400 text-xs uppercase mb-2 font-bold flex items-center gap-2">
+                            <Clock className="w-4 h-4" /> Allowed Sessions (Default)
+                        </label>
+                        <div className="flex gap-2">
+                            {['ASIA', 'UK', 'US'].map(session => (
+                                <button
+                                    key={session}
+                                    type="button"
+                                    onClick={() => toggleSession(session)}
+                                    className={`px-4 py-2 rounded-lg font-bold text-sm transition-all ${defaultSessions.includes(session)
+                                        ? 'bg-indigo-600 text-white'
+                                        : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
+                                        }`}
+                                >
+                                    {session}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* Partial TP Settings */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-slate-400 text-xs uppercase mb-2 font-bold">Partial TP % (Default)</label>
+                            <input
+                                type="number"
+                                min="10"
+                                max="90"
+                                className="w-full bg-slate-950 border border-slate-800 rounded-xl py-2.5 px-4 text-white font-mono focus:outline-none focus:border-amber-500"
+                                value={defaultPartialPercent}
+                                onChange={e => setDefaultPartialPercent(parseInt(e.target.value))}
+                            />
+                        </div>
+                        <div className="flex items-center gap-3">
+                            <button
+                                type="button"
+                                onClick={() => setDefaultMoveSlToEntry(!defaultMoveSlToEntry)}
+                                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${defaultMoveSlToEntry ? 'bg-indigo-600' : 'bg-slate-700'
+                                    }`}
+                            >
+                                <span className={`${defaultMoveSlToEntry ? 'translate-x-6' : 'translate-x-1'} inline-block h-4 w-4 transform rounded-full bg-white transition-transform`} />
+                            </button>
+                            <span className="text-slate-300 text-sm">Move SL to Entry on Partial</span>
                         </div>
                     </div>
 
                     <button
                         type="submit"
-                        className={`w-full md:w-auto font-bold py-2.5 px-8 rounded-xl transition-all flex items-center justify-center gap-2 shadow-lg ${editingId
-                            ? 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-indigo-900/20'
-                            : 'bg-blue-600 hover:bg-blue-700 text-white shadow-blue-900/20'
-                            }`}
+                        className={`w-full font-bold py-2.5 px-8 rounded-xl transition-all flex items-center justify-center gap-2 shadow-lg ${editingId ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-blue-600 hover:bg-blue-700'
+                            } text-white`}
                     >
                         {editingId ? <Save className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
-                        {editingId ? 'Save Changes' : 'Add Strategy'}
+                        {editingId ? 'Save Changes' : 'Create Strategy'}
                     </button>
                 </form>
             </section>
 
-            {/* List Section */}
+            {/* Strategy List */}
             <section className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6">
                 <h2 className="text-xl font-semibold mb-6 flex items-center gap-2">
                     <Layers className="w-5 h-5 text-indigo-400" />
-                    Active Strategies
+                    Strategy Templates
+                    {selectedAccountId && (
+                        <span className="text-xs bg-emerald-500/20 text-emerald-400 px-2 py-1 rounded-lg ml-2">
+                            Click + to add to selected account
+                        </span>
+                    )}
                 </h2>
 
                 <div className="overflow-x-auto">
                     <table className="w-full text-sm text-left">
-                        <thead className="text-slate-500 border-b border-slate-800 uppercase text-xs tracking-wider">
+                        <thead className="text-slate-500 border-b border-slate-800 uppercase text-xs">
                             <tr>
                                 <th className="py-4 px-4 font-bold">Name</th>
-                                <th className="py-4 px-4 font-bold">Webhook ID (TV_ID)</th>
-                                <th className="py-4 px-4 text-right font-bold">Risk Factor</th>
+                                <th className="py-4 px-4 font-bold">TV ID</th>
+                                <th className="py-4 px-4 font-bold">Sessions</th>
+                                <th className="py-4 px-4 text-right font-bold">Risk</th>
                                 <th className="py-4 px-4 text-right font-bold">Actions</th>
                             </tr>
                         </thead>
@@ -210,31 +314,52 @@ export function StrategiesManager() {
                                 <tr key={strat.id} className={`transition-colors ${editingId === strat.id ? 'bg-indigo-500/10' : 'hover:bg-slate-800/30'}`}>
                                     <td className="py-4 px-4 font-bold text-white">{strat.name}</td>
                                     <td className="py-4 px-4">
-                                        <span className="font-mono text-xs text-violet-300 bg-violet-500/10 border border-violet-500/20 rounded-md px-2 py-1">
+                                        <span className="font-mono text-xs text-violet-300 bg-violet-500/10 px-2 py-1 rounded-md">
                                             {strat.tv_id}
                                         </span>
                                     </td>
-                                    <td className="py-4 px-4 text-right font-mono">
-                                        <div className="flex flex-col items-end">
-                                            <span className="text-emerald-400 font-bold">{strat.risk_factor.toFixed(1)}x</span>
-                                            <span className="text-[10px] text-slate-500 hidden sm:inline-block">
-                                                ≈ ${(config ? config.risk_per_trade * strat.risk_factor : 0).toFixed(2)}
-                                            </span>
+                                    <td className="py-4 px-4">
+                                        <div className="flex gap-1">
+                                            {strat.default_allowed_sessions.split(',').map(s => (
+                                                <span key={s} className="text-xs bg-slate-800 px-2 py-0.5 rounded text-slate-300">
+                                                    {s.trim()}
+                                                </span>
+                                            ))}
                                         </div>
+                                    </td>
+                                    <td className="py-4 px-4 text-right font-mono">
+                                        <span className="text-emerald-400 font-bold">{strat.default_risk_factor.toFixed(1)}x</span>
                                     </td>
                                     <td className="py-4 px-4 text-right">
                                         <div className="flex justify-end gap-2">
+                                            {selectedAccountId && (
+                                                isStrategyOnAccount(strat.id) ? (
+                                                    <button
+                                                        onClick={() => removeStrategyFromAccount(strat.id)}
+                                                        className="p-2 bg-red-500/20 text-red-400 rounded-lg"
+                                                        title="Remove from account"
+                                                    >
+                                                        <X className="w-4 h-4" />
+                                                    </button>
+                                                ) : (
+                                                    <button
+                                                        onClick={() => addStrategyToAccount(strat.id)}
+                                                        className="p-2 bg-emerald-500/20 text-emerald-400 rounded-lg"
+                                                        title="Add to account"
+                                                    >
+                                                        <Plus className="w-4 h-4" />
+                                                    </button>
+                                                )
+                                            )}
                                             <button
                                                 onClick={() => handleEdit(strat)}
-                                                className="p-2 bg-slate-800 hover:bg-indigo-500/20 text-slate-400 hover:text-indigo-400 rounded-lg transition-colors border border-transparent hover:border-indigo-500/30"
-                                                title="Edit Strategy"
+                                                className="p-2 bg-slate-800 hover:bg-indigo-500/20 text-slate-400 hover:text-indigo-400 rounded-lg"
                                             >
                                                 <Pencil className="w-4 h-4" />
                                             </button>
                                             <button
                                                 onClick={() => handleDelete(strat.id)}
-                                                className="p-2 bg-slate-800 hover:bg-red-500/20 text-slate-400 hover:text-red-400 rounded-lg transition-colors border border-transparent hover:border-red-500/30"
-                                                title="Delete Strategy"
+                                                className="p-2 bg-slate-800 hover:bg-red-500/20 text-slate-400 hover:text-red-400 rounded-lg"
                                             >
                                                 <Trash2 className="w-4 h-4" />
                                             </button>
@@ -244,12 +369,8 @@ export function StrategiesManager() {
                             ))}
                             {strategies.length === 0 && !loading && (
                                 <tr>
-                                    <td colSpan={4} className="py-12 text-center text-slate-500 italic">
-                                        <div className="flex flex-col items-center gap-2">
-                                            <Layers className="w-8 h-8 text-slate-700" />
-                                            <p>No strategies defined yet.</p>
-                                            <p className="text-xs">Incoming webhooks will use the global risk setting (1.0x).</p>
-                                        </div>
+                                    <td colSpan={5} className="py-12 text-center text-slate-500 italic">
+                                        No strategies defined yet.
                                     </td>
                                 </tr>
                             )}

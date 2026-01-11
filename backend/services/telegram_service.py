@@ -1,7 +1,18 @@
+"""
+Telegram Service - Trading Bot Notifications
+
+Updated for multi-account execution with:
+- PARTIAL signal notifications
+- CLOSE signal notifications
+- Timeframe in signal notifications
+- Account name in all trade notifications
+"""
+
 import httpx
 import os
 import asyncio
 from backend.database import SessionLocal, Log
+
 
 class TelegramService:
     def __init__(self):
@@ -45,8 +56,12 @@ class TelegramService:
         finally:
             db.close()
 
+    # =========================================================================
+    # SYSTEM NOTIFICATIONS
+    # =========================================================================
+
     async def notify_startup(self):
-        msg = "🤖 <b>TopStep Bot Online</b>\nSystem is ready to trade."
+        msg = "🤖 <b>TopStep Bot Online</b>\nMulti-account system ready."
         await self.send_message(msg)
         print("📨 Telegram Startup Message Sent")
 
@@ -54,57 +69,136 @@ class TelegramService:
         msg = "🛑 <b>TopStep Bot Shutting Down</b>\nSystem is offline."
         await self.send_message(msg)
 
-    async def notify_signal(self, ticker: str, action: str, price: float, sl: float, tp: float, strategy: str = "default"):
+    async def notify_error(self, error_msg: str):
+        msg = f"⚠️ <b>System Error</b>\n{error_msg}"
+        await self.send_message(msg)
+
+    # =========================================================================
+    # SIGNAL NOTIFICATIONS (NEW: timeframe, strategy visible)
+    # =========================================================================
+
+    async def notify_signal(
+        self, 
+        ticker: str, 
+        action: str, 
+        price: float, 
+        sl: float, 
+        tp: float, 
+        strategy: str = "default",
+        timeframe: str = None,
+        accounts_count: int = 0
+    ):
+        """Notify of incoming SIGNAL alert."""
         emoji = "🟢" if action.upper() == "BUY" else "🔴"
-        strat_tag = f"[{strategy}] " if strategy != "default" else ""
+        strat_tag = f"[{strategy}]" if strategy != "default" else "[default]"
+        tf_tag = f" {timeframe}" if timeframe else ""
+        
         msg = (
-            f"⚡ <b>{strat_tag}Signal Received</b>\n"
-            f"{emoji} <b>{action.upper()} {ticker}</b>\n"
-            f"Price: {price}\n"
-            f"SL: {sl} | TP: {tp}"
+            f"⚡ <b>SIGNAL Received</b>\n"
+            f"{emoji} <b>{action.upper()} {ticker}</b>{tf_tag}\n"
+            f"Strategy: {strat_tag}\n"
+            f"Entry: {price} | SL: {sl} | TP: {tp}"
+        )
+        
+        if accounts_count > 0:
+            msg += f"\n<i>Processing on {accounts_count} account(s)...</i>"
+        
+        await self.send_message(msg)
+
+    async def notify_partial_signal(
+        self,
+        ticker: str,
+        timeframe: str,
+        strategy: str,
+        new_sl: float = None,
+        new_tp: float = None
+    ):
+        """Notify of incoming PARTIAL signal."""
+        msg = (
+            f"📊 <b>PARTIAL Signal</b>\n"
+            f"Ticker: {ticker} ({timeframe})\n"
+            f"Strategy: [{strategy}]"
+        )
+        
+        if new_sl:
+            msg += f"\nNew SL: {new_sl}"
+        if new_tp:
+            msg += f"\nNew TP: {new_tp}"
+        
+        await self.send_message(msg)
+
+    async def notify_close_signal(
+        self,
+        ticker: str,
+        timeframe: str,
+        strategy: str
+    ):
+        """Notify of incoming CLOSE signal."""
+        msg = (
+            f"🛑 <b>CLOSE Signal</b>\n"
+            f"Ticker: {ticker} ({timeframe})\n"
+            f"Strategy: [{strategy}]\n"
+            f"<i>Closing positions on matching accounts...</i>"
         )
         await self.send_message(msg)
 
-    async def notify_order_submitted(self, ticker: str, action: str, quantity: int, price: float, order_id: str):
-        # Notify that order was sent to broker (Price is Requested Price, not Fill)
-        # We could add strategy here too if passed, but typically signal is enough context.
-        # But 'Order Executed' log uses trade object, so we could theoretically pull it.
-        # For now, let's keep it simple as requested: "indiquer également dans les logs / notifs telegram cette info"
+    # =========================================================================
+    # TRADE EXECUTION NOTIFICATIONS (NEW: account name)
+    # =========================================================================
+
+    async def notify_order_submitted(
+        self, 
+        ticker: str, 
+        action: str, 
+        quantity: int, 
+        price: float, 
+        order_id: str,
+        account_name: str = None
+    ):
+        """Notify that order was sent to broker."""
+        account_tag = f" ({account_name})" if account_name else ""
         amount_str = f"{action} {quantity}x {ticker}"
-        msg = f"🚀 <b>Order Submitted</b>\n{amount_str} @ {price}\nOrder ID: {order_id}"
+        msg = f"🚀 <b>Order Submitted</b>{account_tag}\n{amount_str} @ {price}\nOrder ID: {order_id}"
         await self.send_message(msg)
 
-    async def notify_position_opened(self, symbol: str, side: str, quantity: int, price: float, order_id: str = None):
-        # Notify real fill
+    async def notify_position_opened(
+        self, 
+        symbol: str, 
+        side: str, 
+        quantity: int, 
+        price: float, 
+        order_id: str = None,
+        account_name: str = None
+    ):
+        """Notify real fill."""
         side_upper = str(side).upper()
-        if "BUY" in side_upper or "LONG" in side_upper:
-            emoji = "🔵"
-        else:
-            emoji = "🟠"
-            
+        emoji = "🔵" if "BUY" in side_upper or "LONG" in side_upper else "🟠"
+        account_tag = f" ({account_name})" if account_name else ""
+        
         msg = (
-            f"{emoji} <b>Position Opened: {symbol}</b>\n"
+            f"{emoji} <b>Position Opened: {symbol}</b>{account_tag}\n"
             f"{side_upper} {quantity}x @ {price:.2f}\n" 
             f"<i>Filled</i>"
         )
         await self.send_message(msg)
 
-    async def notify_trade_rejection(self, ticker: str, reason: str):
-        msg = (
-            f"❌ <b>Trade Rejected</b>\n"
-            f"Ticker: {ticker}\n"
-            f"Reason: {reason}"
-        )
-        await self.send_message(msg)
-
-    async def notify_position_closed(self, symbol: str, side: str, entry_price: float, exit_price: float, pnl: float, quantity: int, fees: float = 0.0):
+    async def notify_position_closed(
+        self, 
+        symbol: str, 
+        side: str, 
+        entry_price: float, 
+        exit_price: float, 
+        pnl: float, 
+        quantity: int, 
+        fees: float = 0.0,
+        account_name: str = None
+    ):
+        """Notify position closed."""
         pnl_val = pnl if pnl is not None else 0.0
         pnl_emoji = "💰" if pnl_val >= 0 else "💸"
-        
-        # Handle 'side' being int or str
         side_str = str(side).upper()
+        account_tag = f" ({account_name})" if account_name else ""
         
-        # Enhance Side Emoji
         if "BUY" in side_str or "LONG" in side_str:
             side_emoji = "🟢"
         elif "SELL" in side_str or "SHORT" in side_str:
@@ -113,7 +207,7 @@ class TelegramService:
             side_emoji = "⚪"
         
         msg = (
-            f"{pnl_emoji} <b>Position Closed: {symbol}</b>\n"
+            f"{pnl_emoji} <b>Position Closed: {symbol}</b>{account_tag}\n"
             f"{side_emoji} {side_str} x {quantity}\n"
         )
         
@@ -126,31 +220,108 @@ class TelegramService:
         msg += f"<i>Fees: ${fees:.2f}</i>"
         
         await self.send_message(msg)
+
+    async def notify_partial_executed(
+        self,
+        ticker: str,
+        reduced_qty: int,
+        remaining_qty: int,
+        account_name: str = None,
+        sl_moved_to_entry: bool = False
+    ):
+        """Notify partial take-profit executed."""
+        account_tag = f" ({account_name})" if account_name else ""
         
-    async def notify_error(self, error_msg: str):
-        msg = f"⚠️ <b>System Error</b>\n{error_msg}"
+        msg = (
+            f"📊 <b>Partial TP Executed</b>{account_tag}\n"
+            f"Ticker: {ticker}\n"
+            f"Reduced: {reduced_qty} contracts\n"
+            f"Remaining: {remaining_qty} contracts"
+        )
+        
+        if sl_moved_to_entry:
+            msg += "\n<i>SL moved to breakeven</i>"
+        
+        await self.send_message(msg)
+
+    async def notify_close_executed(
+        self,
+        ticker: str,
+        account_name: str = None
+    ):
+        """Notify full position closed by CLOSE signal."""
+        account_tag = f" ({account_name})" if account_name else ""
+        
+        msg = (
+            f"🛑 <b>Position Closed (Signal)</b>{account_tag}\n"
+            f"Ticker: {ticker}\n"
+            f"<i>Position fully closed</i>"
+        )
+        await self.send_message(msg)
+
+    # =========================================================================
+    # REJECTION & WARNING NOTIFICATIONS
+    # =========================================================================
+
+    async def notify_trade_rejection(
+        self, 
+        ticker: str, 
+        reason: str,
+        account_name: str = None
+    ):
+        """Notify trade rejection."""
+        account_tag = f" ({account_name})" if account_name else ""
+        
+        msg = (
+            f"❌ <b>Trade Rejected</b>{account_tag}\n"
+            f"Ticker: {ticker}\n"
+            f"Reason: {reason}"
+        )
         await self.send_message(msg)
 
     async def notify_orphaned_orders(self, orders: list):
-        """
-        Notifies about working orders that have no matching open position.
-        """
+        """Notifies about working orders without matching positions."""
         if not orders:
             return
             
-        msg = "⚠️ <b>Orphaned Orders Detected</b>\n"
-        msg += "Orders active without open positions:\n\n"
+        msg = "⚠️ <b>Orphaned Orders Detected</b>\nOrders active without open positions:\n\n"
         
         for o in orders:
-            # Try to get symbol/contract
             symbol = o.get('symbol') or o.get('contractId') or "Unknown"
+            account = o.get('_account_name', '')
             side = o.get('action') or o.get('side') or "Limit"
             price = o.get('price') or o.get('stopPrice') or "Mkt"
             qty = o.get('qty') or o.get('quantity') or "?"
             
-            msg += f"• <b>{symbol}</b>: {side} {qty} @ {price}\n"
+            account_tag = f" ({account})" if account else ""
+            msg += f"• <b>{symbol}</b>{account_tag}: {side} {qty} @ {price}\n"
             
         msg += "\nCheck dashboard to cancel if not intended."
         await self.send_message(msg)
+
+    async def notify_cross_account_block(
+        self,
+        ticker: str,
+        conflicting_account: str,
+        conflicting_side: str
+    ):
+        """Notify when trade is blocked due to opposing position on another account."""
+        msg = (
+            f"🚫 <b>Cross-Account Block</b>\n"
+            f"Ticker: {ticker}\n"
+            f"Conflict: {conflicting_side} position on {conflicting_account}\n"
+            f"<i>Cannot open opposing position on same asset</i>"
+        )
+        await self.send_message(msg)
+
+    async def notify_flatten_all(self, accounts_count: int):
+        """Notify global flatten executed."""
+        msg = (
+            f"⏰ <b>Force Flatten Complete</b>\n"
+            f"Flattened {accounts_count} account(s)\n"
+            f"<i>All positions closed, orders cancelled</i>"
+        )
+        await self.send_message(msg)
+
 
 telegram_service = TelegramService()
