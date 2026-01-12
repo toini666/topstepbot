@@ -120,14 +120,25 @@ export const useTopStep = () => {
                             newPositions[aid] = posRes.data;
                             newOrders[aid] = ordRes.data;
                             // Map Trade format to HistoricalTrade-like format for display
+                            // Helper to ensure timestamps are parsed as UTC
+                            const parseUtcTimestamp = (ts: string | null | undefined): string | null => {
+                                if (!ts) return null;
+                                // If timestamp doesn't end with Z and doesn't contain timezone info, add Z
+                                const tsStr = String(ts);
+                                if (!tsStr.endsWith('Z') && !tsStr.includes('+')) {
+                                    return tsStr.replace(' ', 'T') + 'Z';
+                                }
+                                return tsStr.replace(' ', 'T');
+                            };
+
                             newTrades[aid] = histRes.data.map((t: Trade) => ({
                                 id: t.id,
                                 accountId: t.account_id || aid,
                                 contractId: t.ticker,
-                                creationTimestamp: t.timestamp,
+                                creationTimestamp: parseUtcTimestamp(t.timestamp),
                                 price: t.entry_price,
                                 exitPrice: t.exit_price,
-                                exitTime: t.exit_time,
+                                exitTime: parseUtcTimestamp(t.exit_time),
                                 profitAndLoss: t.pnl,
                                 fees: t.fees,
                                 side: t.action === 'BUY' ? 0 : 1,

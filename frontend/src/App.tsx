@@ -550,6 +550,18 @@ function App() {
                         }}
                       />
                     </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-slate-400 text-sm">Max Contracts</span>
+                      <RiskInput
+                        currentValue={selectedAccountSettings?.max_contracts ?? 50}
+                        onSave={(val) => {
+                          if (selectedAccountId) {
+                            updateAccountSettings(selectedAccountId, { max_contracts: Math.round(val) });
+                          }
+                        }}
+                        prefix=""
+                      />
+                    </div>
                     <div className="flex justify-between items-center border-t border-slate-800 pt-4 mt-auto">
                       <span className="text-slate-400 text-sm">Balance</span>
                       <span className="font-mono text-white text-2xl font-bold">

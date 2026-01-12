@@ -9,7 +9,7 @@ Key Features:
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from backend.database import init_db, get_db, Setting, AccountSettings, seed_default_sessions
+from backend.database import init_db, get_db, Setting, AccountSettings, seed_default_sessions, TickerMap
 from backend.routers import webhook, dashboard, strategies, export
 from contextlib import asynccontextmanager
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -34,6 +34,15 @@ BRUSSELS_TZ = pytz.timezone("Europe/Brussels")
 # Key: account_id, Value: { contractId: position_data }
 _last_open_positions = {}
 _last_orphans_ids = set()
+
+# Health Check State
+_api_health = {
+    "consecutive_failures": 0,
+    "last_check_time": None,
+    "last_response_time": None,
+    "is_healthy": True,
+    "notified_down": False
+}
 
 
 async def monitor_closed_positions_job():
@@ -132,6 +141,15 @@ async def monitor_closed_positions_job():
                                 # UPDATE TRADE RECORD IN DATABASE
                                 from backend.database import Trade
                                 ticker_variants = [prev_cid, target_symbol]
+                                
+                                # Also look up the TradingView ticker from TickerMap
+                                # Trade.ticker stores TV format (e.g., "MNQ1!") but prev_cid is TopStep format
+                                ticker_map_entry = db.query(TickerMap).filter(
+                                    TickerMap.ts_contract_id == prev_cid
+                                ).first()
+                                if ticker_map_entry:
+                                    ticker_variants.append(ticker_map_entry.tv_ticker)
+                                
                                 # Find matching open trade and update it
                                 open_trade = db.query(Trade).filter(
                                     Trade.account_id == account_id,
@@ -161,9 +179,18 @@ async def monitor_closed_positions_job():
                             else:
                                 # No matching trade from API, still try to update our DB
                                 from backend.database import Trade
+                                ticker_variants = [prev_cid]
+                                
+                                # Also look up the TradingView ticker from TickerMap
+                                ticker_map_entry = db.query(TickerMap).filter(
+                                    TickerMap.ts_contract_id == prev_cid
+                                ).first()
+                                if ticker_map_entry:
+                                    ticker_variants.append(ticker_map_entry.tv_ticker)
+                                
                                 open_trade = db.query(Trade).filter(
                                     Trade.account_id == account_id,
-                                    Trade.ticker == prev_cid,
+                                    Trade.ticker.in_(ticker_variants),
                                     Trade.status == "OPEN"
                                 ).order_by(Trade.timestamp.desc()).first()
                                 
@@ -202,6 +229,46 @@ async def monitor_closed_positions_job():
                                     side_str = "SELL"
                                 else:
                                     side_str = "UNK"
+                                
+                                # Check if trade record exists or create one for manual trades
+                                from backend.database import Trade
+                                ticker_variants = [curr_cid]
+                                ticker_map_entry = db.query(TickerMap).filter(
+                                    TickerMap.ts_contract_id == curr_cid
+                                ).first()
+                                tv_ticker = ticker_map_entry.tv_ticker if ticker_map_entry else curr_cid
+                                if ticker_map_entry:
+                                    ticker_variants.append(tv_ticker)
+                                
+                                open_trade = db.query(Trade).filter(
+                                    Trade.account_id == account_id,
+                                    Trade.ticker.in_(ticker_variants),
+                                    Trade.status == "OPEN"
+                                ).order_by(Trade.timestamp.desc()).first()
+                                
+                                if open_trade and fill_price:
+                                    # Update with real execution price
+                                    open_trade.entry_price = fill_price
+                                    db.commit()
+                                    print(f"✅ Trade #{open_trade.id} entry_price updated to real fill: {fill_price}")
+                                elif not open_trade:
+                                    # NO MATCHING TRADE = MANUAL TRADE
+                                    # Create a Trade record so it appears in history
+                                    fill_qty = matching_fill.get('size', 1)
+                                    manual_trade = Trade(
+                                        account_id=account_id,
+                                        ticker=tv_ticker,
+                                        action=side_str,
+                                        entry_price=fill_price,
+                                        quantity=fill_qty,
+                                        status="OPEN",
+                                        strategy="MANUAL",
+                                        timeframe="-",
+                                        timestamp=datetime.now(pytz.UTC)
+                                    )
+                                    db.add(manual_trade)
+                                    db.commit()
+                                    print(f"📝 Created Trade #{manual_trade.id} for MANUAL position: {tv_ticker} x{fill_qty} @ {fill_price}")
                                 
                                 await telegram_service.notify_position_opened(
                                     symbol=f"{matching_fill.get('symbol', curr_cid)} ({account_name})",
@@ -308,6 +375,64 @@ async def auto_flatten_job():
         db.close()
 
 
+async def api_health_check_job():
+    """
+    Periodically checks TopStep API health using /api/Status/ping.
+    Sends Telegram notification after 3 consecutive failures.
+    Logs recovery when API comes back online.
+    """
+    global _api_health
+    from backend.database import SessionLocal, Log
+    
+    FAILURE_THRESHOLD = 3  # Notify after 3 consecutive failures
+    
+    is_healthy, response_time, error = await topstep_client.ping()
+    
+    _api_health["last_check_time"] = datetime.now(BRUSSELS_TZ).isoformat()
+    _api_health["last_response_time"] = response_time
+    
+    if is_healthy:
+        # API is healthy
+        if not _api_health["is_healthy"]:
+            # Was down, now recovered
+            db = SessionLocal()
+            try:
+                db.add(Log(level="INFO", message=f"TopStep API recovered - Response time: {response_time:.0f}ms"))
+                db.commit()
+                await telegram_service.send_message(
+                    f"✅ <b>TopStep API Recovered</b>\n\n"
+                    f"• Response time: {response_time:.0f}ms\n"
+                    f"• Previous failures: {_api_health['consecutive_failures']}"
+                )
+            finally:
+                db.close()
+        
+        _api_health["consecutive_failures"] = 0
+        _api_health["is_healthy"] = True
+        _api_health["notified_down"] = False
+    else:
+        # API is down
+        _api_health["consecutive_failures"] += 1
+        _api_health["is_healthy"] = False
+        
+        db = SessionLocal()
+        try:
+            db.add(Log(level="ERROR", message=f"TopStep API ping failed: {error} (#{_api_health['consecutive_failures']})"))
+            db.commit()
+            
+            # Send notification only after threshold and only once
+            if _api_health["consecutive_failures"] >= FAILURE_THRESHOLD and not _api_health["notified_down"]:
+                await telegram_service.send_message(
+                    f"🚨 <b>TopStep API DOWN</b>\n\n"
+                    f"• Error: {error}\n"
+                    f"• Consecutive failures: {_api_health['consecutive_failures']}\n"
+                    f"• Trading may be affected!"
+                )
+                _api_health["notified_down"] = True
+        finally:
+            db.close()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
@@ -401,6 +526,9 @@ async def lifespan(app: FastAPI):
     # Maintenance Jobs
     scheduler.add_job(backup_database, 'cron', hour=3, minute=0)
     scheduler.add_job(clean_logs, 'cron', hour=3, minute=15, kwargs={'days': 7})
+    
+    # API Health Check (every 60 seconds)
+    scheduler.add_job(api_health_check_job, 'interval', seconds=60)
 
     scheduler.start()
     print("Scheduler started.")

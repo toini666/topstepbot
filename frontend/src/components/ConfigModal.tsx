@@ -99,6 +99,19 @@ export function ConfigModal({ isOpen, onClose, config, onSave }: ConfigModalProp
         }
     };
 
+    const updateMapping = async (id: number, updates: Partial<TickerMap>) => {
+        try {
+            const res = await axios.patch(`${API_BASE}/settings/ticker-map/${id}`, updates);
+            if (res.data.success) {
+                // Update local state immediately
+                setMappings(mappings.map(m => m.id === id ? { ...m, ...updates } : m));
+                toast.success("Mapping Updated");
+            }
+        } catch (e) {
+            toast.error("Error updating mapping");
+        }
+    };
+
     if (!isOpen) return null;
 
     const handleSave = async () => {
@@ -354,6 +367,7 @@ export function ConfigModal({ isOpen, onClose, config, onSave }: ConfigModalProp
                             mappings={mappings}
                             onAdd={addMapping}
                             onDelete={deleteMapping}
+                            onUpdate={updateMapping}
                         />
                     )}
                 </div>

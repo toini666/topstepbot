@@ -65,7 +65,7 @@ topstepbot/
 |-------|---------|
 | `Setting` | Key-value global settings store |
 | `TradingSession` | Session definitions (ASIA, UK, US) |
-| `TickerMap` | TradingView → TopStep contract mapping |
+| `TickerMap` | TradingView → TopStep contract mapping + micro_equivalent |
 | `Strategy` | Strategy templates with default configs |
 | `AccountSettings` | Per-account trading configuration |
 | `AccountStrategyConfig` | Strategy overrides per account |
@@ -103,6 +103,7 @@ class RiskEngine:
     check_strategy_enabled(account_id, strategy) → Tuple[bool, str]
     check_session_allowed(account_id, strategy) → Tuple[bool, str]
     check_open_position(account_id, ticker, client) → Tuple[bool, str]
+    check_contract_limit(account_id, new_size) → Tuple[bool, str]
     check_cross_account_direction(ticker, direction, client) → Tuple[bool, str]
     
     # Position Sizing
@@ -133,6 +134,8 @@ Async HTTP client for TopStepX API with automatic token management.
 | POST | `/api/Order/search` | Get order history |
 | POST | `/api/Order/place` | Place new order |
 | POST | `/api/Order/modify` | Modify existing order |
+| POST | `/api/Position/partialCloseContract` | Partial close position |
+| POST | `/api/Status/ping` | API Health Check |
 | POST | `/api/Order/cancel` | Cancel order |
 | POST | `/api/Contract/available` | List available contracts |
 | POST | `/api/Trade/search` | Get trade history |
@@ -229,6 +232,7 @@ Data export and analytics endpoints.
 |-----|----------|----------|
 | Position Monitor | Every 30s | Detect closed positions, update Trade status to CLOSED with PnL/fees, notify via Telegram |
 | Auto Flatten | Configurable time | Close all positions daily |
+| API Health Check | Every 60s | Pings API, tracks health, alerts on consecutive failures |
 | Database Backup | 03:00 UTC | Copy database file |
 | Log Cleanup | 03:15 UTC | Remove logs > 7 days |
 

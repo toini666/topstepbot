@@ -6,9 +6,10 @@ interface RiskInputProps {
     currentValue: number;
     onSave: (newValue: number) => void;
     isLoading?: boolean;
+    prefix?: string;  // Optional prefix (defaults to "$")
 }
 
-export function RiskInput({ currentValue, onSave, isLoading = false }: RiskInputProps) {
+export function RiskInput({ currentValue, onSave, isLoading = false, prefix = "$" }: RiskInputProps) {
     const [isEditing, setIsEditing] = useState(false);
     const [value, setValue] = useState(currentValue.toString());
 
@@ -39,7 +40,7 @@ export function RiskInput({ currentValue, onSave, isLoading = false }: RiskInput
     if (isEditing) {
         return (
             <div className="flex items-center gap-1 animate-fade-in">
-                <span className="text-slate-500">$</span>
+                {prefix && <span className="text-slate-500">{prefix}</span>}
                 <input
                     type="number"
                     value={value}
@@ -77,7 +78,7 @@ export function RiskInput({ currentValue, onSave, isLoading = false }: RiskInput
 
     return (
         <div className="flex items-center justify-end gap-2 group">
-            <span className="font-mono text-white text-lg font-bold tracking-tight">${currentValue}</span>
+            <span className="font-mono text-white text-lg font-bold tracking-tight">{prefix}{currentValue}</span>
             <button
                 onClick={handleEdit}
                 className="p-1.5 text-slate-500 hover:text-indigo-400 hover:bg-indigo-500/10 rounded transition-all"

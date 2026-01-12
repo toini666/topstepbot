@@ -77,6 +77,7 @@ class AccountSettingsBase(BaseModel):
     account_name: Optional[str] = None
     trading_enabled: bool = True
     risk_per_trade: float = 200.0
+    max_contracts: int = 50  # Max micro-equivalent contracts
 
 
 class AccountSettingsCreate(AccountSettingsBase):
@@ -87,6 +88,7 @@ class AccountSettingsUpdate(BaseModel):
     trading_enabled: Optional[bool] = None
     risk_per_trade: Optional[float] = None
     account_name: Optional[str] = None
+    max_contracts: Optional[int] = None
 
 
 class AccountSettingsResponse(AccountSettingsBase):
@@ -288,6 +290,7 @@ class TickerMapBase(BaseModel):
     ts_ticker: str
     tick_size: float
     tick_value: float
+    micro_equivalent: int = 1  # 1 for micro, 10 for mini
 
 
 class TickerMapCreate(TickerMapBase):

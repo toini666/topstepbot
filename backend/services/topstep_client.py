@@ -126,6 +126,31 @@ class TopStepClient:
         self.token = None
         return True
 
+    async def ping(self) -> tuple:
+        """
+        Checks TopStep API health using /api/Status/ping endpoint.
+        Returns (is_healthy: bool, response_time_ms: float, error: str|None)
+        """
+        import time
+        url = f"{self.base_url}/api/Status/ping"
+        
+        start_time = time.time()
+        async with httpx.AsyncClient() as client:
+            try:
+                response = await client.get(url, timeout=10)
+                response_time = (time.time() - start_time) * 1000  # ms
+                
+                if response.status_code == 200:
+                    return (True, response_time, None)
+                else:
+                    return (False, response_time, f"HTTP {response.status_code}")
+            except httpx.TimeoutException:
+                response_time = (time.time() - start_time) * 1000
+                return (False, response_time, "Timeout")
+            except Exception as e:
+                response_time = (time.time() - start_time) * 1000
+                return (False, response_time, str(e))
+
     async def _ensure_token(self):
         """Checks if token is valid, if not, logs in."""
         # 1. If no token, login
@@ -350,6 +375,40 @@ class TopStepClient:
             except Exception as e:
                 print(f"Close Position Error: {e}")
                 return False
+
+    async def partial_close_position(self, account_id: int, contract_id: str, size: int) -> dict:
+        """Partially closes a position using TopStep's dedicated API."""
+        if not self.token:
+            if not await self.login():
+                return {"success": False, "error": "Not authenticated"}
+        
+        url = f"{self.base_url}/api/Position/partialCloseContract"
+        headers = {"Authorization": f"Bearer {self.token}"}
+        payload = {
+            "accountId": account_id,
+            "contractId": contract_id,
+            "size": size
+        }
+
+        async with httpx.AsyncClient() as client:
+            try:
+                response = await client.post(url, json=payload, headers=headers, timeout=10)
+                
+                if response.status_code != 200:
+                    self._log_api_call("POST", url, payload, None, response.status_code)
+                    if response.status_code == 401: self.token = None 
+                    return {"success": False, "error": f"HTTP {response.status_code}"}
+                
+                try:
+                    data = response.json()
+                    self._log_api_call("POST", url, payload, data, response.status_code)
+                    return data
+                except json.JSONDecodeError:
+                    self._log_api_call("POST", url, payload, {"raw": response.text}, response.status_code)
+                    return {"success": False, "error": "Invalid JSON response"}
+            except Exception as e:
+                print(f"Partial Close Position Error: {e}")
+                return {"success": False, "error": str(e)}
 
     async def cancel_order(self, account_id: int, order_id: int):
         """Cancels a specific order."""

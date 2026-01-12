@@ -251,6 +251,23 @@ async def handle_signal(
             db.add(Log(level="WARNING", message=f"Qty=0 for account {account_id}, skipping"))
             continue
         
+        # Check contract limit
+        limit_ok, limit_reason = await risk_engine.check_contract_limit(
+            account_id, alert.ticker, qty, topstep_client
+        )
+        if not limit_ok:
+            account_settings = db.query(AccountSettings).filter(AccountSettings.account_id == account_id).first()
+            account_name = (account_settings.account_name if account_settings and account_settings.account_name else str(account_id))
+            db.add(Log(level="WARNING", message=f"Contract limit exceeded for {alert.ticker} on {account_name}: {limit_reason}"))
+            db.commit()
+            await telegram_service.send_message(
+                f"⚠️ <b>Trade Rejected: Contract Limit</b>\n\n"
+                f"• Account: {account_name}\n"
+                f"• Ticker: {alert.ticker}\n"
+                f"• Reason: {limit_reason}"
+            )
+            continue
+        
         # Map direction
         action = "BUY" if alert.side.upper() in ["BUY", "LONG"] else "SELL"
         
@@ -383,21 +400,18 @@ async def handle_partial(alert: TradingViewAlert, db: Session) -> Dict[str, Any]
             if reduce_qty <= 0:
                 continue
             
-            # Close partial quantity
-            # This requires placing an opposite market order
-            action = "SELL" if matching_pos.get('type') == 1 else "BUY"
-            
-            response = await topstep_client.place_order(
-                ticker=alert.ticker,
-                action=action,
-                quantity=reduce_qty,
-                account_id=account_id
+            # Use TopStep's dedicated partial close API
+            contract_id = matching_pos.get('contractId')
+            response = await topstep_client.partial_close_position(
+                account_id=account_id,
+                contract_id=contract_id,
+                size=reduce_qty
             )
             
-            if response.get("status") == "filled":
+            if response.get("success"):
                 # Get account name
                 account_settings = db.query(AccountSettings).filter(AccountSettings.account_id == account_id).first()
-                account_name = account_settings.account_name if account_settings else str(account_id)
+                account_name = (account_settings.account_name if account_settings and account_settings.account_name else str(account_id))
                 
                 remaining_qty = current_size - reduce_qty
                 
@@ -518,7 +532,7 @@ async def handle_close(alert: TradingViewAlert, db: Session) -> Dict[str, Any]:
                 
                 # Get account name for notification
                 account_settings = db.query(AccountSettings).filter(AccountSettings.account_id == account_id).first()
-                account_name = account_settings.account_name if account_settings else str(account_id)
+                account_name = (account_settings.account_name if account_settings and account_settings.account_name else str(account_id))
                 
                 db.add(Log(level="INFO", message=f"CLOSE: Position closed for {alert.ticker} on {account_name}"))
                 
@@ -585,7 +599,7 @@ async def execute_trade(
     
     # Get account name for notifications
     account_settings = db.query(AccountSettings).filter(AccountSettings.account_id == account_id).first()
-    account_name = account_settings.account_name if account_settings else str(account_id)
+    account_name = (account_settings.account_name if account_settings and account_settings.account_name else str(account_id))
     
     try:
         response = await topstep_client.place_order(

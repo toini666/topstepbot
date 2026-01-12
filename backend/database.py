@@ -59,6 +59,7 @@ class TickerMap(Base):
     ts_ticker = Column(String)  # Human readable name mapping (e.g. MNQH6)
     tick_size = Column(Float)
     tick_value = Column(Float)
+    micro_equivalent = Column(Integer, default=1)  # 1 for micro, 10 for mini contracts
 
 
 # =============================================================================
@@ -98,6 +99,7 @@ class AccountSettings(Base):
     account_name = Column(String, nullable=True)  # Cached account name for display
     trading_enabled = Column(Boolean, default=True)  # Master switch per account
     risk_per_trade = Column(Float, default=200.0)  # Account-specific risk amount ($)
+    max_contracts = Column(Integer, default=50)  # Max micro-equivalent contracts allowed
     
     created_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc))
     updated_at = Column(DateTime, onupdate=lambda: datetime.datetime.now(datetime.timezone.utc))

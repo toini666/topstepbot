@@ -14,7 +14,9 @@ This document details the exact sequences, validations, and API calls for all tr
 6. [Cross-Account Direction Check](#6-cross-account-direction-check)
 7. [Session Validation Logic](#7-session-validation-logic)
 8. [Position Sizing Calculation](#8-position-sizing-calculation)
+
 9. [Strategy Configuration Management](#9-strategy-configuration-management)
+10. [API Health Check Flow](#10-api-health-check-flow)
 
 ---
 
@@ -63,6 +65,11 @@ TradingView         Webhook Router         RiskEngine          TopStep API
     │                     │◀─ (bool, reason) ───│                    │
     │                     │                     │                    │
     │                     │── check_session_allowed(id, strat)       │
+    │                     │◀─ (bool, reason) ───│                    │
+    │                     │                     │                    │
+
+    │                     │                     │                    │
+    │                     │── check_contract_limit(id, qty)          │
     │                     │◀─ (bool, reason) ───│                    │
     │                     │                     │                    │
     │                     │── check_open_position(id, ticker) ──────▶│
@@ -161,7 +168,7 @@ matching_trades = db.query(Trade).filter(
       - reduce_qty = max(1, int(current_size × partial_percent / 100))
       - If reduce_qty >= current_size: reduce_qty = current_size - 1
       - If reduce_qty <= 0: skip
-   g. Place opposite market order (SELL if LONG, BUY if SHORT)
+   g. Call TopStep: `partialCloseContract(account_id, contractId, reduce_qty)`
    h. **CRITICAL: Sync remaining SL/TP order quantities**
       - Call sync_order_quantities(account_id, ticker, remaining_qty)
       - Updates all working SL/TP orders to match new position size
@@ -562,4 +569,32 @@ AccountStrategyConfig (Per-Account Override)
 
 2. **Risk calculation uses account config** - The `get_risk_amount()` function uses `AccountStrategyConfig.risk_factor`, not `Strategy.default_risk_factor`.
 
+
+
 3. **All operations are logged** - Create/update/delete operations on both templates and account configs are recorded in System Logs with JSON details.
+
+---
+
+## 10. API Health Check Flow
+
+### Trigger
+Scheduled job every 60 seconds (backend).
+
+### Sequence
+```
+1. Call TopStep: GET /api/Status/ping
+2. Calculate response time (ms)
+3. IF Success (200 OK):
+   a. Update global health state (healthy=True)
+   b. Reset failures counter = 0
+   c. IF previously DOWN:
+      - Log INFO "API Recovered"
+      - Send recovery notification (Telegram)
+4. IF Failure (4xx/5xx/Timeout):
+   a. Update global health state (healthy=False)
+   b. Increment failures counter
+   c. Log ERROR "API Ping Failed"
+   d. IF failures >= 3 AND not notified:
+      - Send DOWN notification (Telegram)
+      - Set notified flag = True
+```

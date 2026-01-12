@@ -65,6 +65,7 @@ Account Settings (per account)
 | **Session Restrictions** | Strategies only execute during allowed sessions |
 | **Market Hours Filter** | Blocks trades outside configured hours |
 | **Blocked Periods** | Custom time blocks where trading is disabled |
+| **Contract Limit** | Maximum contracts (micro-equivalent) per account |
 | **Force Flatten** | Manual and scheduled flatten-all capability |
 
 ### 5. Alert Types
@@ -82,7 +83,7 @@ Account Settings (per account)
 #### PARTIAL
 - **Purpose**: Take partial profits
 - **Matching**: By ticker + timeframe + strategy
-- **Action**: Reduces position by configured %, optionally moves SL to entry
+- **Action**: Reduces position via `partialCloseContract` API
 
 #### CLOSE
 - **Purpose**: Close entire position
@@ -131,6 +132,7 @@ Account Settings (per account)
 | **Log Cleaning** | Removes logs older than 7 days at 04:00 UTC |
 | **Position Monitoring** | Detects closed positions for notifications |
 | **Orphan Detection** | Alerts for orders without matching positions |
+| **API Health Check** | Pings TopStep every 60s, alerts on failure |
 
 ---
 

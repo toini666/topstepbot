@@ -227,6 +227,10 @@ def update_account_settings(account_id: int, req: AccountSettingsUpdate, db: Ses
         db.add(Log(level="INFO", message=f"Risk per trade updated for account {account_id}: ${old_val} -> ${req.risk_per_trade}"))
     if req.account_name is not None:
         settings.account_name = req.account_name
+    if req.max_contracts is not None and req.max_contracts != settings.max_contracts:
+        old_val = settings.max_contracts or 50
+        settings.max_contracts = req.max_contracts
+        db.add(Log(level="INFO", message=f"Max contracts updated for account {account_id}: {old_val} -> {req.max_contracts}"))
     
     db.commit()
     db.refresh(settings)
@@ -476,15 +480,33 @@ def get_trades(
     
     # Filter by date range
     if days > 0:
-        # Calculate start of day in local timezone (Brussels)
+        import pytz
         from datetime import timedelta
-        now = datetime.now(timezone.utc)
+        brussels_tz = pytz.timezone("Europe/Brussels")
+        now_utc = datetime.now(timezone.utc)
+        now_brussels = now_utc.astimezone(brussels_tz)
+        
+        # Get start of today in Brussels time
+        today_start_brussels = now_brussels.replace(hour=0, minute=0, second=0, microsecond=0)
+        
         if days == 1:
-            # Today: from midnight local time
-            start_date = now.replace(hour=0, minute=0, second=0, microsecond=0)
+            # Today: from midnight Brussels time
+            start_date_brussels = today_start_brussels
         else:
-            # Last N days
-            start_date = now - timedelta(days=days)
+            # Last N days (including today)
+            # e.g. days=7 -> today + 6 previous days = start from 6 days ago midnight
+            start_date_brussels = today_start_brussels - timedelta(days=days-1)
+            
+        # Convert back to UTC for DB comparison
+        start_date = start_date_brussels.astimezone(timezone.utc)
+        
+        # Ensure correct type for comparison (offset-aware or naive depending on DB)
+        # SQLite usually stores naive strings, but our models use DateTime(timezone=True) or similar?
+        # Typically SQLAlchemy + SQLite with DateTime objects works best with naive or consistently aware.
+        # If DB relies on naive UTC, we might need to strip tzinfo. 
+        # But let's check if Trade.timestamp is aware.
+        # Based on default=lambda: datetime.datetime.now(datetime.timezone.utc), it is aware (UTC).
+        
         query = query.filter(Trade.timestamp >= start_date)
     
     trades = query.order_by(Trade.timestamp.desc()).offset(skip).limit(limit).all()
@@ -679,3 +701,22 @@ def delete_ticker_map(map_id: int, db: Session = Depends(get_db)):
     db.delete(mapping)
     db.commit()
     return {"success": True}
+
+
+@router.patch("/settings/ticker-map/{map_id}")
+def update_ticker_map(map_id: int, updates: dict, db: Session = Depends(get_db)):
+    """Update a ticker mapping (e.g., micro_equivalent)."""
+    mapping = db.query(TickerMap).filter(TickerMap.id == map_id).first()
+    if not mapping:
+        return {"success": False, "message": "Mapping not found"}
+    
+    if "micro_equivalent" in updates:
+        old_val = mapping.micro_equivalent or 1
+        new_val = updates["micro_equivalent"]
+        mapping.micro_equivalent = new_val
+        db.add(Log(level="INFO", message=f"Ticker {mapping.tv_ticker} micro_equivalent updated: {old_val} -> {new_val}"))
+    
+    db.commit()
+    db.refresh(mapping)
+    return {"success": True, "data": TickerMapResponse.model_validate(mapping).model_dump()}
+

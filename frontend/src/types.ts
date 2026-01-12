@@ -143,6 +143,7 @@ export interface AccountSettings {
     account_name?: string;
     trading_enabled: boolean;
     risk_per_trade: number;
+    max_contracts: number;  // Max micro-equivalent contracts
     created_at: string;
     updated_at?: string;
 }
@@ -188,6 +189,7 @@ export interface TickerMap {
     ts_ticker: string;
     tick_size: number;
     tick_value: number;
+    micro_equivalent: number;  // 1 for micro, 10 for mini
 }
 
 // =============================================================================

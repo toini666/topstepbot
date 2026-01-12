@@ -135,6 +135,10 @@ class RiskEngine:
             self.db.add(settings)
             self.db.commit()
             self.db.refresh(settings)
+        elif account_name and not settings.account_name:
+            # Update account_name if it was missing
+            settings.account_name = account_name
+            self.db.commit()
         return settings
     
     # =========================================================================
@@ -336,6 +340,63 @@ class RiskEngine:
             return True, "OK"
         except Exception as e:
             return False, f"Failed to check cross-account positions: {e}"
+    
+    async def check_contract_limit(
+        self, 
+        account_id: int, 
+        ticker: str, 
+        quantity: int,
+        topstep_client
+    ) -> Tuple[bool, str]:
+        """
+        Check if opening this position would exceed account's contract limit.
+        Uses micro_equivalent from TickerMap (1 for micro, 10 for mini).
+        Returns (allowed, reason).
+        """
+        from backend.database import TickerMap
+        
+        try:
+            # Get account settings for max_contracts
+            account_settings = self.get_account_settings(account_id)
+            if not account_settings:
+                return False, f"Account {account_id} not configured"
+            
+            max_contracts = account_settings.max_contracts or 50
+            
+            # Get current open positions
+            positions = await topstep_client.get_open_positions(account_id)
+            
+            # Calculate current usage in micro-equivalent
+            current_usage = 0
+            for pos in positions:
+                pos_contract_id = pos.get('contractId', '')
+                pos_size = pos.get('size', 0)
+                
+                # Find micro_equivalent from TickerMap
+                ticker_map = self.db.query(TickerMap).filter(
+                    TickerMap.ts_contract_id == pos_contract_id
+                ).first()
+                
+                micro_eq = ticker_map.micro_equivalent if ticker_map else 1
+                current_usage += pos_size * micro_eq
+            
+            # Calculate new position micro-equivalent
+            clean_ticker = ticker.replace("1!", "").replace("2!", "")
+            new_ticker_map = self.db.query(TickerMap).filter(
+                TickerMap.tv_ticker == ticker
+            ).first()
+            
+            new_micro_eq = new_ticker_map.micro_equivalent if new_ticker_map else 1
+            new_usage = quantity * new_micro_eq
+            
+            # Check if would exceed limit
+            total_usage = current_usage + new_usage
+            if total_usage > max_contracts:
+                return False, f"Contract limit exceeded: {current_usage} + {new_usage} = {total_usage} > {max_contracts} max"
+            
+            return True, f"OK ({total_usage}/{max_contracts} after trade)"
+        except Exception as e:
+            return False, f"Failed to check contract limit: {e}"
     
     # =========================================================================
     # POSITION SIZING

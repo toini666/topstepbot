@@ -7,11 +7,13 @@ interface TickerMappingProps {
     mappings: TickerMap[];
     onAdd: (mapping: Omit<TickerMap, 'id'>) => Promise<void>;
     onDelete: (id: number) => Promise<void>;
+    onUpdate?: (id: number, updates: Partial<TickerMap>) => Promise<void>;
 }
 
-export function TickerMapping({ mappings, onAdd, onDelete }: TickerMappingProps) {
+export function TickerMapping({ mappings, onAdd, onDelete, onUpdate }: TickerMappingProps) {
     const [tvTicker, setTvTicker] = useState('');
     const [selectedContract, setSelectedContract] = useState(''); // Stores JSON string of contract details
+    const [microEquivalent, setMicroEquivalent] = useState(1);
     const [availableContracts, setAvailableContracts] = useState<any[]>([]);
     const [loadingContracts, setLoadingContracts] = useState(false);
     const [adding, setAdding] = useState(false);
@@ -42,10 +44,12 @@ export function TickerMapping({ mappings, onAdd, onDelete }: TickerMappingProps)
                 ts_contract_id: contract.id, // e.g. CON.F.US.MNQ.H26
                 ts_ticker: contract.name,    // e.g. MNQH6
                 tick_size: contract.tickSize,
-                tick_value: contract.tickValue
+                tick_value: contract.tickValue,
+                micro_equivalent: microEquivalent
             } as any); // Type assertion for Omit
             setTvTicker('');
             setSelectedContract('');
+            setMicroEquivalent(1);
         } catch (e) {
             console.error(e);
         } finally {
@@ -99,6 +103,15 @@ export function TickerMapping({ mappings, onAdd, onDelete }: TickerMappingProps)
                         ))}
                     </select>
 
+                    <input
+                        type="number"
+                        value={microEquivalent}
+                        onChange={(e) => setMicroEquivalent(Math.max(1, parseInt(e.target.value) || 1))}
+                        className="w-14 bg-slate-900 border border-slate-700 rounded-lg px-2 py-2 text-sm text-white text-center focus:outline-none focus:border-indigo-500 font-mono"
+                        min="1"
+                        title="Micro equivalent (1=micro, 10=mini)"
+                    />
+
                     <button
                         onClick={handleAdd}
                         disabled={!tvTicker || !selectedContract || adding}
@@ -123,12 +136,30 @@ export function TickerMapping({ mappings, onAdd, onDelete }: TickerMappingProps)
                                 </span>
                             </div>
                         </div>
-                        <button
-                            onClick={() => onDelete(m.id)}
-                            className="p-1.5 hover:bg-red-500/10 text-slate-500 hover:text-red-400 rounded-lg transition-colors"
-                        >
-                            <Trash2 size={14} />
-                        </button>
+                        <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-1">
+                                <span className="text-[10px] text-slate-500">×</span>
+                                <input
+                                    type="number"
+                                    value={m.micro_equivalent}
+                                    onChange={(e) => {
+                                        const val = parseInt(e.target.value) || 1;
+                                        if (onUpdate && val >= 1) {
+                                            onUpdate(m.id, { micro_equivalent: val });
+                                        }
+                                    }}
+                                    className="w-10 bg-slate-800 border border-slate-700 rounded px-1 py-0.5 text-xs text-white text-center focus:outline-none focus:border-indigo-500 font-mono"
+                                    min="1"
+                                    title="Micro equivalent (1=micro, 10=mini)"
+                                />
+                            </div>
+                            <button
+                                onClick={() => onDelete(m.id)}
+                                className="p-1.5 hover:bg-red-500/10 text-slate-500 hover:text-red-400 rounded-lg transition-colors"
+                            >
+                                <Trash2 size={14} />
+                            </button>
+                        </div>
                     </div>
                 ))}
 
