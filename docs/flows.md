@@ -148,7 +148,7 @@ matching_trades = db.query(Trade).filter(
 
 ```
 1. Receive PARTIAL webhook
-2. Notify partial signal (Telegram)
+2. Notify partial signal (Telegram) - includes accounts count
 3. Query DB for matching open trades
 4. FOR EACH matching trade:
    a. Get account_id from trade
@@ -161,9 +161,13 @@ matching_trades = db.query(Trade).filter(
       - If reduce_qty >= current_size: reduce_qty = current_size - 1
       - If reduce_qty <= 0: skip
    g. Place opposite market order (SELL if LONG, BUY if SHORT)
-   h. If move_sl_to_entry: call update_sl_tp_orders() with entry_price
-   i. If alert has new SL/TP: update_sl_tp_orders()
-   j. Notify partial executed (Telegram)
+   h. **CRITICAL: Sync remaining SL/TP order quantities**
+      - Call sync_order_quantities(account_id, ticker, remaining_qty)
+      - Updates all working SL/TP orders to match new position size
+      - Prevents over-closing when SL/TP is triggered
+   i. If move_sl_to_entry: call update_sl_tp_orders() with entry_price
+   j. If alert has new SL/TP: update_sl_tp_orders()
+   k. Notify partial executed (Telegram) - includes side emoji & BE status
 5. Return processed accounts
 ```
 
@@ -176,6 +180,21 @@ reduce_qty = max(1, int(current_size * (partial_percent / 100)))
 # 3 contracts × 50% = 1.5 → 1 contract
 # 5 contracts × 50% = 2.5 → 2 contracts
 # 2 contracts × 50% = 1.0 → 1 contract
+```
+
+### Order Quantity Sync (Critical Fix)
+```python
+async def sync_order_quantities(account_id, ticker, new_quantity):
+    """
+    After partial close, SL/TP orders still have original quantity.
+    This syncs them to remaining position size to prevent over-closing.
+    """
+    orders = await get_orders(account_id, days=1)
+    
+    for order in orders:
+        if order is SL/TP type and matches ticker:
+            if order.size != new_quantity:
+                await modify_order(order_id, size=new_quantity)
 ```
 
 ---
@@ -205,12 +224,27 @@ TradingView sends `type: "CLOSE"` webhook.
 ## 4. Position Monitoring Flow
 
 ### Trigger
-Scheduled job every 5 seconds.
+Scheduled job every 30 seconds.
 
 ### Purpose
 Detect positions closed externally (TP hit, SL hit, manual close).
 
-### Sequence
+### Startup Behavior
+On bot startup, existing positions are pre-loaded to avoid false "Position Opened" notifications:
+
+```
+1. Login to TopStep
+2. Fetch all accounts
+3. FOR EACH account:
+   a. Get current positions
+   b. Store in _last_open_positions[account_id]
+   c. Collect for summary
+4. Send startup notification:
+   - If positions exist: Summary with all positions (contract, side, qty, account)
+   - If no positions: Standard "Bot Online" message
+```
+
+### Runtime Sequence
 
 ```
 1. Load previous positions from memory (per account)
@@ -221,13 +255,14 @@ Detect positions closed externally (TP hit, SL hit, manual close).
       - Position was closed
       - Fetch trade history to get exit details
       - Calculate PnL and fees
-      - Notify position closed (Telegram)
+      - Calculate Daily PnL total
+      - Notify position closed (Telegram) with daily PnL
    d. Update memory with current positions
-3. Check for orphaned orders:
-   a. Get all working orders
-   b. Get all open positions
+3. Check for orphaned orders (ALL accounts):
+   a. Get working orders from ALL accounts
+   b. Get open positions from ALL accounts
    c. Orders for contracts without positions = orphans
-   d. If orphans found → Notify (Telegram)
+   d. If orphans found → Notify (Telegram) with account names
 ```
 
 ### Data Structures

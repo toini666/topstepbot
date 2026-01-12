@@ -403,6 +403,19 @@ async def handle_partial(alert: TradingViewAlert, db: Session) -> Dict[str, Any]
                 
                 db.add(Log(level="INFO", message=f"PARTIAL: Reduced {reduce_qty} on {alert.ticker} for {account_name} (remaining: {remaining_qty})"))
                 
+                # CRITICAL: Sync SL/TP order quantities with remaining position
+                # This prevents over-closing when stop/TP is hit
+                try:
+                    synced_count = await topstep_client.sync_order_quantities(
+                        account_id=account_id,
+                        ticker=alert.ticker,
+                        new_quantity=remaining_qty
+                    )
+                    if synced_count > 0:
+                        db.add(Log(level="INFO", message=f"PARTIAL: Synced {synced_count} order(s) to qty={remaining_qty}"))
+                except Exception as e:
+                    db.add(Log(level="ERROR", message=f"Failed to sync order quantities: {e}"))
+                
                 # Move SL to entry if configured
                 sl_moved = False
                 if move_sl_to_entry and trade.entry_price:
@@ -436,7 +449,8 @@ async def handle_partial(alert: TradingViewAlert, db: Session) -> Dict[str, Any]
                     reduced_qty=reduce_qty,
                     remaining_qty=remaining_qty,
                     account_name=account_name,
-                    sl_moved_to_entry=sl_moved
+                    sl_moved_to_entry=sl_moved,
+                    side="LONG" if matching_pos.get('type') == 1 else "SHORT"
                 )
                 
                 processed.append(account_name)

@@ -48,6 +48,7 @@ export const aggregateTrades = (trades: HistoricalTrade[]): AggregatedTrade[] =>
             let firstEntryTime = new Date().toISOString();
             let entrySideLabel: 'LONG' | 'SHORT' = 'LONG'; // Default
             let entryStrategy = 'default';
+            let entryTimeframe = '';
             let matchCount = 0;
 
             while (remainingCloseSize > 0 && inventory.length > 0) {
@@ -63,6 +64,7 @@ export const aggregateTrades = (trades: HistoricalTrade[]): AggregatedTrade[] =>
                     const normalizedSide = getSideStr(openTrade.side);
                     entrySideLabel = normalizedSide === 'BUY' ? 'LONG' : 'SHORT';
                     entryStrategy = openTrade.strategy || 'default';
+                    entryTimeframe = openTrade.timeframe || '';
                 }
 
                 // Accumulate Cost
@@ -98,7 +100,8 @@ export const aggregateTrades = (trades: HistoricalTrade[]): AggregatedTrade[] =>
                     exitPrice: trade.price,
                     pnl: trade.profitAndLoss || 0,
                     fees: collectedFees,
-                    strategy: entryStrategy
+                    strategy: entryStrategy,
+                    timeframe: entryTimeframe
                 });
             }
 

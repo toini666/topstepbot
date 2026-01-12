@@ -227,11 +227,46 @@ Data export and analytics endpoints.
 
 | Job | Schedule | Function |
 |-----|----------|----------|
-| Position Monitor | Every 5s | Detect closed positions |
-| Orphan Detection | Every 60s | Find orders without positions |
+| Position Monitor | Every 30s | Detect closed positions, new opens, orphaned orders |
 | Auto Flatten | Configurable time | Close all positions daily |
 | Database Backup | 03:00 UTC | Copy database file |
-| Log Cleanup | 04:00 UTC | Remove logs > 7 days |
+| Log Cleanup | 03:15 UTC | Remove logs > 7 days |
+
+---
+
+## Telegram Bot Commands
+
+The bot provides remote control and monitoring via Telegram.
+
+### Monitoring Commands
+
+| Command | Description |
+|---------|-------------|
+| `/status` | Current account balance, PnL, positions |
+| `/status_all` | All accounts overview (balance, PnL, positions count) |
+| `/accounts` | List all available accounts with IDs |
+
+### Control Commands
+
+| Command | Description |
+|---------|-------------|
+| `/on` | Enable trading (Master Switch) |
+| `/off` | Disable trading |
+| `/login` | Connect to TopStep |
+| `/logout` | Disconnect |
+| `/switch [ID]` | Switch active account |
+
+### Emergency Commands
+
+| Command | Description |
+|---------|-------------|
+| `/cancel_orders` | Cancel orders on current account |
+| `/cancel_all` | Cancel orders on ALL accounts |
+| `/flatten` | Flatten current account |
+| `/flatten_all` | 🚨 Flatten ALL accounts |
+
+### Startup Notification
+On bot startup, sends a summary of any open positions across all accounts instead of individual "Position Opened" notifications.
 
 ---
 

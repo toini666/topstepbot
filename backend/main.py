@@ -136,7 +136,8 @@ async def monitor_closed_positions_job():
                                     exit_price=exit_px,
                                     pnl=pnl_val,
                                     fees=total_fees,
-                                    quantity=matching_trade.get('size', 0)
+                                    quantity=matching_trade.get('size', 0),
+                                    daily_pnl=sum((t.get('profitAndLoss') or 0) - (t.get('fees') or 0) for t in recent_trades)
                                 )
                             else:
                                 await telegram_service.send_message(
@@ -313,7 +314,50 @@ async def lifespan(app: FastAPI):
     # Auto-Connect to TopStep
     try:
         await topstep_client.login()
-        await telegram_service.notify_startup()
+        
+        # Pre-load existing positions to avoid false "Position Opened" notifications
+        all_accounts = await topstep_client.get_accounts()
+        open_positions_summary = []
+        
+        for account in all_accounts:
+            account_id = account.get('id')
+            account_name = account.get('name', str(account_id))
+            
+            try:
+                positions = await topstep_client.get_open_positions(account_id)
+                current_map = {}
+                
+                for pos in positions:
+                    cid = str(pos.get('contractId'))
+                    current_map[cid] = pos
+                    
+                    # Collect for summary
+                    p_type = pos.get('type')
+                    side = "LONG" if str(p_type) == '1' else "SHORT"
+                    qty = pos.get('size', 1)
+                    open_positions_summary.append({
+                        'account': account_name,
+                        'contract': cid,
+                        'side': side,
+                        'qty': qty
+                    })
+                
+                # Store in state to prevent monitor from treating as new
+                _last_open_positions[account_id] = current_map
+                
+            except Exception as e:
+                print(f"Error pre-loading positions for {account_name}: {e}")
+        
+        # Send startup notification with positions summary
+        if open_positions_summary:
+            summary_msg = "🤖 <b>TopStep Bot Online</b>\n\n📈 <b>Open Positions:</b>\n"
+            for p in open_positions_summary:
+                side_emoji = "🟢" if p['side'] == "LONG" else "🔴"
+                summary_msg += f"• {side_emoji} {p['contract']} x{p['qty']} ({p['account']})\n"
+            await telegram_service.send_message(summary_msg)
+        else:
+            await telegram_service.notify_startup()
+        
     except Exception as e:
         print(f"Auto-login failed: {e}")
 

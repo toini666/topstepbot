@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import type { Order } from './types';
 import { useTopStep } from './hooks/useTopStep';
 import { Activity, CheckCircle, TrendingUp, DollarSign, Settings, AlertTriangle, X, Terminal, ChevronDown, ChevronRight, FileText, Copy, Layers, Power } from 'lucide-react';
 import axios from 'axios';
@@ -13,7 +14,7 @@ import { aggregateTrades } from './utils/tradeAggregator';
 import { API_BASE } from './config';
 
 function App() {
-  const { trades, logs, accounts, positions, orders, historicalTrades, selectedAccountId, setSelectedAccountId, connect, logout, loadMoreLogs, isConnected, loading, selectedAccountSettings, toggleAccountTrading, config, updateConfig, historyFilter, setHistoryFilter, marketStatus, strategies, updateAccountSettings, accountSettings } = useTopStep();
+  const { trades, logs, accounts, positions, orders, historicalTrades, selectedAccountId, setSelectedAccountId, connect, logout, loadMoreLogs, isConnected, loading, selectedAccountSettings, toggleAccountTrading, config, updateConfig, historyFilter, setHistoryFilter, marketStatus, strategies, updateAccountSettings, accountSettings, ordersByAccount, positionsByAccount } = useTopStep();
   const [activeTab, setActiveTab] = useState<'trading' | 'logs' | 'strategies'>('trading');
   const [expandedLogs, setExpandedLogs] = useState<Set<number>>(new Set());
   const [selectedStrategyFilter, setSelectedStrategyFilter] = useState<string>('ALL');
@@ -42,24 +43,31 @@ function App() {
 
 
 
-  // Map Strategy from Local Trades
-  const strategyMap = useMemo(() => {
-    const map = new Map<string, string>();
+  // Map Strategy + Timeframe from Local Trades
+  const tradeInfoMap = useMemo(() => {
+    const map = new Map<string, { strategy: string; timeframe?: string }>();
     trades.forEach(t => {
       if (t.topstep_order_id && t.strategy) {
-        map.set(String(t.topstep_order_id), t.strategy);
+        map.set(String(t.topstep_order_id), {
+          strategy: t.strategy,
+          timeframe: t.timeframe
+        });
       }
     });
     return map;
   }, [trades]);
 
-  // Enrich Historical Trades with Strategy
+  // Enrich Historical Trades with Strategy + Timeframe
   const enrichedHistory = useMemo(() => {
-    return historicalTrades.map(ht => ({
-      ...ht,
-      strategy: strategyMap.get(String(ht.orderId)) || 'RobReversal'
-    }));
-  }, [historicalTrades, strategyMap]);
+    return historicalTrades.map(ht => {
+      const info = tradeInfoMap.get(String(ht.orderId));
+      return {
+        ...ht,
+        strategy: info?.strategy || 'RobReversal',
+        timeframe: info?.timeframe
+      };
+    });
+  }, [historicalTrades, tradeInfoMap]);
 
   // Aggregate Trades for display
   const aggregatedTrades = useMemo(() => aggregateTrades(enrichedHistory), [enrichedHistory]);
@@ -281,12 +289,22 @@ function App() {
         </div>
       </header>
 
-      {/* WARNING: ORPHANED ORDERS */}
+      {/* WARNING: ORPHANED ORDERS (ALL ACCOUNTS) */}
       {(() => {
-        const orphanedOrders = orders.filter(o =>
-          (o.status === 1 || o.status === 6) &&
-          !positions.some(p => p.contractId === o.contractId)
-        );
+        // Detect orphaned orders across ALL accounts
+        const orphanedOrders: Array<Order & { accountName: string }> = [];
+
+        for (const account of accounts) {
+          const accountOrders = ordersByAccount[account.id] || [];
+          const accountPositions = positionsByAccount[account.id] || [];
+
+          for (const order of accountOrders) {
+            if ((order.status === 1 || order.status === 6) &&
+              !accountPositions.some(p => p.contractId === order.contractId)) {
+              orphanedOrders.push({ ...order, accountName: account.name });
+            }
+          }
+        }
 
         if (orphanedOrders.length > 0) {
           return (
@@ -300,10 +318,10 @@ function App() {
                   You have <strong>{orphanedOrders.length}</strong> working order(s) for contracts where you have no open position.
                   These orders may execute unexpectedly.
                 </p>
-                <div className="flex gap-2 mt-2">
+                <div className="flex flex-wrap gap-2 mt-2">
                   {orphanedOrders.map(o => (
-                    <span key={o.id} className="text-xs bg-yellow-900/50 text-yellow-200 px-2 py-1 rounded font-mono border border-yellow-700/50">
-                      {o.symbolId} ({o.side === 0 ? 'BUY' : 'SELL'})
+                    <span key={`${o.accountId}-${o.id}`} className="text-xs bg-yellow-900/50 text-yellow-200 px-2 py-1 rounded font-mono border border-yellow-700/50">
+                      {o.symbolId} ({o.side === 0 ? 'BUY' : 'SELL'}) <span className="text-yellow-400">@{o.accountName}</span>
                     </span>
                   ))}
                 </div>
@@ -543,7 +561,7 @@ function App() {
                       onClick={() => setStrategyDropdownOpen(!strategyDropdownOpen)}
                       className="flex items-center gap-2 bg-slate-800 text-slate-300 text-xs font-medium px-3 py-1.5 rounded-md border border-slate-700 hover:bg-slate-700 hover:text-white transition-colors"
                     >
-                      <span>{selectedStrategyFilter === 'ALL' ? 'All Strategies' : selectedStrategyFilter}</span>
+                      <span>{selectedStrategyFilter === 'ALL' ? 'All Strategies' : (strategies.find(s => s.tv_id === selectedStrategyFilter)?.name || selectedStrategyFilter)}</span>
                       <ChevronDown className={`w-3 h-3 transition-transform duration-200 ${strategyDropdownOpen ? 'rotate-180' : ''}`} />
                     </button>
 
@@ -563,22 +581,26 @@ function App() {
                             <span>All Strategies</span>
                             {selectedStrategyFilter === 'ALL' && <CheckCircle className="w-3 h-3" />}
                           </button>
-                          {[...new Set(aggregatedTrades.map(t => t.strategy).filter(Boolean))].map(strat => (
-                            <button
-                              key={strat}
-                              onClick={() => {
-                                setSelectedStrategyFilter(strat || '');
-                                setStrategyDropdownOpen(false);
-                              }}
-                              className={`w-full text-left px-3 py-2 rounded-lg flex items-center justify-between transition-colors text-xs ${selectedStrategyFilter === strat
-                                ? 'bg-indigo-500/10 text-indigo-400'
-                                : 'text-slate-300 hover:bg-slate-700/50'
-                                }`}
-                            >
-                              <span>{strat}</span>
-                              {selectedStrategyFilter === strat && <CheckCircle className="w-3 h-3" />}
-                            </button>
-                          ))}
+                          {[...new Set(aggregatedTrades.map(t => t.strategy).filter(Boolean))].map(strat => {
+                            const stratInfo = strategies.find(s => s.tv_id === strat);
+                            const displayName = stratInfo?.name || strat;
+                            return (
+                              <button
+                                key={strat}
+                                onClick={() => {
+                                  setSelectedStrategyFilter(strat || '');
+                                  setStrategyDropdownOpen(false);
+                                }}
+                                className={`w-full text-left px-3 py-2 rounded-lg flex items-center justify-between transition-colors text-xs ${selectedStrategyFilter === strat
+                                  ? 'bg-indigo-500/10 text-indigo-400'
+                                  : 'text-slate-300 hover:bg-slate-700/50'
+                                  }`}
+                              >
+                                <span>{displayName}</span>
+                                {selectedStrategyFilter === strat && <CheckCircle className="w-3 h-3" />}
+                              </button>
+                            );
+                          })}
                         </div>
                       </div>
                     )}

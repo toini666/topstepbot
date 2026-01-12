@@ -706,6 +706,54 @@ class TopStepClient:
         
         return count
 
+    async def sync_order_quantities(self, account_id: int, ticker: str, new_quantity: int):
+        """
+        Synchronizes SL/TP order quantities with the current position size.
+        This MUST be called after a partial close to prevent over-closing.
+        
+        Args:
+            account_id: The account to sync orders for
+            ticker: The contract ticker (e.g., "MNQ1!")
+            new_quantity: The remaining position size after partial close
+        
+        Returns:
+            Number of orders that were modified
+        """
+        orders = await self.get_orders(account_id, days=1)
+        clean_ticker = ticker.replace("1!", "").replace("2!", "").upper()
+        
+        count = 0
+        for order in orders:
+            oid = order.get('orderId') or order.get('id')
+            ostatus = order.get('status')
+            otype = order.get('type')
+            cid = order.get('contractId') or order.get('symbol')
+            current_size = order.get('size', 0)
+            
+            # Check status (Working/Accepted)
+            valid_statuses = ["Working", "Accepted", 1, 6]
+            if ostatus not in valid_statuses:
+                continue
+            
+            # Check ticker match
+            if not cid or clean_ticker not in cid.upper():
+                continue
+            
+            # Only update SL (type=4) and TP/Limit (type=1) orders
+            if otype not in [1, 4]:
+                continue
+            
+            # Check if size needs adjustment
+            if current_size != new_quantity:
+                print(f"Syncing Order {oid} size: {current_size} -> {new_quantity}")
+                success = await self.modify_order(oid, account_id=account_id, size=new_quantity)
+                if success:
+                    count += 1
+                else:
+                    print(f"Failed to sync order {oid} size")
+        
+        return count
+
     async def cancel_all_orders(self, account_id: int):
         """Fetches all working orders and cancels them."""
         # 1. Get Orders (using existing helper that fetches last 24h)

@@ -85,10 +85,16 @@ class TelegramBot:
             await self.cmd_help()
         elif command == "/status":
             await self.cmd_status()
+        elif command == "/status_all":
+            await self.cmd_status_all()
         elif command == "/flatten":
             await self.cmd_flatten()
+        elif command == "/flatten_all":
+            await self.cmd_flatten_all()
         elif command == "/cancel_orders":
             await self.cmd_cancel_orders()
+        elif command == "/cancel_all":
+            await self.cmd_cancel_all()
         elif command == "/on":
             await self.cmd_set_master_switch(True)
         elif command == "/off":
@@ -113,7 +119,8 @@ class TelegramBot:
         msg = (
             "🤖 <b>Bot Commands</b>\n\n"
             "<b>Monitoring</b>\n"
-            "/status - Account balance, PnL, Positions\n"
+            "/status - Current account status\n"
+            "/status_all - All accounts overview\n"
             "/accounts - List all accounts\n\n"
             "<b>Control</b>\n"
             "/on - Enable Trading (Master Switch)\n"
@@ -122,8 +129,10 @@ class TelegramBot:
             "/logout - Disconnect from TopStep\n"
             "/switch [ID] - Switch Active Account\n\n"
             "<b>Emergency</b>\n"
-            "/cancel_orders - Cancel OPEN orders (keep positions)\n"
-            "/flatten - 🚨 CLOSE ALL POSITIONS & CANCEL ORDERS"
+            "/cancel_orders - Cancel orders (current account)\n"
+            "/cancel_all - Cancel orders (ALL accounts)\n"
+            "/flatten - Close positions (current account)\n"
+            "/flatten_all - 🚨 FLATTEN ALL ACCOUNTS"
         )
         await self.reply(msg)
 
@@ -321,7 +330,6 @@ class TelegramBot:
             account_id = int(setting.value)
             
             await topstep_client.cancel_all_orders(account_id)
-            await topstep_client.cancel_all_orders(account_id)
             await self.reply("✅ All working orders cancelled.")
             
             # Log Action
@@ -402,5 +410,148 @@ class TelegramBot:
     async def cmd_logout(self):
         await topstep_client.logout()
         await self.reply("🔌 Disconnected.")
+
+    # --- MULTI-ACCOUNT COMMANDS ---
+
+    async def cmd_status_all(self):
+        """Show status of ALL accounts."""
+        try:
+            if not topstep_client.token:
+                if not await topstep_client.login():
+                    await self.reply("❌ Not connected to TopStep. Use /login")
+                    return
+            
+            accounts_list = await topstep_client.get_accounts()
+            if not accounts_list:
+                await self.reply("⚠️ No accounts found")
+                return
+
+            # Get master switch
+            db = SessionLocal()
+            try:
+                switch = db.query(Setting).filter(Setting.key == "master_switch").first()
+                is_on = switch and switch.value == "ON"
+                status_emoji = "🟢 ON" if is_on else "🔴 OFF"
+            finally:
+                db.close()
+
+            msg = f"📊 <b>All Accounts Status</b>\nMaster Switch: {status_emoji}\n\n"
+            
+            total_balance = 0.0
+            total_pnl = 0.0
+            total_positions = 0
+            
+            for acc in accounts_list:
+                acc_id = int(acc.get('id'))
+                acc_name = acc.get('name', str(acc_id))
+                balance = acc.get('balance', 0)
+                total_balance += balance
+                
+                # Get positions & PnL for this account
+                positions = await topstep_client.get_open_positions(acc_id)
+                daily_pnl = await self._get_daily_pnl(acc_id)
+                total_pnl += daily_pnl
+                total_positions += len(positions)
+                
+                pos_str = f"📈 {len(positions)} pos" if positions else "✅ Flat"
+                pnl_emoji = "🟢" if daily_pnl >= 0 else "🔴"
+                
+                msg += f"<b>{acc_name}</b>\n"
+                msg += f"  💰 ${balance:,.2f} | {pnl_emoji} ${daily_pnl:,.2f} | {pos_str}\n"
+            
+            msg += f"\n<b>TOTAL:</b> ${total_balance:,.2f} | PnL: ${total_pnl:,.2f} | {total_positions} positions"
+            
+            await self.reply(msg)
+            
+        except Exception as e:
+            await self.reply(f"❌ Error: {e}")
+
+    async def cmd_flatten_all(self):
+        """Flatten ALL accounts - emergency command."""
+        await self.reply("🚨 <b>FLATTENING ALL ACCOUNTS...</b>")
+        db = SessionLocal()
+        
+        try:
+            accounts_list = await topstep_client.get_accounts()
+            if not accounts_list:
+                await self.reply("⚠️ No accounts found")
+                return
+            
+            total_positions = 0
+            total_orders = 0
+            
+            for acc in accounts_list:
+                acc_id = int(acc.get('id'))
+                acc_name = acc.get('name', str(acc_id))
+                
+                try:
+                    # 1. Cancel all orders
+                    orders_cancelled = await topstep_client.cancel_all_orders(acc_id)
+                    total_orders += orders_cancelled if isinstance(orders_cancelled, int) else 0
+                    
+                    # 2. Close all positions
+                    positions = await topstep_client.get_open_positions(acc_id)
+                    
+                    for pos in positions:
+                        contract_id = pos.get('contractId')
+                        qty = pos.get('size', pos.get('quantity'))
+                        p_type = pos.get('type')
+                        
+                        # If Long (1), we SELL. If Short (2), we BUY.
+                        action = "SELL" if str(p_type) == '1' else "BUY"
+                        
+                        await topstep_client.place_order(
+                            ticker=contract_id,
+                            action=action,
+                            quantity=qty,
+                            account_id=acc_id,
+                            contract_id=contract_id
+                        )
+                        total_positions += 1
+                    
+                except Exception as e:
+                    await self.reply(f"⚠️ Error on {acc_name}: {e}")
+            
+            await self.reply(f"✅ <b>Flatten Complete</b>\nClosed {total_positions} positions across all accounts.")
+            
+            # Log Action
+            db.add(Log(level="WARNING", message=f"Telegram: Flatten ALL Executed ({total_positions} positions)"))
+            db.commit()
+            
+        except Exception as e:
+            await self.reply(f"❌ Flatten Error: {e}")
+        finally:
+            db.close()
+
+    async def cmd_cancel_all(self):
+        """Cancel orders on ALL accounts."""
+        db = SessionLocal()
+        try:
+            accounts_list = await topstep_client.get_accounts()
+            if not accounts_list:
+                await self.reply("⚠️ No accounts found")
+                return
+            
+            total_cancelled = 0
+            
+            for acc in accounts_list:
+                acc_id = int(acc.get('id'))
+                try:
+                    result = await topstep_client.cancel_all_orders(acc_id)
+                    if isinstance(result, int):
+                        total_cancelled += result
+                except Exception as e:
+                    print(f"Cancel error for account {acc_id}: {e}")
+            
+            await self.reply(f"✅ Cancelled orders on all accounts.")
+            
+            # Log Action
+            db.add(Log(level="WARNING", message=f"Telegram: Cancel ALL Orders Executed"))
+            db.commit()
+        except Exception as e:
+            await self.reply(f"❌ Error: {e}")
+        finally:
+            db.close()
+
 
 telegram_bot = TelegramBot()

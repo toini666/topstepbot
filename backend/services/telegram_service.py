@@ -111,12 +111,13 @@ class TelegramService:
         timeframe: str,
         strategy: str,
         new_sl: float = None,
-        new_tp: float = None
+        new_tp: float = None,
+        accounts: list = None
     ):
         """Notify of incoming PARTIAL signal."""
         msg = (
-            f"📊 <b>PARTIAL Signal</b>\n"
-            f"Ticker: {ticker} ({timeframe})\n"
+            f"📊 <b>PARTIAL Signal Received</b>\n"
+            f"<b>{ticker}</b> ({timeframe})\n"
             f"Strategy: [{strategy}]"
         )
         
@@ -124,6 +125,9 @@ class TelegramService:
             msg += f"\nNew SL: {new_sl}"
         if new_tp:
             msg += f"\nNew TP: {new_tp}"
+        
+        if accounts and len(accounts) > 0:
+            msg += f"\n<i>Processing on {len(accounts)} account(s)...</i>"
         
         await self.send_message(msg)
 
@@ -191,9 +195,10 @@ class TelegramService:
         pnl: float, 
         quantity: int, 
         fees: float = 0.0,
-        account_name: str = None
+        account_name: str = None,
+        daily_pnl: float = None
     ):
-        """Notify position closed."""
+        """Notify position closed with optional daily PnL."""
         pnl_val = pnl if pnl is not None else 0.0
         pnl_emoji = "💰" if pnl_val >= 0 else "💸"
         side_str = str(side).upper()
@@ -219,6 +224,11 @@ class TelegramService:
         msg += f"<b>PnL: ${pnl_val:.2f}</b>\n"
         msg += f"<i>Fees: ${fees:.2f}</i>"
         
+        # Add daily PnL if provided
+        if daily_pnl is not None:
+            daily_emoji = "📈" if daily_pnl >= 0 else "📉"
+            msg += f"\n\n{daily_emoji} <b>Daily PnL: ${daily_pnl:.2f}</b>"
+        
         await self.send_message(msg)
 
     async def notify_partial_executed(
@@ -227,20 +237,30 @@ class TelegramService:
         reduced_qty: int,
         remaining_qty: int,
         account_name: str = None,
-        sl_moved_to_entry: bool = False
+        sl_moved_to_entry: bool = False,
+        side: str = None
     ):
         """Notify partial take-profit executed."""
         account_tag = f" ({account_name})" if account_name else ""
         
+        # Add side emoji if available
+        side_emoji = ""
+        if side:
+            side_upper = str(side).upper()
+            if "BUY" in side_upper or "LONG" in side_upper:
+                side_emoji = "🟢 "
+            elif "SELL" in side_upper or "SHORT" in side_upper:
+                side_emoji = "🔴 "
+        
         msg = (
-            f"📊 <b>Partial TP Executed</b>{account_tag}\n"
-            f"Ticker: {ticker}\n"
-            f"Reduced: {reduced_qty} contracts\n"
+            f"✂️ <b>Partial TP Executed</b>{account_tag}\n"
+            f"{side_emoji}<b>{ticker}</b>\n"
+            f"Closed: {reduced_qty} contracts\n"
             f"Remaining: {remaining_qty} contracts"
         )
         
         if sl_moved_to_entry:
-            msg += "\n<i>SL moved to breakeven</i>"
+            msg += "\n🎯 <i>SL moved to breakeven</i>"
         
         await self.send_message(msg)
 

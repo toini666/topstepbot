@@ -81,6 +81,7 @@ export interface HistoricalTrade {
     voided: boolean;
     orderId: number;
     strategy?: string;
+    timeframe?: string;  // NEW: timeframe from Trade record
 }
 
 export interface AggregatedTrade {
