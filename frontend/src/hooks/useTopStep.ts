@@ -114,11 +114,30 @@ export const useTopStep = () => {
                             const [posRes, ordRes, histRes] = await Promise.all([
                                 axios.get(`${API_BASE}/dashboard/positions/${aid}`),
                                 axios.get(`${API_BASE}/dashboard/orders/${aid}`, { params: { days } }),
-                                axios.get(`${API_BASE}/dashboard/trades-history/${aid}`, { params: { days } })
+                                // Use internal Trade table instead of TopStep API for aggregated view
+                                axios.get(`${API_BASE}/dashboard/trades`, { params: { account_id: aid, days, status: 'CLOSED' } })
                             ]);
                             newPositions[aid] = posRes.data;
                             newOrders[aid] = ordRes.data;
-                            newTrades[aid] = histRes.data;
+                            // Map Trade format to HistoricalTrade-like format for display
+                            newTrades[aid] = histRes.data.map((t: Trade) => ({
+                                id: t.id,
+                                accountId: t.account_id || aid,
+                                contractId: t.ticker,
+                                creationTimestamp: t.timestamp,
+                                price: t.entry_price,
+                                exitPrice: t.exit_price,
+                                exitTime: t.exit_time,
+                                profitAndLoss: t.pnl,
+                                fees: t.fees,
+                                side: t.action === 'BUY' ? 0 : 1,
+                                size: t.quantity,
+                                strategy: t.strategy,
+                                timeframe: t.timeframe,
+                                // These fields help avoid needing aggregateTrades()
+                                entryPrice: t.entry_price,
+                                isAggregated: true
+                            }))
                         } catch (e) {
                             console.warn(`Error fetching data for account ${aid}:`, e);
                             newPositions[aid] = [];

@@ -6,6 +6,8 @@ This document outlines the roadmap to evolve the current functional prototype in
 *Goal: Protect capital with institutional-grade constraints.*
 - [ ] **News Event Filter**: Integrate an economic calendar API (e.g., ForexFactory or similar). Automatically BLOCK trading 5 mins before/after specific events (NFP, CPI, FOMC).
 - [ ] **Consecutive Loss Kill Switch**: Pause trading for X minutes after N consecutive losses to prevent "tilt" or algo-spirals.
+- [ ] **Max contracts allowed**: Configure per account max contracts allowed + verifications before opening a position
+- [ ] **Alerting when trading unallowed**: In case a max drawdown on a ticker is reached, CME could stop quotation or Topstep could forbid to trade around specific price levels
 
 ## 2. Order Execution & Strategy Engine
 *Goal: Fine-tune how orders are managed after entry.*
@@ -13,6 +15,7 @@ This document outlines the roadmap to evolve the current functional prototype in
 ## 3. Observability & Logging (Traceability)
 *Goal: Know exactly what happened, when, and why.*
 - [ ] **Heartbeat Monitoring**: A background watchdog that pings the TopStep API every minute. If connection drops, send a critical alert to the user.
+- [ ] **More logs in Telegram**: Add monitoring logs in Telegram in case of issue
 
 ## 4. Data & Analytics (The "Journal")
 *Goal: Improve performance through data analysis.*

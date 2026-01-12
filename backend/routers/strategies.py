@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import List
 
-from backend.database import get_db, Strategy
+from backend.database import get_db, Strategy, Log
 from backend.schemas import StrategyCreate, StrategyResponse
 
 router = APIRouter(prefix="/strategies", tags=["strategies"])
@@ -42,6 +42,14 @@ def create_strategy(strategy: StrategyCreate, db: Session = Depends(get_db)):
     db.add(new_strat)
     db.commit()
     db.refresh(new_strat)
+    
+    # Log the creation
+    db.add(Log(
+        level="INFO", 
+        message=f"Strategy Template Created: {new_strat.name} (tv_id: {new_strat.tv_id})"
+    ))
+    db.commit()
+    
     return new_strat
 
 
@@ -82,6 +90,14 @@ def update_strategy(strategy_id: int, strategy: StrategyCreate, db: Session = De
     
     db.commit()
     db.refresh(strat)
+    
+    # Log the update
+    db.add(Log(
+        level="INFO", 
+        message=f"Strategy Template Updated: {strat.name} (sessions: {strat.default_allowed_sessions}, factor: {strat.default_risk_factor}x)"
+    ))
+    db.commit()
+    
     return strat
 
 
@@ -92,6 +108,15 @@ def delete_strategy(strategy_id: int, db: Session = Depends(get_db)):
     if not strat:
         raise HTTPException(status_code=404, detail="Strategy not found")
     
+    strat_name = strat.name
     db.delete(strat)
     db.commit()
+    
+    # Log the deletion
+    db.add(Log(
+        level="WARNING", 
+        message=f"Strategy Template Deleted: {strat_name}"
+    ))
+    db.commit()
+    
     return {"status": "deleted"}

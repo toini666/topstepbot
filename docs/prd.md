@@ -97,7 +97,7 @@ Account Settings (per account)
 | **Account Selector** | Switch between accounts, trading toggle |
 | **Open Positions** | Live positions with strategy/timeframe, close button |
 | **Account Details** | Balance, risk per trade (editable), trading status |
-| **Trade History** | Aggregated trades with strategy filter, PnL display |
+| **Trade History** | Aggregated trades (entry + partials = 1 line), strategy filter, PnL/fees display |
 | **Order History** | Working and filled orders |
 | **System Logs** | Timestamped logs with load more pagination |
 
@@ -117,7 +117,7 @@ Account Settings (per account)
 
 | Feature | Description |
 |---------|-------------|
-| **Trade Recording** | All trades stored with full metadata |
+| **Trade Recording** | All trades stored with full metadata, auto-updated on close with exit price/PnL/fees |
 | **Export Endpoint** | JSON/CSV export with filters |
 | **Statistics API** | Win rate, profit factor, avg PnL, duration |
 | **Filter Options** | By strategy, timeframe, ticker, account, session, date |

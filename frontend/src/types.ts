@@ -8,12 +8,14 @@ export interface Trade {
     ticker: string;
     action: string;
     entry_price: number;
+    exit_price?: number;  // Exit price for closed trades
     sl: number;
     tp: number;
     quantity: number;
     status: string;
     pnl?: number;
-    timeframe?: string;  // NEW
+    fees?: number;  // Trading fees
+    timeframe?: string;
     timestamp: string;
     exit_time?: string;
     rejection_reason?: string;

@@ -227,10 +227,54 @@ Data export and analytics endpoints.
 
 | Job | Schedule | Function |
 |-----|----------|----------|
-| Position Monitor | Every 30s | Detect closed positions, new opens, orphaned orders |
+| Position Monitor | Every 30s | Detect closed positions, update Trade status to CLOSED with PnL/fees, notify via Telegram |
 | Auto Flatten | Configurable time | Close all positions daily |
 | Database Backup | 03:00 UTC | Copy database file |
 | Log Cleanup | 03:15 UTC | Remove logs > 7 days |
+
+---
+
+## Trade History (Aggregated View)
+
+The frontend displays trade history from the **internal Trade table** instead of raw TopStep API data.
+
+### Benefits
+- **Aggregated trades**: Entry + all partial TPs + final close shown as single line
+- **Consistent data**: PnL and fees are totals for the complete trade
+- **Strategy tracking**: Strategy name and timeframe preserved from webhook
+
+### Data Flow
+```
+1. Webhook opens trade → Trade record created (status=OPEN)
+2. TopStep executes → Position appears in API
+3. Position closes (SL/TP/manual) → Position disappears from API
+4. Position Monitor detects closure:
+   - Updates Trade: status=CLOSED, exit_price, pnl, fees, exit_time
+   - Sends Telegram notification
+5. Frontend fetches /dashboard/trades?status=CLOSED → Shows aggregated history
+```
+
+### API Endpoint
+```
+GET /dashboard/trades?account_id={id}&days={n}&status=CLOSED
+```
+
+---
+
+## System Logged Events
+
+The following operations are logged to System Logs (visible in Logs tab):
+
+### Strategy Operations
+
+| Operation | Level | Message | Details |
+|-----------|-------|---------|---------|
+| Create Template | INFO | `Strategy Template Created: {name} (tv_id: {id})` | - |
+| Update Template | INFO | `Strategy Template Updated: {name} (sessions, factor)` | - |
+| Delete Template | WARNING | `Strategy Template Deleted: {name}` | - |
+| Add to Account | INFO | `Strategy Added to Account: {strategy} on {account}` | JSON config |
+| Update Config | INFO | `Strategy Config Updated: {strategy} on {account}` | JSON config |
+| Remove from Account | WARNING | `Strategy Removed from Account: {strategy} from {account}` | JSON details |
 
 ---
 
@@ -317,10 +361,29 @@ App.tsx
 │   └── Order History Table
 ├── System Logs Section
 ├── ConfigModal (global settings)
-├── StrategiesManager (strategy config)
+├── StrategiesManager
+│   ├── View Toggle (Account Strategies / Global Templates)
+│   ├── Account Strategies Table (per-account configs with inline edit)
+│   └── Global Templates Table (strategy CRUD)
 ├── MockWebhookModal (testing)
 └── ConfirmModal (actions)
 ```
+
+### StrategiesManager Features
+
+The Strategies tab provides two views:
+
+| View | Purpose | Features |
+|------|---------|----------|
+| **Account Strategies** | Per-account config | Inline edit sessions, risk factor, partial %, SL→BE toggle |
+| **Global Templates** | Strategy templates | Create/edit/delete strategy definitions |
+
+Both tables display consistent columns:
+- Strategy (Name + TV ID)
+- Sessions (ASIA, UK, US)
+- Risk Factor (multiplier)
+- Partial % (take-profit percentage)
+- SL → BE (move stop-loss to entry on partial)
 
 ---
 

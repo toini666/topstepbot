@@ -157,7 +157,9 @@ class TradeResponse(TradeBase):
     sl: Optional[float] = None
     tp: Optional[float] = None
     pnl: Optional[float] = None
-    timeframe: Optional[str] = None  # NEW
+    fees: Optional[float] = None  # Trading fees
+    exit_price: Optional[float] = None  # Exit price for closed trades
+    timeframe: Optional[str] = None
     timestamp: datetime
     exit_time: Optional[datetime] = None
     rejection_reason: Optional[str] = None

@@ -305,6 +305,26 @@ def add_strategy_to_account(
         db.commit()
         db.refresh(existing)
         
+        # Log the update
+        account_settings = db.query(AccountSettings).filter(AccountSettings.account_id == account_id).first()
+        account_name = account_settings.account_name if account_settings and account_settings.account_name else f"Account #{account_id}"
+        config_details = {
+            "account_id": account_id,
+            "strategy": strategy.name,
+            "strategy_tv_id": strategy.tv_id,
+            "enabled": config.enabled,
+            "risk_factor": config.risk_factor,
+            "allowed_sessions": config.allowed_sessions,
+            "partial_tp_percent": config.partial_tp_percent,
+            "move_sl_to_entry": config.move_sl_to_entry
+        }
+        db.add(Log(
+            level="INFO",
+            message=f"Strategy Config Updated: {strategy.name} on {account_name} (sessions: {config.allowed_sessions}, factor: {config.risk_factor}x)",
+            details=json.dumps(config_details)
+        ))
+        db.commit()
+        
         return AccountStrategyConfigResponse(
             id=existing.id,
             account_id=existing.account_id,
@@ -333,6 +353,26 @@ def add_strategy_to_account(
     db.add(new_config)
     db.commit()
     db.refresh(new_config)
+    
+    # Log the addition
+    account_settings = db.query(AccountSettings).filter(AccountSettings.account_id == account_id).first()
+    account_name = account_settings.account_name if account_settings and account_settings.account_name else f"Account #{account_id}"
+    config_details = {
+        "account_id": account_id,
+        "strategy": strategy.name,
+        "strategy_tv_id": strategy.tv_id,
+        "enabled": config.enabled,
+        "risk_factor": config.risk_factor,
+        "allowed_sessions": config.allowed_sessions,
+        "partial_tp_percent": config.partial_tp_percent,
+        "move_sl_to_entry": config.move_sl_to_entry
+    }
+    db.add(Log(
+        level="INFO",
+        message=f"Strategy Added to Account: {strategy.name} on {account_name} (sessions: {config.allowed_sessions})",
+        details=json.dumps(config_details)
+    ))
+    db.commit()
     
     return AccountStrategyConfigResponse(
         id=new_config.id,
@@ -368,8 +408,28 @@ def remove_strategy_from_account(account_id: int, strategy_id: int, db: Session 
     if not config:
         raise HTTPException(status_code=404, detail="Strategy config not found")
     
+    # Get strategy name for logging
+    strategy = db.query(Strategy).filter(Strategy.id == strategy_id).first()
+    strategy_name = strategy.name if strategy else str(strategy_id)
+    account_settings = db.query(AccountSettings).filter(AccountSettings.account_id == account_id).first()
+    account_name = account_settings.account_name if account_settings and account_settings.account_name else f"Account #{account_id}"
+    
     db.delete(config)
     db.commit()
+    
+    # Log the removal
+    removal_details = {
+        "account_id": account_id,
+        "strategy": strategy_name,
+        "strategy_id": strategy_id
+    }
+    db.add(Log(
+        level="WARNING",
+        message=f"Strategy Removed from Account: {strategy_name} removed from {account_name}",
+        details=json.dumps(removal_details)
+    ))
+    db.commit()
+    
     return {"status": "deleted"}
 
 
@@ -389,9 +449,45 @@ async def get_accounts():
 # =============================================================================
 
 @router.get("/dashboard/trades", response_model=List[TradeResponse])
-def get_trades(skip: int = 0, limit: int = 50, db: Session = Depends(get_db)):
-    """Get recent trades from local database."""
-    trades = db.query(Trade).order_by(Trade.timestamp.desc()).offset(skip).limit(limit).all()
+def get_trades(
+    account_id: Optional[int] = None,
+    days: int = 1,
+    status: Optional[str] = None,
+    skip: int = 0, 
+    limit: int = 100, 
+    db: Session = Depends(get_db)
+):
+    """Get trades from local database with optional filtering.
+    
+    Args:
+        account_id: Filter by specific account
+        days: Number of days to look back (1 = today, 7 = last week)
+        status: Filter by status (OPEN, CLOSED, PENDING, REJECTED)
+    """
+    query = db.query(Trade)
+    
+    # Filter by account
+    if account_id:
+        query = query.filter(Trade.account_id == account_id)
+    
+    # Filter by status
+    if status:
+        query = query.filter(Trade.status == status)
+    
+    # Filter by date range
+    if days > 0:
+        # Calculate start of day in local timezone (Brussels)
+        from datetime import timedelta
+        now = datetime.now(timezone.utc)
+        if days == 1:
+            # Today: from midnight local time
+            start_date = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        else:
+            # Last N days
+            start_date = now - timedelta(days=days)
+        query = query.filter(Trade.timestamp >= start_date)
+    
+    trades = query.order_by(Trade.timestamp.desc()).offset(skip).limit(limit).all()
     return trades
 
 

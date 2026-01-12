@@ -129,6 +129,25 @@ async def monitor_closed_positions_job():
                                             total_fees += entry_fees
                                             break
                                 
+                                # UPDATE TRADE RECORD IN DATABASE
+                                from backend.database import Trade
+                                ticker_variants = [prev_cid, target_symbol]
+                                # Find matching open trade and update it
+                                open_trade = db.query(Trade).filter(
+                                    Trade.account_id == account_id,
+                                    Trade.ticker.in_(ticker_variants),
+                                    Trade.status == "OPEN"
+                                ).order_by(Trade.timestamp.desc()).first()
+                                
+                                if open_trade:
+                                    open_trade.status = "CLOSED"
+                                    open_trade.exit_price = exit_px
+                                    open_trade.pnl = pnl_val
+                                    open_trade.fees = total_fees
+                                    open_trade.exit_time = datetime.now(pytz.UTC)
+                                    db.commit()
+                                    print(f"✅ Trade #{open_trade.id} marked as CLOSED (PnL: ${pnl_val:.2f})")
+                                
                                 await telegram_service.notify_position_closed(
                                     symbol=f"{matching_trade.get('symbol', prev_cid)} ({account_name})",
                                     side=side_str,
@@ -140,6 +159,20 @@ async def monitor_closed_positions_job():
                                     daily_pnl=sum((t.get('profitAndLoss') or 0) - (t.get('fees') or 0) for t in recent_trades)
                                 )
                             else:
+                                # No matching trade from API, still try to update our DB
+                                from backend.database import Trade
+                                open_trade = db.query(Trade).filter(
+                                    Trade.account_id == account_id,
+                                    Trade.ticker == prev_cid,
+                                    Trade.status == "OPEN"
+                                ).order_by(Trade.timestamp.desc()).first()
+                                
+                                if open_trade:
+                                    open_trade.status = "CLOSED"
+                                    open_trade.exit_time = datetime.now(pytz.UTC)
+                                    db.commit()
+                                    print(f"✅ Trade #{open_trade.id} marked as CLOSED (no API match)")
+                                
                                 await telegram_service.send_message(
                                     f"💰 <b>Position Closed: {target_symbol}</b> ({account_name})"
                                 )

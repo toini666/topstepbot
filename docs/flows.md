@@ -14,6 +14,7 @@ This document details the exact sequences, validations, and API calls for all tr
 6. [Cross-Account Direction Check](#6-cross-account-direction-check)
 7. [Session Validation Logic](#7-session-validation-logic)
 8. [Position Sizing Calculation](#8-position-sizing-calculation)
+9. [Strategy Configuration Management](#9-strategy-configuration-management)
 
 ---
 
@@ -255,6 +256,9 @@ On bot startup, existing positions are pre-loaded to avoid false "Position Opene
       - Position was closed
       - Fetch trade history to get exit details
       - Calculate PnL and fees
+      - **UPDATE Trade record in database:**
+        * Find matching Trade by account_id + ticker + status=OPEN
+        * Set status=CLOSED, exit_price, pnl, fees, exit_time
       - Calculate Daily PnL total
       - Notify position closed (Telegram) with daily PnL
    d. Update memory with current positions
@@ -490,3 +494,72 @@ def get_risk_amount(account_id, strategy_tv_id):
 | `success` | true/false |
 | `errorCode` | 0 = Success |
 | `errorMessage` | Human-readable error |
+
+---
+
+## 9. Strategy Configuration Management
+
+### Overview
+
+Strategy configurations exist at two levels:
+1. **Global Templates** (`Strategy` table) - Default settings for each strategy
+2. **Per-Account Configs** (`AccountStrategyConfig` table) - Overrides per account
+
+### Data Model Hierarchy
+
+```
+Strategy (Global Template)
+├── name, tv_id
+├── default_risk_factor (e.g., 1.0)
+├── default_allowed_sessions (e.g., "ASIA,UK,US")
+├── default_partial_tp_percent (e.g., 50)
+└── default_move_sl_to_entry (e.g., true)
+
+AccountStrategyConfig (Per-Account Override)
+├── account_id, strategy_id
+├── enabled (bool)
+├── risk_factor (overrides default)
+├── allowed_sessions (overrides default)
+├── partial_tp_percent (overrides default)
+└── move_sl_to_entry (overrides default)
+```
+
+### Configuration Flow
+
+```
+1. User creates Strategy Template (Global)
+   - Defines default_* values
+   
+2. User adds Strategy to Account
+   - Creates AccountStrategyConfig
+   - Copies defaults from template
+   
+3. User edits Account Config (inline via UI)
+   - Modifies: sessions, risk_factor, partial_%, SL→BE
+   - Changes apply ONLY to that account
+   
+4. Signal Processing uses per-account values:
+   - risk_factor from AccountStrategyConfig
+   - allowed_sessions from AccountStrategyConfig
+   - NOT from Strategy template
+```
+
+### API Endpoints
+
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `GET /strategies/` | GET | List all templates |
+| `POST /strategies/` | POST | Create template |
+| `PUT /strategies/{id}` | PUT | Update template |
+| `DELETE /strategies/{id}` | DELETE | Delete template |
+| `GET /settings/accounts/{id}/strategies` | GET | Get account configs |
+| `POST /settings/accounts/{id}/strategies` | POST | Add/update account config |
+| `DELETE /settings/accounts/{id}/strategies/{sid}` | DELETE | Remove from account |
+
+### Important Notes
+
+1. **Template changes don't propagate** - Modifying a global template does NOT update existing AccountStrategyConfigs. Changes only affect NEW additions.
+
+2. **Risk calculation uses account config** - The `get_risk_amount()` function uses `AccountStrategyConfig.risk_factor`, not `Strategy.default_risk_factor`.
+
+3. **All operations are logged** - Create/update/delete operations on both templates and account configs are recorded in System Logs with JSON details.

@@ -57,9 +57,15 @@ function App() {
     return map;
   }, [trades]);
 
-  // Enrich Historical Trades with Strategy + Timeframe
+  // Enrich Historical Trades with Strategy + Timeframe (if from TopStep API)
+  // Note: When using internal Trade table, data is already complete
   const enrichedHistory = useMemo(() => {
     return historicalTrades.map(ht => {
+      // If already aggregated from internal table, use as-is
+      if ((ht as any).isAggregated) {
+        return ht;
+      }
+      // Otherwise enrich from tradeInfoMap (legacy TopStep API path)
       const info = tradeInfoMap.get(String(ht.orderId));
       return {
         ...ht,
@@ -70,7 +76,30 @@ function App() {
   }, [historicalTrades, tradeInfoMap]);
 
   // Aggregate Trades for display
-  const aggregatedTrades = useMemo(() => aggregateTrades(enrichedHistory), [enrichedHistory]);
+  // - If data is from internal Trade table (isAggregated=true), map directly
+  // - If data is from TopStep API, use aggregateTrades() to combine
+  const aggregatedTrades = useMemo(() => {
+    const firstTrade = enrichedHistory[0];
+    if (firstTrade && (firstTrade as any).isAggregated) {
+      // Data from internal Trade table - already aggregated, just map to display format
+      return enrichedHistory.map(t => ({
+        id: t.id,
+        symbol: t.contractId,
+        side: (String(t.side) === '0' || String(t.side).toUpperCase() === 'BUY' || String(t.side).toUpperCase() === 'LONG') ? 'LONG' : 'SHORT' as 'LONG' | 'SHORT',
+        size: t.size,
+        entryTime: t.creationTimestamp,
+        exitTime: (t as any).exitTime || t.creationTimestamp,
+        entryPrice: (t as any).entryPrice || t.price,
+        exitPrice: (t as any).exitPrice || t.price,
+        pnl: t.profitAndLoss || 0,
+        fees: t.fees || 0,
+        strategy: t.strategy,
+        timeframe: t.timeframe
+      }));
+    }
+    // Fallback to legacy aggregation for TopStep API data
+    return aggregateTrades(enrichedHistory);
+  }, [enrichedHistory]);
 
   const isMarketOpen = marketStatus.is_open;
   // Optional: We can also show marketStatus.reason if needed in UI
@@ -856,7 +885,7 @@ function App() {
         }
 
         {/* STRATEGIES TAB */}
-        {activeTab === 'strategies' && <StrategiesManager selectedAccountId={selectedAccountId} />}
+        {activeTab === 'strategies' && <StrategiesManager selectedAccountId={selectedAccountId} selectedAccountName={currentAccount?.name} />}
 
         {/* Confirmation Modal */}
         <ConfirmationModal
