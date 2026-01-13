@@ -273,10 +273,27 @@ async def monitor_closed_positions_job():
 
                             elif is_full_close:
                                 # Fallback if no trade found (Manual close of manual position not in DB?)
-                                print(f"⚠️ Full close but no OPEN trade record found for {prev_cid}")
-                                await telegram_service.send_message(
-                                    f"💰 <b>Position Closed: {target_symbol}</b> ({account_name})"
-                                )
+                                # CHECK: Did we already close this via Webhook recently?
+                                matching_closed_trade = db.query(Trade).filter(
+                                    Trade.account_id == account_id,
+                                    Trade.ticker.in_(ticker_variants),
+                                    Trade.status == "CLOSED"
+                                ).order_by(Trade.exit_time.desc()).first()
+                                
+                                is_recently_closed = False
+                                if matching_closed_trade and matching_closed_trade.exit_time:
+                                    # If closed within last 2 minutes, assume it's handled
+                                    time_since_close = (datetime.now(timezone.utc) - ensure_aware_internal(matching_closed_trade.exit_time)).total_seconds()
+                                    if time_since_close < 120:
+                                        is_recently_closed = True
+                                
+                                if is_recently_closed:
+                                    print(f"ℹ️ Full close detected for {prev_cid} (Handled by Webhook/Manual Close)")
+                                else:
+                                    print(f"⚠️ Full close but no OPEN trade record found for {prev_cid}")
+                                    await telegram_service.send_message(
+                                        f"💰 <b>Position Closed: {target_symbol}</b> ({account_name})"
+                                    )
                 
                 # Detect New Positions (Opens)
                 if last_map is not None:
@@ -322,7 +339,7 @@ async def monitor_closed_positions_job():
                                 open_trade = db.query(Trade).filter(
                                     Trade.account_id == account_id,
                                     Trade.ticker.in_(ticker_variants),
-                                    Trade.status == "OPEN"
+                                    Trade.status.in_(["OPEN", "PENDING"])
                                 ).order_by(Trade.timestamp.desc()).first()
                                 
                                 if open_trade and fill_price:

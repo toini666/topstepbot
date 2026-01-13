@@ -126,7 +126,7 @@ Account Settings (per account)
 | Feature | Description |
 |---------|-------------|
 | **Trade Recording** | Trades matched by Symbol+Time for precise PnL aggregation (including partials) |
-| **Manual Trades** | Automatically detects and records execution of non-bot trades |
+| **Manual Trades** | Automatically detects and records execution of non-bot trades (Checks for OPEN or PENDING status to avoid duplicates) |
 | **Daily PnL** | Real-time Net PnL calculation (Gross - Fees) synced with TopStep session |
 | **Strict Reconciliation** | DB corrections based on raw API truth data for 100% accuracy |
 | **Export Endpoint** | JSON/CSV export with filters |

@@ -278,7 +278,7 @@ On bot startup, existing positions are pre-loaded to avoid false "Position Opene
    
 3. **Detection of New Positions (Including Manual):**
    - Identify new open positions not present in previous snapshot
-   - IF no matching OPEN trade in DB:
+   - IF no matching OPEN **or PENDING** trade in DB:
      * Create new Trade record with strategy="MANUAL"
      * Capture Entry Price and Time from API
      * Notify "Position Opened" (Telegram)
