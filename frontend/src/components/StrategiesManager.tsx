@@ -44,7 +44,7 @@ export function StrategiesManager({ selectedAccountId, selectedAccountName }: St
     const [configSessions, setConfigSessions] = useState<string[]>(['ASIA', 'UK', 'US']);
     const [configPartialPercent, setConfigPartialPercent] = useState(50);
     const [configMoveSlToEntry, setConfigMoveSlToEntry] = useState(true);
-    const [configAllowOutside, setConfigAllowOutside] = useState(false);
+
 
     useEffect(() => {
         fetchStrategies();
@@ -100,7 +100,11 @@ export function StrategiesManager({ selectedAccountId, selectedAccountName }: St
         setName(strat.name);
         setTvId(strat.tv_id);
         setDefaultFactor(strat.default_risk_factor);
-        setDefaultSessions(strat.default_allowed_sessions.split(',').map(s => s.trim()));
+
+        const sessions = strat.default_allowed_sessions.split(',').map(s => s.trim());
+        if (strat.default_allow_outside_sessions) sessions.push('OUTSIDE');
+        setDefaultSessions(sessions);
+
         setDefaultPartialPercent(strat.default_partial_tp_percent);
         setDefaultMoveSlToEntry(strat.default_move_sl_to_entry);
     };
@@ -108,13 +112,18 @@ export function StrategiesManager({ selectedAccountId, selectedAccountName }: St
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         try {
+            // Logic: 'OUTSIDE' in list -> boolean true, remove from string list
+            const isOutside = defaultSessions.includes('OUTSIDE');
+            const sessionsToSend = defaultSessions.filter(s => s !== 'OUTSIDE').join(',');
+
             const payload = {
                 name,
                 tv_id: tvId,
                 default_risk_factor: defaultFactor,
-                default_allowed_sessions: defaultSessions.join(','),
+                default_allowed_sessions: sessionsToSend,
                 default_partial_tp_percent: defaultPartialPercent,
-                default_move_sl_to_entry: defaultMoveSlToEntry
+                default_move_sl_to_entry: defaultMoveSlToEntry,
+                default_allow_outside_sessions: isOutside
             };
 
             if (editingId) {
@@ -177,7 +186,7 @@ export function StrategiesManager({ selectedAccountId, selectedAccountName }: St
                 allowed_sessions: strategy.default_allowed_sessions,
                 partial_tp_percent: strategy.default_partial_tp_percent,
                 move_sl_to_entry: strategy.default_move_sl_to_entry,
-                allow_outside_sessions: false
+                allow_outside_sessions: strategy.default_allow_outside_sessions
             });
             toast.success('Strategy added to account');
             fetchAccountConfigs(selectedAccountId);
@@ -206,10 +215,13 @@ export function StrategiesManager({ selectedAccountId, selectedAccountName }: St
         setEditingConfigId(config.id);
         setConfigEnabled(config.enabled);
         setConfigRiskFactor(config.risk_factor);
-        setConfigSessions(config.allowed_sessions.split(',').map(s => s.trim()));
+
+        const sessions = config.allowed_sessions.split(',').map(s => s.trim());
+        if (config.allow_outside_sessions) sessions.push('OUTSIDE');
+        setConfigSessions(sessions);
+
         setConfigPartialPercent(config.partial_tp_percent);
         setConfigMoveSlToEntry(config.move_sl_to_entry);
-        setConfigAllowOutside(config.allow_outside_sessions || false);
     };
 
     const cancelEditingConfig = () => {
@@ -221,14 +233,17 @@ export function StrategiesManager({ selectedAccountId, selectedAccountName }: St
         if (!selectedAccountId) return;
 
         try {
+            const isOutside = configSessions.includes('OUTSIDE');
+            const sessionsToSend = configSessions.filter(s => s !== 'OUTSIDE').join(',');
+
             await axios.post(`${API_BASE}/settings/accounts/${selectedAccountId}/strategies`, {
                 strategy_id: config.strategy_id,
                 enabled: configEnabled,
                 risk_factor: configRiskFactor,
-                allowed_sessions: configSessions.join(','),
+                allowed_sessions: sessionsToSend,
                 partial_tp_percent: configPartialPercent,
                 move_sl_to_entry: configMoveSlToEntry,
-                allow_outside_sessions: configAllowOutside
+                allow_outside_sessions: isOutside
             });
             toast.success('Configuration saved');
             setEditingConfigId(null);
@@ -313,7 +328,6 @@ export function StrategiesManager({ selectedAccountId, selectedAccountName }: St
                                     <th className="py-4 px-4 text-center font-bold">Risk Factor</th>
                                     <th className="py-4 px-4 text-center font-bold">Partial %</th>
                                     <th className="py-4 px-4 text-center font-bold">SL → BE</th>
-                                    <th className="py-4 px-4 text-center font-bold">Outside</th>
                                     <th className="py-4 px-4 text-right font-bold">Actions</th>
                                 </tr>
                             </thead>
@@ -352,13 +366,13 @@ export function StrategiesManager({ selectedAccountId, selectedAccountName }: St
                                         <td className="py-4 px-4">
                                             {editingConfigId === config.id ? (
                                                 <div className="flex gap-1">
-                                                    {['ASIA', 'UK', 'US'].map(session => (
+                                                    {['ASIA', 'UK', 'US', 'OUTSIDE'].map(session => (
                                                         <button
                                                             key={session}
                                                             type="button"
                                                             onClick={() => toggleConfigSession(session)}
                                                             className={`px-2 py-1 rounded text-xs font-bold transition-all ${configSessions.includes(session)
-                                                                ? 'bg-emerald-600 text-white'
+                                                                ? session === 'OUTSIDE' ? 'bg-amber-600 text-white' : 'bg-emerald-600 text-white'
                                                                 : 'bg-slate-800 text-slate-500'
                                                                 }`}
                                                         >
@@ -367,12 +381,17 @@ export function StrategiesManager({ selectedAccountId, selectedAccountName }: St
                                                     ))}
                                                 </div>
                                             ) : (
-                                                <div className="flex gap-1">
+                                                <div className="flex gap-1 flex-wrap">
                                                     {config.allowed_sessions.split(',').map(s => (
                                                         <span key={s} className="text-xs bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded">
                                                             {s.trim()}
                                                         </span>
                                                     ))}
+                                                    {config.allow_outside_sessions && (
+                                                        <span className="text-xs bg-amber-500/20 text-amber-500 px-2 py-0.5 rounded">
+                                                            OUTSIDE
+                                                        </span>
+                                                    )}
                                                 </div>
                                             )}
                                         </td>
@@ -426,22 +445,7 @@ export function StrategiesManager({ selectedAccountId, selectedAccountName }: St
                                             )}
                                         </td>
 
-                                        {/* Allow Outside Sessions */}
-                                        <td className="py-4 px-4 text-center">
-                                            {editingConfigId === config.id ? (
-                                                <button
-                                                    type="button"
-                                                    onClick={() => setConfigAllowOutside(!configAllowOutside)}
-                                                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${configAllowOutside ? 'bg-amber-600' : 'bg-slate-700'}`}
-                                                >
-                                                    <span className={`${configAllowOutside ? 'translate-x-6' : 'translate-x-1'} inline-block h-4 w-4 transform rounded-full bg-white transition-transform`} />
-                                                </button>
-                                            ) : (
-                                                <span className={`px-2 py-1 rounded text-xs font-bold ${config.allow_outside_sessions ? 'bg-amber-500/20 text-amber-400' : 'bg-slate-700 text-slate-400'}`}>
-                                                    {config.allow_outside_sessions ? 'ON' : 'OFF'}
-                                                </span>
-                                            )}
-                                        </td>
+
 
                                         {/* Actions */}
                                         <td className="py-4 px-4 text-right">
@@ -570,13 +574,13 @@ export function StrategiesManager({ selectedAccountId, selectedAccountName }: St
                                     <Clock className="w-4 h-4" /> Allowed Sessions (Default)
                                 </label>
                                 <div className="flex gap-2">
-                                    {['ASIA', 'UK', 'US'].map(session => (
+                                    {['ASIA', 'UK', 'US', 'OUTSIDE'].map(session => (
                                         <button
                                             key={session}
                                             type="button"
                                             onClick={() => toggleSession(session)}
                                             className={`px-4 py-2 rounded-lg font-bold text-sm transition-all ${defaultSessions.includes(session)
-                                                ? 'bg-indigo-600 text-white'
+                                                ? session === 'OUTSIDE' ? 'bg-amber-600 text-white' : 'bg-indigo-600 text-white'
                                                 : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
                                                 }`}
                                         >
@@ -599,7 +603,9 @@ export function StrategiesManager({ selectedAccountId, selectedAccountName }: St
                                         onChange={e => setDefaultPartialPercent(parseInt(e.target.value))}
                                     />
                                 </div>
-                                <div className="flex items-center gap-3">
+
+                                {/* Move SL Logic */}
+                                <div className="flex items-center gap-3 bg-slate-950/50 p-3 rounded-xl border border-slate-800">
                                     <button
                                         type="button"
                                         onClick={() => setDefaultMoveSlToEntry(!defaultMoveSlToEntry)}
@@ -608,7 +614,7 @@ export function StrategiesManager({ selectedAccountId, selectedAccountName }: St
                                     >
                                         <span className={`${defaultMoveSlToEntry ? 'translate-x-6' : 'translate-x-1'} inline-block h-4 w-4 transform rounded-full bg-white transition-transform`} />
                                     </button>
-                                    <span className="text-slate-300 text-sm">Move SL to Entry on Partial</span>
+                                    <span className="text-slate-300 text-sm font-bold">Move SL to Entry</span>
                                 </div>
                             </div>
 
@@ -661,12 +667,17 @@ export function StrategiesManager({ selectedAccountId, selectedAccountName }: St
                                             </td>
                                             {/* Sessions */}
                                             <td className="py-4 px-4">
-                                                <div className="flex gap-1">
+                                                <div className="flex gap-1 flex-wrap">
                                                     {strat.default_allowed_sessions.split(',').map(s => (
                                                         <span key={s} className="text-xs bg-slate-800 px-2 py-0.5 rounded text-slate-300">
                                                             {s.trim()}
                                                         </span>
                                                     ))}
+                                                    {strat.default_allow_outside_sessions && (
+                                                        <span className="text-xs bg-amber-500/20 text-amber-500 px-2 py-0.5 rounded">
+                                                            OUTSIDE
+                                                        </span>
+                                                    )}
                                                 </div>
                                             </td>
                                             {/* Risk Factor */}
@@ -677,12 +688,14 @@ export function StrategiesManager({ selectedAccountId, selectedAccountName }: St
                                             <td className="py-4 px-4 text-center font-mono">
                                                 <span className="text-amber-400">{strat.default_partial_tp_percent}%</span>
                                             </td>
+
                                             {/* Move SL to BE */}
                                             <td className="py-4 px-4 text-center">
                                                 <span className={`px-2 py-1 rounded text-xs font-bold ${strat.default_move_sl_to_entry ? 'bg-indigo-500/20 text-indigo-400' : 'bg-slate-700 text-slate-400'}`}>
                                                     {strat.default_move_sl_to_entry ? 'ON' : 'OFF'}
                                                 </span>
                                             </td>
+
                                             {/* Actions */}
                                             <td className="py-4 px-4 text-right">
                                                 <div className="flex justify-end gap-2">

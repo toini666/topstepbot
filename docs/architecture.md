@@ -245,6 +245,7 @@ The frontend displays trade history from the **internal Trade table** instead of
 ### Benefits
 - **Aggregated trades**: Entry + all partial TPs + final close shown as single line
 - **Consistent data**: PnL and fees are totals for the complete trade
+- **Precision**: Trades filtered by Symbol + Entry Timestamp (with 2s tolerance) to prevent data mixing
 - **Strategy tracking**: Strategy name and timeframe preserved from webhook
 
 ### Data Flow
@@ -253,6 +254,7 @@ The frontend displays trade history from the **internal Trade table** instead of
 2. TopStep executes → Position appears in API
 3. Position closes (SL/TP/manual) → Position disappears from API
 4. Position Monitor detects closure:
+   - Matches trade by Symbol AND matching Entry Timestamp (captured from API or initial fill)
    - Updates Trade: status=CLOSED, exit_price, pnl, fees, exit_time
    - Sends Telegram notification
 5. Frontend fetches /dashboard/trades?status=CLOSED → Shows aggregated history
@@ -390,7 +392,10 @@ Both tables display consistent columns:
 - Risk Factor (multiplier)
 - Partial % (take-profit percentage)
 - SL → BE (move stop-loss to entry on partial)
-- Outside (allow trading outside configured sessions)
+- Risk Factor (multiplier)
+- Partial % (take-profit percentage)
+- SL → BE (move stop-loss to entry on partial)
+- Outside (allow trading outside configured sessions) - *Integrated into Sessions list as "OUTSIDE" option*
 
 ---
 

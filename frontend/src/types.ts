@@ -163,6 +163,7 @@ export interface Strategy {
     default_allowed_sessions: string;
     default_partial_tp_percent: number;
     default_move_sl_to_entry: boolean;
+    default_allow_outside_sessions: boolean;
     created_at: string;
 }
 

@@ -265,6 +265,7 @@ On bot startup, existing positions are pre-loaded to avoid false "Position Opene
       - Calculate PnL and fees
       - **UPDATE Trade record in database:**
         * Find matching Trade by account_id + ticker + status=OPEN
+        * Match Entry Timestamp (tolerance < 2s) to prevent mixing trades
         * Set status=CLOSED, exit_price, pnl, fees, exit_time
       - Calculate Daily PnL total
       - Notify position closed (Telegram) with daily PnL
@@ -541,7 +542,8 @@ AccountStrategyConfig (Per-Account Override)
 ├── allowed_sessions (overrides default)
 ├── partial_tp_percent (overrides default)
 ├── move_sl_to_entry (overrides default)
-└── allow_outside_sessions (trade outside defined sessions)
+├── move_sl_to_entry (overrides default)
+└── allow_outside_sessions (Managed in UI via "OUTSIDE" session option)
 ```
 
 ### Configuration Flow
@@ -555,7 +557,8 @@ AccountStrategyConfig (Per-Account Override)
    - Copies defaults from template
    
 3. User edits Account Config (inline via UI)
-   - Modifies: sessions, risk_factor, partial_%, SL→BE
+   - Modifies: sessions (including OUTSIDE), risk_factor, partial_%, SL→BE
+   - "OUTSIDE" in sessions list maps to allow_outside_sessions=True
    - Changes apply ONLY to that account
    
 4. Signal Processing uses per-account values:

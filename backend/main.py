@@ -21,7 +21,7 @@ from backend.services.maintenance_service import backup_database, clean_logs, ch
 from backend.services.persistence_service import save_state, load_state
 import asyncio
 import json
-from datetime import datetime, time
+from datetime import datetime, time, timedelta
 import pytz
 
 # Scheduler Setup
@@ -48,13 +48,25 @@ _api_health = {
 async def monitor_closed_positions_job():
     """
     Polls TopStep API for open positions on ALL accounts.
-    Detects if a previously open position is missing (closed).
+    Detects if a previously open position is missing (closed) or changed size (partial).
     Triggers Telegram Notification for valid closed trades.
     """
     global _last_open_positions, _last_orphans_ids
     from backend.database import SessionLocal, Log
     db = SessionLocal()
     
+    # Helper for parsing dates
+    def parse_topstep_date(date_str):
+        if not date_str: return None
+        clean = str(date_str).replace('Z', '+00:00')
+        try:
+            dt = datetime.fromisoformat(clean)
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            return dt
+        except ValueError:
+            return None
+
     try:
         # Get all accounts from TopStep
         all_accounts = await topstep_client.get_accounts()
@@ -81,110 +93,144 @@ async def monitor_closed_positions_job():
                 # Get last known state for this account
                 last_map = _last_open_positions.get(account_id, {})
                 
-                # Detect Closures
+                # Detect Closures (Full or Partial)
                 if last_map:
                     for prev_cid, prev_pos in last_map.items():
-                        if prev_cid not in current_map:
-                            # Position CLOSED!
-                            print(f"💰 DETECTED CLOSURE: {prev_cid} on Account {account_name}")
+                        target_symbol = prev_pos.get('symbolId') or prev_cid
+                        
+                        # Check State Change
+                        is_full_close = prev_cid not in current_map
+                        is_partial = False
+                        current_size = 0
+                        
+                        if not is_full_close:
+                            current_pos = current_map[prev_cid]
+                            prev_size = prev_pos.get('size', 0)
+                            current_size = current_pos.get('size', 0)
+                            if current_size < prev_size:
+                                is_partial = True
+                                print(f"📉 DETECTED PARTIAL: {prev_cid} on Account {account_name} ({prev_size} -> {current_size})")
+                        
+                        if is_full_close or is_partial:
+                            if is_full_close:
+                                print(f"💰 DETECTED CLOSURE: {prev_cid} on Account {account_name}")
+
+                            # 1. Find the Open Trade Record FIRST
+                            from backend.database import Trade
+                            ticker_variants = [prev_cid, target_symbol]
                             
-                            # Fetch Details of Closed Trade (PnL)
+                            ticker_map_entry = db.query(TickerMap).filter(
+                                TickerMap.ts_contract_id == prev_cid
+                            ).first()
+                            if ticker_map_entry:
+                                ticker_variants.append(ticker_map_entry.tv_ticker)
+                            
+                            open_trade = db.query(Trade).filter(
+                                Trade.account_id == account_id,
+                                Trade.ticker.in_(ticker_variants),
+                                Trade.status == "OPEN"
+                            ).order_by(Trade.timestamp.desc()).first()
+
+                            # 2. Fetch History to calculate PnL
                             recent_trades = await topstep_client.get_historical_trades(account_id, days=1)
-                            target_symbol = prev_pos.get('symbolId') or prev_cid
                             
-                            matching_trade = None
-                            if recent_trades:
-                                for t in recent_trades:
-                                    if str(t.get('symbol')) == str(target_symbol) or str(t.get('contractId')) == str(prev_cid):
-                                        matching_trade = t
-                                        break
+                            # 3. Filter Trades (Symbol match AND Time >= Entry Time)
+                            relevant_trades = []
+                            matching_trade = None # The specific close trade if any
                             
-                            if matching_trade:
-                                # Find ALL trades related to this position (including partial closes)
-                                # All trades for the same contract ID on the same day
-                                all_related_trades = [t for t in recent_trades 
-                                    if str(t.get('symbol')) == str(target_symbol) or str(t.get('contractId')) == str(prev_cid)]
+                            target_entry_time = None
+                            if open_trade and open_trade.timestamp:
+                                target_entry_time = open_trade.timestamp
+
+                            # Helper to safely get fallback ts
+                            start_time_fallback = None
+                            if target_entry_time:
+                                start_time_fallback = target_entry_time - timedelta(seconds=5)
+                            
+                            for t in recent_trades:
+                                t_sym = str(t.get('symbol') or '')
+                                t_cid = str(t.get('contractId') or '')
                                 
-                                # Take exit price from the most recent trade (the final close)
-                                exit_px = matching_trade.get('price') or matching_trade.get('fillPrice') or 0
-                                
-                                # Sum PnL and fees from ALL related trades (entry, partial, and full close)
-                                pnl_val = sum((t.get('pnl') or t.get('profitAndLoss') or 0) for t in all_related_trades)
-                                total_fees = sum((t.get('fees') or 0) for t in all_related_trades)
-                                
-                                # Map Side (from the closing trade)
-                                raw_side = matching_trade.get('side')
-                                raw_side_upper = str(raw_side).upper().strip()
-                                
-                                if raw_side_upper in ["0", "BUY", "LONG"]:
-                                    side_str = "SHORT"  # Exit buy = was short
-                                elif raw_side_upper in ["1", "2", "SELL", "SHORT"]:
-                                    side_str = "LONG"  # Exit sell = was long
-                                else:
-                                    side_str = str(raw_side)
-                                
-                                # UPDATE TRADE RECORD IN DATABASE
-                                from backend.database import Trade
-                                ticker_variants = [prev_cid, target_symbol]
-                                
-                                # Also look up the TradingView ticker from TickerMap
-                                # Trade.ticker stores TV format (e.g., "MNQ1!") but prev_cid is TopStep format
-                                ticker_map_entry = db.query(TickerMap).filter(
-                                    TickerMap.ts_contract_id == prev_cid
-                                ).first()
-                                if ticker_map_entry:
-                                    ticker_variants.append(ticker_map_entry.tv_ticker)
-                                
-                                # Find matching open trade and update it
-                                open_trade = db.query(Trade).filter(
-                                    Trade.account_id == account_id,
-                                    Trade.ticker.in_(ticker_variants),
-                                    Trade.status == "OPEN"
-                                ).order_by(Trade.timestamp.desc()).first()
-                                
-                                if open_trade:
+                                # Check Symbol Match
+                                if t_sym == str(target_symbol) or t_cid == str(prev_cid):
+                                    
+                                    # Try to extract Entry Time from API Trade
+                                    # Keys vary: entryTime, entryTimestamp, or fallback to creationTimestamp (fills)
+                                    t_entry_ts = parse_topstep_date(t.get('entryTime') or t.get('entryTimestamp'))
+                                    
+                                    # If no explicit entry time in API (e.g. flat fill), fallback to filtering by > open_trade time
+                                    if not t_entry_ts and start_time_fallback:
+                                        # Fallback to Time-based logic
+                                        t_created = parse_topstep_date(t.get('creationTimestamp') or t.get('timestamp') or t.get('time'))
+                                        if t_created and t_created >= start_time_fallback:
+                                            relevant_trades.append(t)
+                                            if is_full_close and not matching_trade: matching_trade = t
+                                        continue
+
+                                    # Primary Logic: Match Entry Timestamp
+                                    if t_entry_ts and target_entry_time:
+                                        # Allow 2s tolerance for micro-variations
+                                        diff = abs((t_entry_ts - target_entry_time).total_seconds())
+                                        if diff < 2.0:
+                                            relevant_trades.append(t)
+                                            if is_full_close and not matching_trade: matching_trade = t
+                            
+                            # Calculate Stats
+                            pnl_val = sum((t.get('pnl') or t.get('profitAndLoss') or 0) for t in relevant_trades)
+                            total_fees = sum((t.get('fees') or 0) for t in relevant_trades)
+                            
+                            # Update DB
+                            if open_trade:
+                                if is_full_close:
+                                    # Full Close Update
+                                    exit_px = 0
+                                    # Try to find the exit price from recent trades (first one is newest)
+                                    if relevant_trades:
+                                         # Assume API returns newest first? If not, sort.
+                                         # Sort by time desc just to be sure
+                                         sorted_rel = sorted(relevant_trades, key=lambda x: x.get('creationTimestamp', ''), reverse=True)
+                                         last_fill = sorted_rel[0]
+                                         exit_px = last_fill.get('price') or last_fill.get('fillPrice') or 0
+                                    
                                     open_trade.status = "CLOSED"
                                     open_trade.exit_price = exit_px
                                     open_trade.pnl = pnl_val
                                     open_trade.fees = total_fees
                                     open_trade.exit_time = datetime.now(pytz.UTC)
                                     db.commit()
+                                    
+                                    side_str = "FLAT"
+                                    # Notify
+                                    if matching_trade:
+                                        # Try to determine side
+                                        raw_side = matching_trade.get('side')
+                                        raw_side_upper = str(raw_side).upper().strip()
+                                        if raw_side_upper in ["0", "BUY", "LONG"]: side_str = "SHORT"
+                                        elif raw_side_upper in ["1", "2", "SELL", "SHORT"]: side_str = "LONG"
+                                    
+                                    await telegram_service.notify_position_closed(
+                                        symbol=f"{target_symbol} ({account_name})",
+                                        side=side_str,
+                                        entry_price=open_trade.entry_price or 0,
+                                        exit_price=exit_px,
+                                        pnl=pnl_val,
+                                        fees=total_fees,
+                                        quantity=open_trade.quantity, # Initial Qty
+                                        daily_pnl=pnl_val # Approximation
+                                    )
                                     print(f"✅ Trade #{open_trade.id} marked as CLOSED (PnL: ${pnl_val:.2f})")
                                 
-                                await telegram_service.notify_position_closed(
-                                    symbol=f"{matching_trade.get('symbol', prev_cid)} ({account_name})",
-                                    side=side_str,
-                                    entry_price=0,
-                                    exit_price=exit_px,
-                                    pnl=pnl_val,
-                                    fees=total_fees,
-                                    quantity=matching_trade.get('size', 0),
-                                    daily_pnl=sum((t.get('profitAndLoss') or 0) - (t.get('fees') or 0) for t in recent_trades)
-                                )
-                            else:
-                                # No matching trade from API, still try to update our DB
-                                from backend.database import Trade
-                                ticker_variants = [prev_cid]
-                                
-                                # Also look up the TradingView ticker from TickerMap
-                                ticker_map_entry = db.query(TickerMap).filter(
-                                    TickerMap.ts_contract_id == prev_cid
-                                ).first()
-                                if ticker_map_entry:
-                                    ticker_variants.append(ticker_map_entry.tv_ticker)
-                                
-                                open_trade = db.query(Trade).filter(
-                                    Trade.account_id == account_id,
-                                    Trade.ticker.in_(ticker_variants),
-                                    Trade.status == "OPEN"
-                                ).order_by(Trade.timestamp.desc()).first()
-                                
-                                if open_trade:
-                                    open_trade.status = "CLOSED"
-                                    open_trade.exit_time = datetime.now(pytz.UTC)
+                                elif is_partial:
+                                    # Partial Update
+                                    # Update PnL/Fees accumulated so far (realized)
+                                    open_trade.pnl = pnl_val
+                                    open_trade.fees = total_fees
                                     db.commit()
-                                    print(f"✅ Trade #{open_trade.id} marked as CLOSED (no API match)")
-                                
+                                    print(f"🔄 Trade #{open_trade.id} updated for PARTIAL (PnL: ${pnl_val:.2f})")
+
+                            elif is_full_close:
+                                # Fallback if no trade found (Manual close of manual position not in DB?)
+                                print(f"⚠️ Full close but no OPEN trade record found for {prev_cid}")
                                 await telegram_service.send_message(
                                     f"💰 <b>Position Closed: {target_symbol}</b> ({account_name})"
                                 )
@@ -207,6 +253,11 @@ async def monitor_closed_positions_job():
                             if matching_fill:
                                 fill_price = matching_fill.get('price') or 0
                                 fill_side = str(matching_fill.get('side')).upper().strip()
+                                # Try to capture the native Entry Timestamp from the API
+                                entry_ts = parse_topstep_date(matching_fill.get('entryTime') or matching_fill.get('entryTimestamp'))
+                                # Fallback to creation timestamp if entryTime not separate
+                                if not entry_ts:
+                                    entry_ts = parse_topstep_date(matching_fill.get('creationTimestamp') or matching_fill.get('timestamp') or matching_fill.get('time'))
                                 
                                 if fill_side in ["0", "BUY", "LONG"]:
                                     side_str = "BUY"
@@ -232,10 +283,13 @@ async def monitor_closed_positions_job():
                                 ).order_by(Trade.timestamp.desc()).first()
                                 
                                 if open_trade and fill_price:
-                                    # Update with real execution price
+                                    # Update with real execution price AND time
                                     open_trade.entry_price = fill_price
+                                    # CRITICAL: Update timestamp to match API Entry Time for future grouping
+                                    if entry_ts:
+                                         open_trade.timestamp = entry_ts
                                     db.commit()
-                                    print(f"✅ Trade #{open_trade.id} entry_price updated to real fill: {fill_price}")
+                                    print(f"✅ Trade #{open_trade.id} updated with real fill: {fill_price}")
                                 elif not open_trade:
                                     # NO MATCHING TRADE = MANUAL TRADE
                                     # Create a Trade record so it appears in history
@@ -249,7 +303,7 @@ async def monitor_closed_positions_job():
                                         status="OPEN",
                                         strategy="MANUAL",
                                         timeframe="-",
-                                        timestamp=datetime.now(pytz.UTC)
+                                        timestamp=entry_ts or datetime.now(pytz.UTC)
                                     )
                                     db.add(manual_trade)
                                     db.commit()

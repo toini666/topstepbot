@@ -68,7 +68,7 @@ Account Settings (per account)
 | **Cross-Account Direction** | Cannot hold opposing positions across accounts (configurable) |
 | **Trading Days** | Configurable day-of-week toggles (replaces hardcoded weekend block) |
 | **Session Restrictions** | Strategies only execute during allowed sessions |
-| **Allow Outside Sessions** | Per-strategy override to trade outside defined sessions |
+| **Allow Outside Sessions** | Configurable via "OUTSIDE" option in session list |
 | **Market Hours Filter** | Blocks trades outside configured hours |
 | **Blocked Periods** | Custom time blocks where trading is disabled |
 | **Contract Limit** | Maximum contracts (micro-equivalent) per account |
@@ -125,7 +125,7 @@ Account Settings (per account)
 
 | Feature | Description |
 |---------|-------------|
-| **Trade Recording** | All trades stored with full metadata, auto-updated on close with exit price/PnL/fees |
+| **Trade Recording** | Trades matched by Symbol+Time for precise PnL aggregation (including partials) |
 | **Export Endpoint** | JSON/CSV export with filters |
 | **Statistics API** | Win rate, profit factor, avg PnL, duration |
 | **Filter Options** | By strategy, timeframe, ticker, account, session, date |

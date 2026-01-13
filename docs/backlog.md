@@ -21,3 +21,4 @@ This document outlines the roadmap to evolve the current functional prototype in
 ## 4. Infrastructure & DevOps
 *Goal: Stability and ease of deployment.*
 - [ ] **Cloudflare Tunnel Integration**: Setup a permanent webhook URL (`https://bot.domaine.com`) to avoid daily ngrok reconfiguration.
+- [ ] **Healthcheck integration**: Setup online service to health check the bot and send alert if Bot does not respond
