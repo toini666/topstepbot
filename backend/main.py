@@ -100,11 +100,19 @@ async def monitor_closed_positions_job():
                                         break
                             
                             if matching_trade:
-                                exit_px = matching_trade.get('price') or matching_trade.get('fillPrice') or 0
-                                raw_pnl = matching_trade.get('pnl') or matching_trade.get('profitAndLoss')
-                                pnl_val = raw_pnl if raw_pnl is not None else 0.0
+                                # Find ALL trades related to this position (including partial closes)
+                                # All trades for the same contract ID on the same day
+                                all_related_trades = [t for t in recent_trades 
+                                    if str(t.get('symbol')) == str(target_symbol) or str(t.get('contractId')) == str(prev_cid)]
                                 
-                                # Map Side
+                                # Take exit price from the most recent trade (the final close)
+                                exit_px = matching_trade.get('price') or matching_trade.get('fillPrice') or 0
+                                
+                                # Sum PnL and fees from ALL related trades (entry, partial, and full close)
+                                pnl_val = sum((t.get('pnl') or t.get('profitAndLoss') or 0) for t in all_related_trades)
+                                total_fees = sum((t.get('fees') or 0) for t in all_related_trades)
+                                
+                                # Map Side (from the closing trade)
                                 raw_side = matching_trade.get('side')
                                 raw_side_upper = str(raw_side).upper().strip()
                                 
@@ -114,29 +122,6 @@ async def monitor_closed_positions_job():
                                     side_str = "LONG"  # Exit sell = was long
                                 else:
                                     side_str = str(raw_side)
-                                
-                                # Calculate Total Fees
-                                exit_fees = matching_trade.get('fees') or 0.0
-                                total_fees = exit_fees
-                                
-                                # Find entry trade for fee calculation
-                                is_buy = raw_side_upper in ["0", "BUY", "LONG"]
-                                for t in recent_trades:
-                                    t_side = str(t.get('side')).upper().strip()
-                                    t_sym = str(t.get('symbol'))
-                                    t_cid = str(t.get('contractId'))
-                                    
-                                    is_target_entry = False
-                                    if is_buy and t_side in ["1", "2", "SELL", "SHORT"]:
-                                        is_target_entry = True
-                                    elif not is_buy and t_side in ["0", "BUY", "LONG"]:
-                                        is_target_entry = True
-                                    
-                                    if is_target_entry and (t_sym == str(target_symbol) or t_cid == str(prev_cid)):
-                                        if t.get('creationTimestamp') < matching_trade.get('creationTimestamp'):
-                                            entry_fees = t.get('fees') or 0.0
-                                            total_fees += entry_fees
-                                            break
                                 
                                 # UPDATE TRADE RECORD IN DATABASE
                                 from backend.database import Trade

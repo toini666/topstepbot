@@ -34,7 +34,10 @@ export const useTopStep = () => {
         auto_flatten_enabled: false,
         auto_flatten_time: "21:55",
         market_open_time: "00:00",
-        market_close_time: "22:00"
+        market_close_time: "22:00",
+        trading_days: ['MON', 'TUE', 'WED', 'THU', 'FRI'],
+        enforce_single_position_per_asset: true,
+        block_cross_account_opposite: true
     });
     const [accountSettings, setAccountSettings] = useState<Record<number, AccountSettings>>({});
     const [tradingSessions, setTradingSessions] = useState<TradingSession[]>([]);

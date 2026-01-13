@@ -79,6 +79,7 @@ class Strategy(Base):
     default_allowed_sessions = Column(String, default="ASIA,UK,US")  # Comma-separated
     default_partial_tp_percent = Column(Float, default=50.0)  # % to reduce on partial
     default_move_sl_to_entry = Column(Boolean, default=True)  # Move SL to BE after partial
+    default_allow_outside_sessions = Column(Boolean, default=False)  # Allow trading outside sessions
     
     created_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc))
     
@@ -121,6 +122,7 @@ class AccountStrategyConfig(Base):
     allowed_sessions = Column(String, default="ASIA,UK,US")  # Comma-separated session names
     partial_tp_percent = Column(Float, default=50.0)  # % to reduce on partial TP
     move_sl_to_entry = Column(Boolean, default=True)  # Move SL to BE after partial
+    allow_outside_sessions = Column(Boolean, default=False)  # Allow trading outside sessions
     
     created_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc))
     updated_at = Column(DateTime, onupdate=lambda: datetime.datetime.now(datetime.timezone.utc))

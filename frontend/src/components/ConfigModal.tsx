@@ -25,6 +25,11 @@ export function ConfigModal({ isOpen, onClose, config, onSave }: ConfigModalProp
     const [marketOpenTime, setMarketOpenTime] = useState("00:00");
     const [marketCloseTime, setMarketCloseTime] = useState("22:00");
 
+    // New settings
+    const [tradingDays, setTradingDays] = useState<string[]>(['MON', 'TUE', 'WED', 'THU', 'FRI']);
+    const [enforceSinglePosition, setEnforceSinglePosition] = useState(true);
+    const [blockCrossAccount, setBlockCrossAccount] = useState(true);
+
     // Sessions
     const [sessions, setSessions] = useState<TradingSession[]>([]);
     const [sessionsModified, setSessionsModified] = useState<Record<number, TradingSession>>({});
@@ -44,6 +49,9 @@ export function ConfigModal({ isOpen, onClose, config, onSave }: ConfigModalProp
             setAutoFlattenTime(config.auto_flatten_time || "21:55");
             setMarketOpenTime(config.market_open_time || "00:00");
             setMarketCloseTime(config.market_close_time || "22:00");
+            setTradingDays(config.trading_days || ['MON', 'TUE', 'WED', 'THU', 'FRI']);
+            setEnforceSinglePosition(config.enforce_single_position_per_asset ?? true);
+            setBlockCrossAccount(config.block_cross_account_opposite ?? true);
             fetchSessions();
             fetchMappings();
             initializedRef.current = true;
@@ -124,7 +132,10 @@ export function ConfigModal({ isOpen, onClose, config, onSave }: ConfigModalProp
                 auto_flatten_enabled: autoFlattenEnabled,
                 auto_flatten_time: autoFlattenTime,
                 market_open_time: marketOpenTime,
-                market_close_time: marketCloseTime
+                market_close_time: marketCloseTime,
+                trading_days: tradingDays,
+                enforce_single_position_per_asset: enforceSinglePosition,
+                block_cross_account_opposite: blockCrossAccount
             });
 
             // Save Sessions if modified
@@ -233,6 +244,49 @@ export function ConfigModal({ isOpen, onClose, config, onSave }: ConfigModalProp
                                 </div>
                             </div>
 
+                            {/* Trading Days */}
+                            <div className="space-y-3">
+                                <label className="text-sm font-semibold text-slate-300 flex items-center gap-2">
+                                    <Calendar className="w-4 h-4 text-slate-400" />
+                                    Trading Days
+                                </label>
+                                <div className="flex gap-2">
+                                    {[
+                                        { key: 'MON', label: 'M' },
+                                        { key: 'TUE', label: 'T' },
+                                        { key: 'WED', label: 'W' },
+                                        { key: 'THU', label: 'T' },
+                                        { key: 'FRI', label: 'F' },
+                                        { key: 'SAT', label: 'S' },
+                                        { key: 'SUN', label: 'S' }
+                                    ].map(day => {
+                                        const isEnabled = tradingDays.includes(day.key);
+                                        return (
+                                            <button
+                                                key={day.key}
+                                                onClick={() => {
+                                                    if (isEnabled) {
+                                                        setTradingDays(tradingDays.filter(d => d !== day.key));
+                                                    } else {
+                                                        setTradingDays([...tradingDays, day.key]);
+                                                    }
+                                                }}
+                                                className={`w-9 h-9 rounded-lg font-bold text-sm transition-all ${isEnabled
+                                                    ? 'bg-indigo-500 text-white shadow-lg shadow-indigo-500/30'
+                                                    : 'bg-slate-800 text-slate-500 hover:bg-slate-700'
+                                                    }`}
+                                                title={day.key}
+                                            >
+                                                {day.label}
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                                <p className="text-[10px] text-slate-500 italic">
+                                    Click to enable/disable trading on each day. Di=Dimanche, S=Samedi.
+                                </p>
+                            </div>
+
                             {/* Blocked Periods */}
                             <div className={`space-y-3 transition-opacity ${!blockedPeriodsEnabled ? "opacity-50" : ""}`}>
                                 <div className="flex justify-between items-center">
@@ -313,6 +367,39 @@ export function ConfigModal({ isOpen, onClose, config, onSave }: ConfigModalProp
                                 <p className="text-[10px] text-slate-500 italic">
                                     Closes ALL positions and cancels ALL orders across ALL accounts at this time.
                                 </p>
+                            </div>
+
+                            {/* Risk Rules */}
+                            <div className="space-y-3 pt-4 border-t border-slate-800">
+                                <label className="text-sm font-semibold text-slate-300">Risk Rules</label>
+
+                                {/* Single Position per Asset */}
+                                <div className="flex justify-between items-center">
+                                    <div>
+                                        <span className="text-sm text-slate-300">Single Position Per Asset</span>
+                                        <p className="text-[10px] text-slate-500">Prevent opening 2 positions on the same asset</p>
+                                    </div>
+                                    <button
+                                        onClick={() => setEnforceSinglePosition(!enforceSinglePosition)}
+                                        className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${enforceSinglePosition ? 'bg-indigo-500' : 'bg-slate-700'}`}
+                                    >
+                                        <span className={`${enforceSinglePosition ? 'translate-x-5' : 'translate-x-1'} inline-block h-3 w-3 transform rounded-full bg-white transition-transform`} />
+                                    </button>
+                                </div>
+
+                                {/* Block Cross-Account Opposite */}
+                                <div className="flex justify-between items-center">
+                                    <div>
+                                        <span className="text-sm text-slate-300">Block Cross-Account Opposite</span>
+                                        <p className="text-[10px] text-slate-500">Prevent LONG on one account if SHORT on another</p>
+                                    </div>
+                                    <button
+                                        onClick={() => setBlockCrossAccount(!blockCrossAccount)}
+                                        className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${blockCrossAccount ? 'bg-indigo-500' : 'bg-slate-700'}`}
+                                    >
+                                        <span className={`${blockCrossAccount ? 'translate-x-5' : 'translate-x-1'} inline-block h-3 w-3 transform rounded-full bg-white transition-transform`} />
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     )}

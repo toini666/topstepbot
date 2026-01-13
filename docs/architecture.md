@@ -97,14 +97,14 @@ class RiskEngine:
     get_current_session() → Optional[str]
     
     # Validation Checks
-    check_market_hours() → Tuple[bool, str]
+    check_market_hours() → Tuple[bool, str]  # Uses configurable trading_days
     check_blocked_periods() → Tuple[bool, str]
     check_account_enabled(account_id) → Tuple[bool, str]
     check_strategy_enabled(account_id, strategy) → Tuple[bool, str]
-    check_session_allowed(account_id, strategy) → Tuple[bool, str]
-    check_open_position(account_id, ticker, client) → Tuple[bool, str]
+    check_session_allowed(account_id, strategy) → Tuple[bool, str]  # Respects allow_outside_sessions
+    check_open_position(account_id, ticker, client) → Tuple[bool, str]  # Configurable via toggle
     check_contract_limit(account_id, new_size) → Tuple[bool, str]
-    check_cross_account_direction(ticker, direction, client) → Tuple[bool, str]
+    check_cross_account_direction(ticker, direction, client) → Tuple[bool, str]  # Configurable via toggle
     
     # Position Sizing
     get_risk_amount(account_id, strategy) → float
@@ -298,8 +298,10 @@ The bot provides remote control and monitoring via Telegram.
 
 | Command | Description |
 |---------|-------------|
-| `/on` | Enable trading (Master Switch) |
-| `/off` | Disable trading |
+| `/on` | Enable trading on selected account |
+| `/off` | Disable trading on selected account |
+| `/on_all` | Enable trading on ALL accounts |
+| `/off_all` | Disable trading on ALL accounts |
 | `/login` | Connect to TopStep |
 | `/logout` | Disconnect |
 | `/switch [ID]` | Switch active account |
@@ -388,6 +390,7 @@ Both tables display consistent columns:
 - Risk Factor (multiplier)
 - Partial % (take-profit percentage)
 - SL → BE (move stop-loss to entry on partial)
+- Outside (allow trading outside configured sessions)
 
 ---
 
@@ -465,3 +468,6 @@ DATABASE_URL=sqlite:///./topstepbot.db
 | `blocked_periods` | [] | JSON array of time blocks |
 | `auto_flatten_enabled` | false | Daily auto-flatten |
 | `auto_flatten_time` | "21:55" | Flatten time |
+| `trading_days` | ["MON","TUE","WED","THU","FRI"] | Days when trading is allowed |
+| `enforce_single_position_per_asset` | true | Block duplicate positions on same ticker |
+| `block_cross_account_opposite` | true | Block opposing positions across accounts |

@@ -110,6 +110,7 @@ class TelegramService:
         ticker: str,
         timeframe: str,
         strategy: str,
+        price: float = None,
         new_sl: float = None,
         new_tp: float = None,
         accounts: list = None
@@ -121,6 +122,8 @@ class TelegramService:
             f"Strategy: [{strategy}]"
         )
         
+        if price:
+            msg += f"\nTV Price: {price}"
         if new_sl:
             msg += f"\nNew SL: {new_sl}"
         if new_tp:
@@ -135,15 +138,20 @@ class TelegramService:
         self,
         ticker: str,
         timeframe: str,
-        strategy: str
+        strategy: str,
+        price: float = None
     ):
         """Notify of incoming CLOSE signal."""
         msg = (
             f"🛑 <b>CLOSE Signal</b>\n"
             f"Ticker: {ticker} ({timeframe})\n"
-            f"Strategy: [{strategy}]\n"
-            f"<i>Closing positions on matching accounts...</i>"
+            f"Strategy: [{strategy}]"
         )
+        
+        if price:
+            msg += f"\nTV Price: {price}"
+        
+        msg += f"\n<i>Closing positions on matching accounts...</i>"
         await self.send_message(msg)
 
     # =========================================================================
@@ -238,7 +246,8 @@ class TelegramService:
         remaining_qty: int,
         account_name: str = None,
         sl_moved_to_entry: bool = False,
-        side: str = None
+        side: str = None,
+        fill_price: float = None
     ):
         """Notify partial take-profit executed."""
         account_tag = f" ({account_name})" if account_name else ""
@@ -259,6 +268,9 @@ class TelegramService:
             f"Remaining: {remaining_qty} contracts"
         )
         
+        if fill_price:
+            msg += f"\nFill Price: {fill_price}"
+        
         if sl_moved_to_entry:
             msg += "\n🎯 <i>SL moved to breakeven</i>"
         
@@ -267,16 +279,21 @@ class TelegramService:
     async def notify_close_executed(
         self,
         ticker: str,
-        account_name: str = None
+        account_name: str = None,
+        fill_price: float = None
     ):
         """Notify full position closed by CLOSE signal."""
         account_tag = f" ({account_name})" if account_name else ""
         
         msg = (
             f"🛑 <b>Position Closed (Signal)</b>{account_tag}\n"
-            f"Ticker: {ticker}\n"
-            f"<i>Position fully closed</i>"
+            f"Ticker: {ticker}"
         )
+        
+        if fill_price:
+            msg += f"\nFill Price: {fill_price}"
+        
+        msg += f"\n<i>Position fully closed</i>"
         await self.send_message(msg)
 
     # =========================================================================

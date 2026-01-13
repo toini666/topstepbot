@@ -118,6 +118,9 @@ export interface GlobalConfig {
     auto_flatten_time: string;
     market_open_time: string;
     market_close_time: string;
+    trading_days: string[];  // ['MON', 'TUE', 'WED', 'THU', 'FRI']
+    enforce_single_position_per_asset: boolean;
+    block_cross_account_opposite: boolean;
 }
 
 // =============================================================================
@@ -174,6 +177,7 @@ export interface AccountStrategyConfig {
     allowed_sessions: string;
     partial_tp_percent: number;
     move_sl_to_entry: boolean;
+    allow_outside_sessions: boolean;
     created_at: string;
     updated_at?: string;
 }

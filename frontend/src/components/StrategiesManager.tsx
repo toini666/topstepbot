@@ -44,6 +44,7 @@ export function StrategiesManager({ selectedAccountId, selectedAccountName }: St
     const [configSessions, setConfigSessions] = useState<string[]>(['ASIA', 'UK', 'US']);
     const [configPartialPercent, setConfigPartialPercent] = useState(50);
     const [configMoveSlToEntry, setConfigMoveSlToEntry] = useState(true);
+    const [configAllowOutside, setConfigAllowOutside] = useState(false);
 
     useEffect(() => {
         fetchStrategies();
@@ -175,7 +176,8 @@ export function StrategiesManager({ selectedAccountId, selectedAccountName }: St
                 risk_factor: strategy.default_risk_factor,
                 allowed_sessions: strategy.default_allowed_sessions,
                 partial_tp_percent: strategy.default_partial_tp_percent,
-                move_sl_to_entry: strategy.default_move_sl_to_entry
+                move_sl_to_entry: strategy.default_move_sl_to_entry,
+                allow_outside_sessions: false
             });
             toast.success('Strategy added to account');
             fetchAccountConfigs(selectedAccountId);
@@ -200,7 +202,6 @@ export function StrategiesManager({ selectedAccountId, selectedAccountName }: St
         return accountConfigs.some(c => c.strategy_id === strategyId);
     };
 
-    // Start editing an account config
     const startEditingConfig = (config: AccountStrategyConfig) => {
         setEditingConfigId(config.id);
         setConfigEnabled(config.enabled);
@@ -208,6 +209,7 @@ export function StrategiesManager({ selectedAccountId, selectedAccountName }: St
         setConfigSessions(config.allowed_sessions.split(',').map(s => s.trim()));
         setConfigPartialPercent(config.partial_tp_percent);
         setConfigMoveSlToEntry(config.move_sl_to_entry);
+        setConfigAllowOutside(config.allow_outside_sessions || false);
     };
 
     const cancelEditingConfig = () => {
@@ -225,7 +227,8 @@ export function StrategiesManager({ selectedAccountId, selectedAccountName }: St
                 risk_factor: configRiskFactor,
                 allowed_sessions: configSessions.join(','),
                 partial_tp_percent: configPartialPercent,
-                move_sl_to_entry: configMoveSlToEntry
+                move_sl_to_entry: configMoveSlToEntry,
+                allow_outside_sessions: configAllowOutside
             });
             toast.success('Configuration saved');
             setEditingConfigId(null);
@@ -246,7 +249,8 @@ export function StrategiesManager({ selectedAccountId, selectedAccountName }: St
                 risk_factor: config.risk_factor,
                 allowed_sessions: config.allowed_sessions,
                 partial_tp_percent: config.partial_tp_percent,
-                move_sl_to_entry: config.move_sl_to_entry
+                move_sl_to_entry: config.move_sl_to_entry,
+                allow_outside_sessions: config.allow_outside_sessions || false
             });
             toast.success(config.enabled ? 'Strategy disabled' : 'Strategy enabled');
             fetchAccountConfigs(selectedAccountId);
@@ -309,6 +313,7 @@ export function StrategiesManager({ selectedAccountId, selectedAccountName }: St
                                     <th className="py-4 px-4 text-center font-bold">Risk Factor</th>
                                     <th className="py-4 px-4 text-center font-bold">Partial %</th>
                                     <th className="py-4 px-4 text-center font-bold">SL → BE</th>
+                                    <th className="py-4 px-4 text-center font-bold">Outside</th>
                                     <th className="py-4 px-4 text-right font-bold">Actions</th>
                                 </tr>
                             </thead>
@@ -421,6 +426,23 @@ export function StrategiesManager({ selectedAccountId, selectedAccountName }: St
                                             )}
                                         </td>
 
+                                        {/* Allow Outside Sessions */}
+                                        <td className="py-4 px-4 text-center">
+                                            {editingConfigId === config.id ? (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setConfigAllowOutside(!configAllowOutside)}
+                                                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${configAllowOutside ? 'bg-amber-600' : 'bg-slate-700'}`}
+                                                >
+                                                    <span className={`${configAllowOutside ? 'translate-x-6' : 'translate-x-1'} inline-block h-4 w-4 transform rounded-full bg-white transition-transform`} />
+                                                </button>
+                                            ) : (
+                                                <span className={`px-2 py-1 rounded text-xs font-bold ${config.allow_outside_sessions ? 'bg-amber-500/20 text-amber-400' : 'bg-slate-700 text-slate-400'}`}>
+                                                    {config.allow_outside_sessions ? 'ON' : 'OFF'}
+                                                </span>
+                                            )}
+                                        </td>
+
                                         {/* Actions */}
                                         <td className="py-4 px-4 text-right">
                                             <div className="flex justify-end gap-2">
@@ -465,7 +487,7 @@ export function StrategiesManager({ selectedAccountId, selectedAccountName }: St
                                 ))}
                                 {accountConfigs.length === 0 && (
                                     <tr>
-                                        <td colSpan={7} className="py-12 text-center text-slate-500 italic">
+                                        <td colSpan={8} className="py-12 text-center text-slate-500 italic">
                                             Aucune stratégie activée sur ce compte.
                                             <br />
                                             <button

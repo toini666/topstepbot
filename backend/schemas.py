@@ -54,6 +54,7 @@ class StrategyBase(BaseModel):
     default_allowed_sessions: str = "ASIA,UK,US"
     default_partial_tp_percent: float = 50.0
     default_move_sl_to_entry: bool = True
+    default_allow_outside_sessions: bool = False
 
 
 class StrategyCreate(StrategyBase):
@@ -111,6 +112,7 @@ class AccountStrategyConfigBase(BaseModel):
     allowed_sessions: str = "ASIA,UK,US"
     partial_tp_percent: float = 50.0
     move_sl_to_entry: bool = True
+    allow_outside_sessions: bool = False
 
 
 class AccountStrategyConfigCreate(AccountStrategyConfigBase):
@@ -123,6 +125,7 @@ class AccountStrategyConfigUpdate(BaseModel):
     allowed_sessions: Optional[str] = None
     partial_tp_percent: Optional[float] = None
     move_sl_to_entry: Optional[bool] = None
+    allow_outside_sessions: Optional[bool] = None
 
 
 class AccountStrategyConfigResponse(AccountStrategyConfigBase):
@@ -130,6 +133,7 @@ class AccountStrategyConfigResponse(AccountStrategyConfigBase):
     account_id: int
     strategy_name: Optional[str] = None  # Populated from join
     strategy_tv_id: Optional[str] = None  # Populated from join
+    allow_outside_sessions: bool = False
     created_at: datetime
     updated_at: Optional[datetime] = None
 
@@ -205,6 +209,9 @@ class GlobalSettingsResponse(BaseModel):
     auto_flatten_time: str = "21:55"
     market_open_time: str = "00:00"
     market_close_time: str = "22:00"
+    trading_days: List[str] = ["MON", "TUE", "WED", "THU", "FRI"]
+    enforce_single_position_per_asset: bool = True
+    block_cross_account_opposite: bool = True
 
 
 class GlobalSettingsUpdate(BaseModel):
@@ -214,6 +221,9 @@ class GlobalSettingsUpdate(BaseModel):
     auto_flatten_time: Optional[str] = None
     market_open_time: Optional[str] = None
     market_close_time: Optional[str] = None
+    trading_days: Optional[List[str]] = None
+    enforce_single_position_per_asset: Optional[bool] = None
+    block_cross_account_opposite: Optional[bool] = None
 
 
 # =============================================================================

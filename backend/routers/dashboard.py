@@ -85,7 +85,10 @@ def get_global_config(db: Session = Depends(get_db)):
         auto_flatten_enabled=settings.get("auto_flatten_enabled", False),
         auto_flatten_time=settings.get("auto_flatten_time", "21:55"),
         market_open_time=settings.get("market_open_time", "00:00"),
-        market_close_time=settings.get("market_close_time", "22:00")
+        market_close_time=settings.get("market_close_time", "22:00"),
+        trading_days=settings.get("trading_days", ["MON", "TUE", "WED", "THU", "FRI"]),
+        enforce_single_position_per_asset=settings.get("enforce_single_position_per_asset", True),
+        block_cross_account_opposite=settings.get("block_cross_account_opposite", True)
     )
 
 
@@ -98,6 +101,8 @@ def update_global_config(req: GlobalSettingsUpdate, db: Session = Depends(get_db
             setting.value = value
         else:
             db.add(Setting(key=key, value=value))
+    
+    log_messages = []
     
     if req.blocked_periods_enabled is not None:
         set_setting("blocked_periods_enabled", "true" if req.blocked_periods_enabled else "false")
@@ -118,7 +123,25 @@ def update_global_config(req: GlobalSettingsUpdate, db: Session = Depends(get_db
     if req.market_close_time is not None:
         set_setting("market_close_time", req.market_close_time)
     
-    # Log the change
+    # New settings
+    if req.trading_days is not None:
+        set_setting("trading_days", json.dumps(req.trading_days))
+        log_messages.append(f"Trading days updated to [{','.join(req.trading_days)}]")
+    
+    if req.enforce_single_position_per_asset is not None:
+        set_setting("enforce_single_position_per_asset", "true" if req.enforce_single_position_per_asset else "false")
+        status = "ENABLED" if req.enforce_single_position_per_asset else "DISABLED"
+        log_messages.append(f"Single position per asset rule {status}")
+    
+    if req.block_cross_account_opposite is not None:
+        set_setting("block_cross_account_opposite", "true" if req.block_cross_account_opposite else "false")
+        status = "ENABLED" if req.block_cross_account_opposite else "DISABLED"
+        log_messages.append(f"Cross-account direction blocking {status}")
+    
+    # Log changes
+    for msg in log_messages:
+        db.add(Log(level="INFO", message=f"Global Settings: {msg}"))
+    
     db.add(Log(level="INFO", message="Global Settings Updated", details=json.dumps(req.model_dump(), default=str)))
     db.commit()
     return {"status": "updated"}
@@ -270,6 +293,7 @@ def get_account_strategy_configs(account_id: int, db: Session = Depends(get_db))
             allowed_sessions=config.allowed_sessions,
             partial_tp_percent=config.partial_tp_percent,
             move_sl_to_entry=config.move_sl_to_entry,
+            allow_outside_sessions=config.allow_outside_sessions,
             created_at=config.created_at,
             updated_at=config.updated_at
         )
@@ -306,6 +330,7 @@ def add_strategy_to_account(
         existing.allowed_sessions = config.allowed_sessions
         existing.partial_tp_percent = config.partial_tp_percent
         existing.move_sl_to_entry = config.move_sl_to_entry
+        existing.allow_outside_sessions = config.allow_outside_sessions
         db.commit()
         db.refresh(existing)
         
@@ -320,7 +345,8 @@ def add_strategy_to_account(
             "risk_factor": config.risk_factor,
             "allowed_sessions": config.allowed_sessions,
             "partial_tp_percent": config.partial_tp_percent,
-            "move_sl_to_entry": config.move_sl_to_entry
+            "move_sl_to_entry": config.move_sl_to_entry,
+            "allow_outside_sessions": config.allow_outside_sessions
         }
         db.add(Log(
             level="INFO",
@@ -340,6 +366,7 @@ def add_strategy_to_account(
             allowed_sessions=existing.allowed_sessions,
             partial_tp_percent=existing.partial_tp_percent,
             move_sl_to_entry=existing.move_sl_to_entry,
+            allow_outside_sessions=existing.allow_outside_sessions,
             created_at=existing.created_at,
             updated_at=existing.updated_at
         )
@@ -352,6 +379,7 @@ def add_strategy_to_account(
         allowed_sessions=config.allowed_sessions,
         partial_tp_percent=config.partial_tp_percent,
         move_sl_to_entry=config.move_sl_to_entry,
+        allow_outside_sessions=config.allow_outside_sessions,
         created_at=datetime.now(timezone.utc)
     )
     db.add(new_config)
@@ -369,7 +397,8 @@ def add_strategy_to_account(
         "risk_factor": config.risk_factor,
         "allowed_sessions": config.allowed_sessions,
         "partial_tp_percent": config.partial_tp_percent,
-        "move_sl_to_entry": config.move_sl_to_entry
+        "move_sl_to_entry": config.move_sl_to_entry,
+        "allow_outside_sessions": config.allow_outside_sessions
     }
     db.add(Log(
         level="INFO",
@@ -389,6 +418,7 @@ def add_strategy_to_account(
         allowed_sessions=new_config.allowed_sessions,
         partial_tp_percent=new_config.partial_tp_percent,
         move_sl_to_entry=new_config.move_sl_to_entry,
+        allow_outside_sessions=new_config.allow_outside_sessions,
         created_at=new_config.created_at,
         updated_at=new_config.updated_at
     )

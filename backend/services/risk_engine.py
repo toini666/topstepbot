@@ -60,6 +60,17 @@ class RiskEngine:
         settings["market_open_time"] = self._get_setting("market_open_time", "00:00")
         settings["market_close_time"] = self._get_setting("market_close_time", "22:00")
         
+        # Trading days (default: Mon-Fri)
+        td_json = self._get_setting("trading_days", '["MON","TUE","WED","THU","FRI"]')
+        try:
+            settings["trading_days"] = json.loads(td_json)
+        except Exception:
+            settings["trading_days"] = ["MON", "TUE", "WED", "THU", "FRI"]
+        
+        # Configurable risk rules
+        settings["enforce_single_position_per_asset"] = self._get_setting("enforce_single_position_per_asset", "true").lower() == "true"
+        settings["block_cross_account_opposite"] = self._get_setting("block_cross_account_opposite", "true").lower() == "true"
+        
         return settings
     
     def _get_setting(self, key: str, default: str = "") -> str:
@@ -166,19 +177,25 @@ class RiskEngine:
     
     def check_market_hours(self) -> Tuple[bool, str]:
         """
-        Check if market is open (Mon-Fri, within configured hours).
+        Check if market is open (within configured hours and on allowed days).
         Returns (allowed, reason).
         """
         now_bru = datetime.now(BRUSSELS_TZ)
         now_time = now_bru.time()
         
-        # Weekend check (Sat=5, Sun=6)
-        if now_bru.weekday() >= 5:
-            day_name = now_bru.strftime("%A")
-            return False, f"Market Closed (Weekend: {day_name})"
-        
-        # Get market hours from settings
+        # Get settings
         settings = self.get_global_settings()
+        
+        # Day of week check (replaces hardcoded weekend check)
+        day_names = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"]
+        current_day = day_names[now_bru.weekday()]
+        enabled_days = settings.get("trading_days", ["MON", "TUE", "WED", "THU", "FRI"])
+        
+        if current_day not in enabled_days:
+            day_full = now_bru.strftime("%A")
+            return False, f"Trading disabled on {day_full}"
+        
+        # Market hours check
         try:
             open_h, open_m = map(int, settings["market_open_time"].split(':'))
             close_h, close_m = map(int, settings["market_close_time"].split(':'))
@@ -268,10 +285,14 @@ class RiskEngine:
         Returns (allowed, reason).
         """
         current_session = self.get_current_session()
+        config = self.get_strategy_config(account_id, strategy_tv_id)
+        
         if not current_session:
+            # Outside all sessions - check if allowed for this strategy
+            if config and config.allow_outside_sessions:
+                return True, "OK (outside sessions - allowed)"
             return False, "Outside trading sessions"
         
-        config = self.get_strategy_config(account_id, strategy_tv_id)
         if not config:
             return False, f"Strategy not configured"
         
@@ -287,6 +308,11 @@ class RiskEngine:
         Check if there's already an open position for this ticker on this account.
         Returns (allowed, reason).
         """
+        # Check if this rule is enabled
+        settings = self.get_global_settings()
+        if not settings.get("enforce_single_position_per_asset", True):
+            return True, "OK (multiple positions allowed)"
+        
         try:
             positions = await topstep_client.get_open_positions(account_id)
             
@@ -314,6 +340,11 @@ class RiskEngine:
         This prevents long/short conflicts across accounts.
         Returns (allowed, reason).
         """
+        # Check if this rule is enabled
+        settings = self.get_global_settings()
+        if not settings.get("block_cross_account_opposite", True):
+            return True, "OK (cross-account check disabled)"
+        
         try:
             # Get all accounts we know about
             all_accounts = self.db.query(AccountSettings).all()

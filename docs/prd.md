@@ -42,9 +42,12 @@ TopStep Bot is an automated trading system that bridges TradingView alerts with 
 ```
 Global Settings (all accounts)
 ├── Market Hours (open/close times)
+├── Trading Days (M T W T F S S toggles)
 ├── Blocked Trading Periods
 ├── Auto-Flatten Time
-└── Trading Sessions (ASIA, UK, US)
+├── Trading Sessions (ASIA, UK, US)
+├── Single Position Per Asset (toggle)
+└── Block Cross-Account Opposite (toggle)
 
 Account Settings (per account)
 ├── Trading Enabled (pause/resume)
@@ -53,16 +56,19 @@ Account Settings (per account)
     ├── Risk Factor (multiplier)
     ├── Allowed Sessions
     ├── Partial TP %
-    └── Move SL to Breakeven
+    ├── Move SL to Breakeven
+    └── Allow Outside Sessions
 ```
 
 ### 4. Risk Management
 
 | Control | Description |
 |---------|-------------|
-| **Single Position Rule** | Maximum 1 position per ticker per account |
-| **Cross-Account Direction** | Cannot hold opposing positions across accounts |
+| **Single Position Rule** | Maximum 1 position per ticker per account (configurable) |
+| **Cross-Account Direction** | Cannot hold opposing positions across accounts (configurable) |
+| **Trading Days** | Configurable day-of-week toggles (replaces hardcoded weekend block) |
 | **Session Restrictions** | Strategies only execute during allowed sessions |
+| **Allow Outside Sessions** | Per-strategy override to trade outside defined sessions |
 | **Market Hours Filter** | Blocks trades outside configured hours |
 | **Blocked Periods** | Custom time blocks where trading is disabled |
 | **Contract Limit** | Maximum contracts (micro-equivalent) per account |
@@ -109,10 +115,11 @@ Account Settings (per account)
 | **Signal Received** | Ticker, action, prices, strategy, timeframe |
 | **Order Submitted** | Ticker, quantity, account name |
 | **Position Opened** | Entry price, side, quantity |
-| **Position Closed** | PnL, fees, duration |
-| **Partial Executed** | Reduced qty, remaining, SL moved status |
+| **Position Closed** | PnL, fees, duration, daily PnL |
+| **Partial Executed** | Reduced qty, remaining, fill price, SL moved status |
 | **Trade Rejection** | Ticker, reason, account |
 | **Orphaned Orders** | Warning for orders without positions |
+| **Trading Toggled** | Account name, new status (via /on, /off, /on_all, /off_all) |
 
 ### 8. Data & Analytics
 

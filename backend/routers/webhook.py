@@ -345,6 +345,7 @@ async def handle_partial(alert: TradingViewAlert, db: Session) -> Dict[str, Any]
         ticker=alert.ticker,
         timeframe=alert.timeframe,
         strategy=strategy_name,
+        price=alert.entry,
         new_sl=alert.stop,
         new_tp=alert.tp
     )
@@ -457,14 +458,31 @@ async def handle_partial(alert: TradingViewAlert, db: Session) -> Dict[str, Any]
                     except Exception as e:
                         db.add(Log(level="ERROR", message=f"Failed to update SL/TP: {e}"))
                 
-                # Notify execution
+                # Notify execution - get fill price from response if available
+                fill_price = response.get('fillPrice') or response.get('price')
+                
+                # If API response doesn't have fill price, fetch from recent trades
+                if not fill_price:
+                    try:
+                        import asyncio
+                        await asyncio.sleep(0.5)  # Small delay for trade to be recorded
+                        recent_trades = await topstep_client.get_historical_trades(account_id, days=1)
+                        clean_ticker = alert.ticker.replace("1!", "").replace("2!", "").upper()
+                        for t in sorted(recent_trades, key=lambda x: x.get('creationTimestamp', ''), reverse=True):
+                            if clean_ticker in str(t.get('contractId', '')).upper():
+                                fill_price = t.get('price') or t.get('fillPrice')
+                                break
+                    except Exception:
+                        pass
+                
                 await telegram_service.notify_partial_executed(
                     ticker=alert.ticker,
                     reduced_qty=reduce_qty,
                     remaining_qty=remaining_qty,
                     account_name=account_name,
                     sl_moved_to_entry=sl_moved,
-                    side="LONG" if matching_pos.get('type') == 1 else "SHORT"
+                    side="LONG" if matching_pos.get('type') == 1 else "SHORT",
+                    fill_price=fill_price
                 )
                 
                 processed.append(account_name)
@@ -495,7 +513,8 @@ async def handle_close(alert: TradingViewAlert, db: Session) -> Dict[str, Any]:
     await telegram_service.notify_close_signal(
         ticker=alert.ticker,
         timeframe=alert.timeframe,
-        strategy=strategy_name
+        strategy=strategy_name,
+        price=alert.entry
     )
     
     # Find matching trades in our DB
@@ -519,8 +538,24 @@ async def handle_close(alert: TradingViewAlert, db: Session) -> Dict[str, Any]:
         account_id = trade.account_id
         
         try:
-            # Close position
-            success = await topstep_client.close_position(account_id, trade.ticker)
+            # Get current position from TopStep to find proper contract_id
+            positions = await topstep_client.get_open_positions(account_id)
+            clean_ticker = alert.ticker.replace("1!", "").replace("2!", "").upper()
+            
+            matching_pos = None
+            for pos in positions:
+                if clean_ticker in pos.get('contractId', '').upper():
+                    matching_pos = pos
+                    break
+            
+            if not matching_pos:
+                db.add(Log(level="WARNING", message=f"CLOSE: No open position found for {alert.ticker} on account {account_id}"))
+                continue
+            
+            contract_id = matching_pos.get('contractId')
+            
+            # Close position with proper contract_id
+            success = await topstep_client.close_position(account_id, contract_id)
             
             if success:
                 # Cancel remaining orders for this contract
@@ -536,10 +571,21 @@ async def handle_close(alert: TradingViewAlert, db: Session) -> Dict[str, Any]:
                 
                 db.add(Log(level="INFO", message=f"CLOSE: Position closed for {alert.ticker} on {account_name}"))
                 
-                # Notify execution
+                # Notify execution - try to get fill price from recent trades
+                fill_price = None
+                try:
+                    recent = await topstep_client.get_historical_trades(account_id, days=1)
+                    for t in recent:
+                        if clean_ticker in str(t.get('contractId', '')).upper():
+                            fill_price = t.get('price') or t.get('fillPrice')
+                            break
+                except Exception:
+                    pass
+                
                 await telegram_service.notify_close_executed(
                     ticker=alert.ticker,
-                    account_name=account_name
+                    account_name=account_name,
+                    fill_price=fill_price
                 )
                 
                 processed.append(account_name)

@@ -338,11 +338,17 @@ async def auto_flatten_job():
 
 ### Purpose
 Prevent opening BUY on Account A if SHORT exists on Account B for same ticker.
+**This check is configurable via `block_cross_account_opposite` global setting.**
 
 ### Logic
 
 ```python
 async def check_cross_account_direction(ticker, direction, client):
+    # Check if rule is enabled
+    global_settings = get_global_settings()
+    if not global_settings.get("block_cross_account_opposite", True):
+        return True, "Cross-account check disabled"
+    
     clean_ticker = normalize(ticker)
     accounts = await client.get_accounts()
     
@@ -405,11 +411,13 @@ def get_current_session():
 ```python
 def check_session_allowed(account_id, strategy_tv_id):
     current_session = get_current_session()
-    
-    if not current_session:
-        return True, ""  # No session = allow
-    
     config = get_strategy_config(account_id, strategy_tv_id)
+    
+    # If no active session, check allow_outside_sessions
+    if not current_session:
+        if config and config.allow_outside_sessions:
+            return True, "Allowed outside sessions"
+        return False, "Outside all trading sessions"
     
     if not config:
         return True, ""  # No config = use defaults
@@ -418,6 +426,10 @@ def check_session_allowed(account_id, strategy_tv_id):
     
     if current_session in allowed:
         return True, ""
+    
+    # Not in allowed session, check allow_outside_sessions
+    if config.allow_outside_sessions:
+        return True, "Allowed outside defined sessions"
     
     return False, f"Session {current_session} not allowed"
 ```
@@ -528,7 +540,8 @@ AccountStrategyConfig (Per-Account Override)
 ├── risk_factor (overrides default)
 ├── allowed_sessions (overrides default)
 ├── partial_tp_percent (overrides default)
-└── move_sl_to_entry (overrides default)
+├── move_sl_to_entry (overrides default)
+└── allow_outside_sessions (trade outside defined sessions)
 ```
 
 ### Configuration Flow

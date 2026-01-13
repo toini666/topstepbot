@@ -96,9 +96,13 @@ class TelegramBot:
         elif command == "/cancel_all":
             await self.cmd_cancel_all()
         elif command == "/on":
-            await self.cmd_set_master_switch(True)
+            await self.cmd_set_trading(True)
         elif command == "/off":
-            await self.cmd_set_master_switch(False)
+            await self.cmd_set_trading(False)
+        elif command == "/on_all":
+            await self.cmd_set_trading_all(True)
+        elif command == "/off_all":
+            await self.cmd_set_trading_all(False)
         elif command == "/accounts":
             await self.cmd_accounts()
         elif command == "/switch":
@@ -122,12 +126,15 @@ class TelegramBot:
             "/status - Current account status\n"
             "/status_all - All accounts overview\n"
             "/accounts - List all accounts\n\n"
-            "<b>Control</b>\n"
-            "/on - Enable Trading (Master Switch)\n"
-            "/off - Disable Trading\n"
+            "<b>Trading Control</b>\n"
+            "/on - Enable trading (current account)\n"
+            "/off - Disable trading (current account)\n"
+            "/on_all - Enable trading (ALL accounts)\n"
+            "/off_all - Disable trading (ALL accounts)\n"
+            "/switch [ID] - Switch active account\n\n"
+            "<b>Connection</b>\n"
             "/login - Connect to TopStep\n"
-            "/logout - Disconnect from TopStep\n"
-            "/switch [ID] - Switch Active Account\n\n"
+            "/logout - Disconnect from TopStep\n\n"
             "<b>Emergency</b>\n"
             "/cancel_orders - Cancel orders (current account)\n"
             "/cancel_all - Cancel orders (ALL accounts)\n"
@@ -139,14 +146,7 @@ class TelegramBot:
     async def cmd_status(self):
         db = SessionLocal()
         try:
-            # 1. Get Master Switch
-            # 1. Get Master Switch
-            switch = db.query(Setting).filter(Setting.key == "master_switch").first()
-            # Dashboard uses "ON"/"OFF"
-            is_on = switch and switch.value == "ON"
-            status_emoji = "🟢 ON" if is_on else "🔴 OFF"
-
-            # 2. Get Account
+            # Get selected account
             acc_setting = db.query(Setting).filter(Setting.key == "selected_account_id").first()
             if not acc_setting:
                 await self.reply("⚠️ No Account Selected")
@@ -154,13 +154,17 @@ class TelegramBot:
             
             account_id = int(acc_setting.value)
             
-            # 3. Fetch Data
+            # Get account trading status from AccountSettings
+            from backend.database import AccountSettings
+            account_settings = db.query(AccountSettings).filter(AccountSettings.account_id == account_id).first()
+            is_trading_on = account_settings and account_settings.trading_enabled
+            status_emoji = "🟢 Trading ON" if is_trading_on else "🔴 Trading OFF"
+            
             # Check connection first
             if not topstep_client.token:
-                # Try auto-login
                 if not await topstep_client.login():
-                     await self.reply(f"📊 <b>System Status</b>\nMaster Switch: {status_emoji}\n\n❌ <b>Disconnected from TopStep</b>\nUse /login to connect.")
-                     return
+                    await self.reply(f"📊 <b>System Status</b>\n{status_emoji}\n\n❌ <b>Disconnected from TopStep</b>\nUse /login to connect.")
+                    return
 
             # Refresh account info
             accounts_list = await topstep_client.get_accounts()
@@ -169,18 +173,18 @@ class TelegramBot:
             
             # Find account in list
             for acc in accounts_list:
-                 if int(acc.get('id')) == account_id:
-                     account_name = acc.get('name')
-                     balance = acc.get('balance', 0)
-                     break
+                if int(acc.get('id')) == account_id:
+                    account_name = acc.get('name')
+                    balance = acc.get('balance', 0)
+                    break
             
-            # 4. Positions & Orders & PnL
+            # Positions & PnL
             positions = await topstep_client.get_open_positions(account_id)
             daily_pnl = await self._get_daily_pnl(account_id)
             
             msg = (
                 f"📊 <b>System Status</b>\n"
-                f"Master Switch: {status_emoji}\n"
+                f"{status_emoji}\n"
                 f"Account: <b>{account_name}</b>\n"
                 f"Balance: <b>${balance:,.2f}</b>\n"
                 f"Daily PnL: <b>${daily_pnl:,.2f}</b>\n\n"
@@ -236,26 +240,66 @@ class TelegramBot:
             print(f"PnL Calc Error: {e}")
             return 0.0
 
-    async def cmd_set_master_switch(self, enable: bool):
+    async def cmd_set_trading(self, enable: bool):
+        """Toggle trading_enabled on the SELECTED account."""
         db = SessionLocal()
         try:
-            val = "ON" if enable else "OFF"
-            setting = db.query(Setting).filter(Setting.key == "master_switch").first()
-            if not setting:
-                setting = Setting(key="master_switch", value=val)
-                db.add(setting)
-            else:
-                setting.value = val
+            # Get selected account
+            acc_setting = db.query(Setting).filter(Setting.key == "selected_account_id").first()
+            if not acc_setting:
+                await self.reply("❌ No account selected. Use /switch [ID]")
+                return
+            
+            account_id = int(acc_setting.value)
+            
+            # Update account settings
+            from backend.database import AccountSettings
+            account = db.query(AccountSettings).filter(AccountSettings.account_id == account_id).first()
+            if not account:
+                await self.reply(f"❌ Account {account_id} not configured in settings")
+                return
+            
+            account.trading_enabled = enable
+            db.commit()
+            
+            account_name = account.account_name or str(account_id)
+            state = "🟢 ENABLED" if enable else "🔴 DISABLED"
+            await self.reply(f"✅ Trading {state} for {account_name}")
+            
+            # Log Action
+            db.add(Log(level="WARNING", message=f"Telegram: Trading {'enabled' if enable else 'disabled'} for account {account_name}"))
+            db.commit()
+        except Exception as e:
+            await self.reply(f"❌ Error: {e}")
+        finally:
+            db.close()
+
+    async def cmd_set_trading_all(self, enable: bool):
+        """Toggle trading_enabled on ALL accounts."""
+        db = SessionLocal()
+        try:
+            from backend.database import AccountSettings
+            accounts = db.query(AccountSettings).all()
+            
+            if not accounts:
+                await self.reply("⚠️ No accounts configured")
+                return
+            
+            count = 0
+            for acc in accounts:
+                acc.trading_enabled = enable
+                count += 1
+            
             db.commit()
             
             state = "🟢 ENABLED" if enable else "🔴 DISABLED"
-            await self.reply(f"✅ Master Switch {state}")
+            await self.reply(f"✅ Trading {state} for {count} account(s)")
             
             # Log Action
-            db.add(Log(level="WARNING", message=f"Telegram: Master Switch set to {val}"))
+            db.add(Log(level="WARNING", message=f"Telegram: Trading {'enabled' if enable else 'disabled'} for ALL {count} accounts"))
             db.commit()
         except Exception as e:
-            await self.reply(f"❌ Failed to toggle switch: {e}")
+            await self.reply(f"❌ Error: {e}")
         finally:
             db.close()
 
