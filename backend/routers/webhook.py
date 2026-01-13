@@ -134,16 +134,20 @@ async def handle_signal(
     strategy_name = alert.strat or "default"
     
     # Immediate notification with timeframe
-    await telegram_service.notify_signal(
-        ticker=alert.ticker,
-        action=alert.side,
-        price=alert.entry,
-        sl=alert.stop,
-        tp=alert.tp,
-        strategy=strategy_name,
-        timeframe=alert.timeframe,
-        accounts_count=0  # Will update after eligibility check
-    )
+    try:
+        await telegram_service.notify_signal(
+            ticker=alert.ticker,
+            action=alert.side,
+            price=alert.entry,
+            sl=alert.stop,
+            tp=alert.tp,
+            strategy=strategy_name,
+            timeframe=alert.timeframe,
+            accounts_count=0  # Will update after eligibility check
+        )
+    except Exception as e:
+        db.add(Log(level="ERROR", message=f"Telegram Notification Failed: {e}"))
+        db.commit()
     
     # Global checks (apply to ALL accounts)
     allowed, reason = risk_engine.check_market_hours()
@@ -341,14 +345,18 @@ async def handle_partial(alert: TradingViewAlert, db: Session) -> Dict[str, Any]
     from backend.services.telegram_service import telegram_service
     
     # Notify PARTIAL signal received
-    await telegram_service.notify_partial_signal(
-        ticker=alert.ticker,
-        timeframe=alert.timeframe,
-        strategy=strategy_name,
-        price=alert.entry,
-        new_sl=alert.stop,
-        new_tp=alert.tp
-    )
+    try:
+        await telegram_service.notify_partial_signal(
+            ticker=alert.ticker,
+            timeframe=alert.timeframe,
+            strategy=strategy_name,
+            price=alert.entry,
+            new_sl=alert.stop,
+            new_tp=alert.tp
+        )
+    except Exception as e:
+        db.add(Log(level="ERROR", message=f"Telegram Partial Notification Failed: {e}"))
+        db.commit()
     
     # Find matching trades in our DB
     matching_trades = db.query(Trade).filter(
@@ -510,12 +518,16 @@ async def handle_close(alert: TradingViewAlert, db: Session) -> Dict[str, Any]:
     from backend.services.telegram_service import telegram_service
     
     # Notify CLOSE signal received
-    await telegram_service.notify_close_signal(
-        ticker=alert.ticker,
-        timeframe=alert.timeframe,
-        strategy=strategy_name,
-        price=alert.entry
-    )
+    try:
+        await telegram_service.notify_close_signal(
+            ticker=alert.ticker,
+            timeframe=alert.timeframe,
+            strategy=strategy_name,
+            price=alert.entry
+        )
+    except Exception as e:
+        db.add(Log(level="ERROR", message=f"Telegram Close Notification Failed: {e}"))
+        db.commit()
     
     # Find matching trades in our DB
     matching_trades = db.query(Trade).filter(
@@ -624,6 +636,22 @@ async def resolve_contract(ticker: str, db: Session):
         tick_size = 0.25
     if tick_value is None:
         tick_value = 0.5
+    
+    # SAVE MAPPING FOR FUTURE USE (e.g. Reconciliation)
+    try:
+        new_map = TickerMap(
+            tv_ticker=ticker,
+            ts_contract_id=contract.get("id"),
+            ts_ticker=contract.get("name"),
+            tick_size=tick_size,
+            tick_value=tick_value,
+            micro_equivalent=1 # Default to 1, user can edit later
+        )
+        db.add(new_map)
+        db.commit()
+    except Exception as e:
+        print(f"Failed to save TickerMap for {ticker}: {e}")
+        # Continue even if save fails
     
     return contract.get("id"), tick_size, tick_value
 

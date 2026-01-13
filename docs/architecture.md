@@ -230,7 +230,7 @@ Data export and analytics endpoints.
 
 | Job | Schedule | Function |
 |-----|----------|----------|
-| Position Monitor | Every 30s | Detect closed positions, update Trade status to CLOSED with PnL/fees, notify via Telegram |
+| Position Monitor | Every 5s | Detect closed positions, update Trade status to CLOSED with PnL/fees, notify via Telegram |
 | Auto Flatten | Configurable time | Close all positions daily |
 | API Health Check | Every 60s | Pings API, tracks health, alerts on consecutive failures |
 | Database Backup | 03:00 UTC | Copy database file |
@@ -258,6 +258,14 @@ The frontend displays trade history from the **internal Trade table** instead of
    - Updates Trade: status=CLOSED, exit_price, pnl, fees, exit_time
    - Sends Telegram notification
 5. Frontend fetches /dashboard/trades?status=CLOSED → Shows aggregated history
+6. **Reconciliation Loop**:
+   - Checks for "phantom" open trades in DB that are missing from API
+   - Verifies against "Truth" (API History) using robust timestamp comparison
+   - Automatically marks as CLOSED if verified
+7. **Manual Trade Detection**:
+   - Detects new positions not initiated by webhook
+   - Creates Trade record with strategy="MANUAL"
+   - Tracks these trades normally through to closure
 ```
 
 ### API Endpoint

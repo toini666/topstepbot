@@ -698,7 +698,7 @@ function App() {
                           <td className={`py-3 px-4 text-right font-mono font-bold ${trade.pnl > 0 ? 'text-green-400' :
                             trade.pnl < 0 ? 'text-red-400' : 'text-slate-500'
                             }`}>
-                            {trade.pnl ? `$${trade.pnl.toFixed(2)}` : '-'}
+                            {trade.pnl !== undefined && trade.pnl !== null ? `$${trade.pnl.toFixed(2)}` : '-'}
                           </td>
                         </tr>
                       ))}

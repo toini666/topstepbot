@@ -449,8 +449,8 @@ class TopStepClient:
         Returns a dict with {id, name, tickSize, tickValue, ...} or None.
         Uses In-Memory Cache to avoid frequent API calls.
         """
-        # Normalize Ticker: Remove "1!", "2!" (TradingView continuous)
-        clean_ticker = ticker.replace("1!", "").replace("2!", "")
+        # Normalize Ticker: Remove "1!", "2!" and any trailing "!"
+        clean_ticker = ticker.replace("1!", "").replace("2!", "").replace("!", "")
         
         # 1. Check Cache
         cached = self._contract_cache.get(clean_ticker)

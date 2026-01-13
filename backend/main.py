@@ -21,7 +21,7 @@ from backend.services.maintenance_service import backup_database, clean_logs, ch
 from backend.services.persistence_service import save_state, load_state
 import asyncio
 import json
-from datetime import datetime, time, timedelta
+from datetime import datetime, time, timedelta, timezone
 import pytz
 
 # Scheduler Setup
@@ -65,7 +65,29 @@ async def monitor_closed_positions_job():
                 dt = dt.replace(tzinfo=timezone.utc)
             return dt
         except ValueError:
+            # Handle non-standard microseconds (e.g. 5 digits)
+            if "." in clean:
+                try:
+                    left, right = clean.split(".", 1)
+                    if "+" in right:
+                        micro, tz = right.split("+", 1)
+                        # Pad or truncate to 6 digits
+                        micro = (micro + "000000")[:6]
+                        clean = f"{left}.{micro}+{tz}"
+                        dt = datetime.fromisoformat(clean)
+                        if dt.tzinfo is None:
+                            dt = dt.replace(tzinfo=timezone.utc)
+                        return dt
+                except:
+                    pass
             return None
+
+    # Helper for robust time comparison
+    def ensure_aware_internal(d):
+        if not d: return None
+        if d.tzinfo is None:
+            return d.replace(tzinfo=timezone.utc)
+        return d
 
     try:
         # Get all accounts from TopStep
@@ -140,7 +162,7 @@ async def monitor_closed_positions_job():
                             
                             target_entry_time = None
                             if open_trade and open_trade.timestamp:
-                                target_entry_time = open_trade.timestamp
+                                target_entry_time = ensure_aware_internal(open_trade.timestamp)
 
                             # Helper to safely get fallback ts
                             start_time_fallback = None
@@ -208,6 +230,27 @@ async def monitor_closed_positions_job():
                                         if raw_side_upper in ["0", "BUY", "LONG"]: side_str = "SHORT"
                                         elif raw_side_upper in ["1", "2", "SELL", "SHORT"]: side_str = "LONG"
                                     
+                                    # Calculate Real Daily PnL (Closed Trades Today + including this one)
+                                    # Use API data to perfectly match /status command logic and avoid DB sync issues
+                                    # We already have recent_trades (last 24h), we can filter them for "today"
+                                    # But to be 100% aligned with /status, let's just sum the PnL of all trades returned by API for the day.
+                                    # Since recent_trades = get_historical_trades(days=1), it contains today's trades.
+                                    
+                                    today_utc = datetime.now(timezone.utc).date()
+                                    real_daily_pnl = 0.0
+                                    real_daily_fees = 0.0
+                                    
+                                    for t in recent_trades:
+                                        pnl = t.get('profitAndLoss') or t.get('pnl')
+                                        fees = t.get('fees')
+                                        if pnl is not None: real_daily_pnl += float(pnl)
+                                        if fees is not None: real_daily_fees += float(fees)
+                                    
+                                    # Net PnL = Gross PnL - Fees (TopStep API PnL is usually Gross)
+                                    # Verify if /status logic subtracts fees.
+                                    # TelegramBot._get_daily_pnl: return total_pnl - total_fees
+                                    final_daily_pnl = real_daily_pnl - real_daily_fees
+
                                     await telegram_service.notify_position_closed(
                                         symbol=f"{target_symbol} ({account_name})",
                                         side=side_str,
@@ -216,7 +259,7 @@ async def monitor_closed_positions_job():
                                         pnl=pnl_val,
                                         fees=total_fees,
                                         quantity=open_trade.quantity, # Initial Qty
-                                        daily_pnl=pnl_val # Approximation
+                                        daily_pnl=final_daily_pnl
                                     )
                                     print(f"✅ Trade #{open_trade.id} marked as CLOSED (PnL: ${pnl_val:.2f})")
                                 
@@ -320,6 +363,109 @@ async def monitor_closed_positions_job():
                 # Update state for this account
                 _last_open_positions[account_id] = current_map
                 
+                # =================================================================
+                # DB RECONCILIATION (Detect Closures missed during downtime)
+                # =================================================================
+                from backend.database import Trade
+                
+                # Get ALL OPEN trades for this account from DB
+                db_open_trades = db.query(Trade).filter(
+                    Trade.account_id == account_id,
+                    Trade.status == "OPEN"
+                ).all()
+                
+                for trade in db_open_trades:
+                    # Resolve expected contract ID for this trade
+                    expected_cid = None
+                    ticker_map_entry = db.query(TickerMap).filter(TickerMap.tv_ticker == trade.ticker).first()
+                    
+                    if ticker_map_entry:
+                        expected_cid = ticker_map_entry.ts_contract_id
+                    
+                    # If we can't find contract ID via map, try to match by partial string in current map
+                    # This is a fallback
+                    if not expected_cid:
+                        clean_ticker = trade.ticker.replace("1!", "").replace("2!", "").upper()
+                        # Try to find match in current positions
+                        for cid, pos in current_map.items():
+                            if clean_ticker in str(pos.get('symbolId') or cid).upper():
+                                expected_cid = cid
+                                break
+                    
+                    # If still no expected CID, we can't properly verify, so skip
+                    if not expected_cid:
+                        continue
+                        
+                    # CHECK: Is this trade physically present in TopStep?
+                    if expected_cid not in current_map:
+                        print(f"🕵️ RECONCILIATION: Trade #{trade.id} ({trade.ticker}) is OPEN in DB but missing in API. Verifying closure...")
+                        
+                        # Verify against history (look for exit execution after trade entry)
+                        recent_trades = await topstep_client.get_historical_trades(account_id, days=1)
+                        trade_entry_time = trade.timestamp
+                        
+                        # Find matching exit execution
+                        # We look for a trade with matching symbol and time > entry time
+                        confirm_close = False
+                        exit_fill = None
+                        
+                        for t in recent_trades:
+                            t_cid = str(t.get('contractId') or '')
+                            if t_cid == expected_cid:
+                                t_time = parse_topstep_date(t.get('creationTimestamp') or t.get('timestamp') or t.get('time'))
+                                t_time = ensure_aware_internal(t_time)
+                                
+                                # If trade has entry time, ensure this fill is AFTER it
+                                if trade_entry_time:
+                                    # Ensure trade_entry_time is aware
+                                    trade_entry_time = ensure_aware_internal(trade_entry_time)
+                                    
+                                    try:
+                                        if t_time and t_time > trade_entry_time:
+                                            confirm_close = True
+                                            exit_fill = t
+                                            break
+                                    except TypeError as e:
+                                        print(f"⚠️ Date Comp Error: {e} | T: {t_time} ({t_time.tzinfo if t_time else 'None'}) vs Entry: {trade_entry_time} ({trade_entry_time.tzinfo if trade_entry_time else 'None'})")
+                                        continue
+                                
+                                # If no entry time in DB (legacy?), assume recent fill is the exit
+                                if not trade_entry_time:
+                                    confirm_close = True
+                                    exit_fill = t
+                                    break
+                        
+                        if confirm_close:
+                            # It is confirmed closed
+                            exit_px = exit_fill.get('price') or exit_fill.get('fillPrice') or 0
+                            pnl_val = exit_fill.get('pnl') or exit_fill.get('profitAndLoss') or 0
+                            fees_val = exit_fill.get('fees') or 0
+                            
+                            trade.status = "CLOSED"
+                            trade.exit_price = exit_px
+                            trade.exit_time = datetime.now(pytz.UTC)
+                            trade.pnl = pnl_val
+                            trade.fees = fees_val
+                            db.commit()
+                            
+                            print(f"✅ RECONCILIATION: Trade #{trade.id} marked as CLOSED (PnL: ${pnl_val:.2f})")
+                            db.add(Log(level="INFO", message=f"RECONCILIATION: Trade #{trade.id} marked as CLOSED (PnL: ${pnl_val:.2f})"))
+                            db.commit()
+                            
+                            await telegram_service.notify_position_closed(
+                                symbol=f"{trade.ticker} ({account_name})",
+                                side="LONG" if trade.action == "BUY" else "SHORT", # Use DB side
+                                entry_price=trade.entry_price,
+                                exit_price=exit_px,
+                                pnl=pnl_val,
+                                fees=fees_val,
+                                quantity=trade.quantity
+                            )
+                        else:
+                            print(f"⚠️ RECONCILIATION: Could not confirm closure in history for #{trade.id}. Keeping OPEN.")
+                            db.add(Log(level="DEBUG", message=f"RECONCILIATION: Could not confirm closure in history for #{trade.id}"))
+                            db.commit()
+
                 # Check for orphaned orders on this account
                 recent_orders = await topstep_client.get_orders(account_id, days=1)
                 for o in recent_orders:
@@ -560,7 +706,7 @@ async def lifespan(app: FastAPI):
 
     # Add Scheduled Jobs
     scheduler.add_job(auto_flatten_job, 'interval', minutes=1)
-    scheduler.add_job(monitor_closed_positions_job, 'interval', seconds=30)
+    scheduler.add_job(monitor_closed_positions_job, 'interval', seconds=5)
     
     # Maintenance Jobs
     scheduler.add_job(backup_database, 'cron', hour=3, minute=0)

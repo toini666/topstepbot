@@ -232,7 +232,7 @@ TradingView sends `type: "CLOSE"` webhook.
 ## 4. Position Monitoring Flow
 
 ### Trigger
-Scheduled job every 30 seconds.
+Scheduled job every 5 seconds.
 
 ### Purpose
 Detect positions closed externally (TP hit, SL hit, manual close).
@@ -267,14 +267,28 @@ On bot startup, existing positions are pre-loaded to avoid false "Position Opene
         * Find matching Trade by account_id + ticker + status=OPEN
         * Match Entry Timestamp (tolerance < 2s) to prevent mixing trades
         * Set status=CLOSED, exit_price, pnl, fees, exit_time
-      - Calculate Daily PnL total
+      - Calculate PnL and fees
+      - **UPDATE Trade record in database:**
+        * Find matching Trade by account_id + ticker + status=OPEN
+        * Match Entry Timestamp (tolerance < 2s) to prevent mixing trades
+        * Set status=CLOSED, exit_price, pnl, fees, exit_time
+      - Calculate Daily PnL total (Sum of all API trades for current session)
       - Notify position closed (Telegram) with daily PnL
    d. Update memory with current positions
-3. Check for orphaned orders (ALL accounts):
-   a. Get working orders from ALL accounts
-   b. Get open positions from ALL accounts
-   c. Orders for contracts without positions = orphans
-   d. If orphans found → Notify (Telegram) with account names
+   
+3. **Detection of New Positions (Including Manual):**
+   - Identify new open positions not present in previous snapshot
+   - IF no matching OPEN trade in DB:
+     * Create new Trade record with strategy="MANUAL"
+     * Capture Entry Price and Time from API
+     * Notify "Position Opened" (Telegram)
+     
+4. **Reconciliation (Missed Closures):**
+   - Iterate all OPEN trades in DB
+   - IF trade not found in current API positions:
+     * Check API history for execution AFTER trade entry
+     * Robust comparison: Ensure Timezone Awareness (UTC vs UTC)
+     * IF matching exit found: Mark DB trade as CLOSED and Notify
 ```
 
 ### Data Structures

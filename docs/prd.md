@@ -126,6 +126,9 @@ Account Settings (per account)
 | Feature | Description |
 |---------|-------------|
 | **Trade Recording** | Trades matched by Symbol+Time for precise PnL aggregation (including partials) |
+| **Manual Trades** | Automatically detects and records execution of non-bot trades |
+| **Daily PnL** | Real-time Net PnL calculation (Gross - Fees) synced with TopStep session |
+| **Strict Reconciliation** | DB corrections based on raw API truth data for 100% accuracy |
 | **Export Endpoint** | JSON/CSV export with filters |
 | **Statistics API** | Win rate, profit factor, avg PnL, duration |
 | **Filter Options** | By strategy, timeframe, ticker, account, session, date |
@@ -137,9 +140,10 @@ Account Settings (per account)
 | **Daily Backups** | Automatic at 03:00 UTC, keeps last 7 |
 | **Startup Backup** | Creates backup if none exists for today |
 | **Log Cleaning** | Removes logs older than 7 days at 04:00 UTC |
-| **Position Monitoring** | Detects closed positions for notifications |
+| **Position Monitoring** | Detects closed positions every 5s for notifications |
 | **Orphan Detection** | Alerts for orders without matching positions |
 | **API Health Check** | Pings TopStep every 60s, alerts on failure |
+| **Manual Trade Sync** | Detects and tracks manually executed trades |
 
 ---
 
