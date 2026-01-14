@@ -15,6 +15,7 @@ This document outlines the roadmap to evolve the current functional prototype in
 
 ## 3. Data & Analytics (The "Journal")
 *Goal: Improve performance through data analysis.*
+- [ ] **Add unrealized PNL**: Add unrealized PNL in the dashboard
 - [ ] **Equity Curve Plotting**: A chart in the dashboard showing P&L evolution over the day/week.
 - [ ] **Win/Loss & Expectancy Stats**: Auto-calculate Sharpe Ratio, Profit Factor, and Average Win/Loss on the Stats panel.
 - [ ] **Stats per strategy**: Dashboard with stats about each strategy.
@@ -25,3 +26,4 @@ This document outlines the roadmap to evolve the current functional prototype in
 - [ ] **Healthcheck integration**: Setup online service to health check the bot and send alert if Bot does not respond
 - [ ] **Automated tests**: setup workflow of automated test to verify everything is still working (core features) after a development
 - [ ] **Execution optimization**: optimize workflow to have the minimum execution time between trading alert and trade execution
+- [ ] **Ngrok URL change monitoring**: Check if URL changed and notify user

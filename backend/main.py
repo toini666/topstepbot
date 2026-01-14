@@ -20,7 +20,9 @@ from backend.services.telegram_bot import telegram_bot
 from backend.services.maintenance_service import backup_database, clean_logs, check_and_run_startup_backup
 from backend.services.persistence_service import save_state, load_state
 import asyncio
+import aiohttp
 import json
+import os
 from datetime import datetime, time, timedelta, timezone
 import pytz
 
@@ -42,6 +44,13 @@ _api_health = {
     "last_response_time": None,
     "is_healthy": True,
     "notified_down": False
+}
+
+# Heartbeat State
+_heartbeat_state = {
+    "start_time": None,
+    "last_sent": None,
+    "consecutive_failures": 0
 }
 
 
@@ -635,6 +644,143 @@ async def api_health_check_job():
             db.close()
 
 
+async def heartbeat_job():
+    """
+    Sends a heartbeat ping to external monitoring system (N8N).
+    Includes metadata about bot status for richer monitoring.
+    """
+    global _heartbeat_state
+    from backend.database import SessionLocal, Setting, AccountSettings
+    
+    webhook_url = os.getenv("HEARTBEAT_WEBHOOK_URL")
+    if not webhook_url:
+        return  # Heartbeat not configured
+    
+    db = SessionLocal()
+    try:
+        # Calculate uptime
+        uptime_seconds = 0
+        if _heartbeat_state["start_time"]:
+            uptime_seconds = (datetime.now(BRUSSELS_TZ) - _heartbeat_state["start_time"]).total_seconds()
+        
+        # Get global trading status
+        trading_enabled = True
+        setting = db.query(Setting).filter(Setting.key == "trading_enabled").first()
+        if setting:
+            trading_enabled = setting.value == "true"
+        
+        # Get active accounts count
+        try:
+            all_accounts = await topstep_client.get_accounts()
+            active_accounts = len(all_accounts) if all_accounts else 0
+        except Exception:
+            active_accounts = 0
+        
+        # Get API health status
+        api_healthy = _api_health.get("is_healthy", True)
+        
+        # Build payload
+        payload = {
+            "bot_name": "TopStepBot",
+            "timestamp": datetime.now(BRUSSELS_TZ).isoformat(),
+            "uptime_seconds": int(uptime_seconds),
+            "uptime_formatted": format_uptime(uptime_seconds),
+            "trading_enabled": trading_enabled,
+            "active_accounts": active_accounts,
+            "api_healthy": api_healthy,
+            "version": "2.0.0"
+        }
+        
+        # Build headers (with optional auth)
+        headers = {"Content-Type": "application/json"}
+        auth_token = os.getenv("HEARTBEAT_AUTH_TOKEN")
+        if auth_token:
+            headers["Authorization"] = auth_token
+        
+        # Send heartbeat
+        async with aiohttp.ClientSession() as session:
+            async with session.post(webhook_url, json=payload, headers=headers, timeout=10) as response:
+                if response.status in [200, 201, 202, 204]:
+                    _heartbeat_state["last_sent"] = datetime.now(BRUSSELS_TZ)
+                    _heartbeat_state["consecutive_failures"] = 0
+                else:
+                    _heartbeat_state["consecutive_failures"] += 1
+                    print(f"⚠️ Heartbeat failed: HTTP {response.status}")
+    
+    except asyncio.TimeoutError:
+        _heartbeat_state["consecutive_failures"] += 1
+        print("⚠️ Heartbeat timeout")
+    except Exception as e:
+        _heartbeat_state["consecutive_failures"] += 1
+        print(f"⚠️ Heartbeat error: {e}")
+    finally:
+        db.close()
+
+
+def format_uptime(seconds: float) -> str:
+    """Format uptime in a human-readable way."""
+    seconds = int(seconds)
+    days, remainder = divmod(seconds, 86400)
+    hours, remainder = divmod(remainder, 3600)
+    minutes, secs = divmod(remainder, 60)
+    
+    parts = []
+    if days > 0:
+        parts.append(f"{days}d")
+    if hours > 0:
+        parts.append(f"{hours}h")
+    if minutes > 0:
+        parts.append(f"{minutes}m")
+    if secs > 0 or not parts:
+        parts.append(f"{secs}s")
+    
+    return " ".join(parts)
+
+
+async def send_shutdown_webhook():
+    """
+    Sends a shutdown notification to external monitoring system (N8N).
+    This indicates a graceful shutdown (not a crash), so N8N can differentiate.
+    """
+    webhook_url = os.getenv("HEARTBEAT_WEBHOOK_URL")
+    if not webhook_url:
+        return
+    
+    try:
+        # Calculate final uptime
+        uptime_seconds = 0
+        if _heartbeat_state["start_time"]:
+            uptime_seconds = (datetime.now(BRUSSELS_TZ) - _heartbeat_state["start_time"]).total_seconds()
+        
+        # Build payload
+        payload = {
+            "bot_name": "TopStepBot",
+            "timestamp": datetime.now(BRUSSELS_TZ).isoformat(),
+            "event": "shutdown",
+            "reason": "graceful",
+            "uptime_seconds": int(uptime_seconds),
+            "uptime_formatted": format_uptime(uptime_seconds),
+            "version": "2.0.0"
+        }
+        
+        # Build headers (with optional auth)
+        headers = {"Content-Type": "application/json"}
+        auth_token = os.getenv("HEARTBEAT_AUTH_TOKEN")
+        if auth_token:
+            headers["Authorization"] = auth_token
+        
+        # Send shutdown notification
+        async with aiohttp.ClientSession() as session:
+            async with session.post(webhook_url, json=payload, headers=headers, timeout=5) as response:
+                if response.status in [200, 201, 202, 204]:
+                    print("✅ Shutdown notification sent to monitoring")
+                else:
+                    print(f"⚠️ Shutdown notification failed: HTTP {response.status}")
+    
+    except Exception as e:
+        print(f"⚠️ Shutdown notification error: {e}")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
@@ -732,6 +878,15 @@ async def lifespan(app: FastAPI):
     # API Health Check (every 60 seconds)
     scheduler.add_job(api_health_check_job, 'interval', seconds=60)
 
+    # Heartbeat Job (configurable interval, default 60s)
+    heartbeat_interval = int(os.getenv("HEARTBEAT_INTERVAL_SECONDS", "60"))
+    if os.getenv("HEARTBEAT_WEBHOOK_URL"):
+        scheduler.add_job(heartbeat_job, 'interval', seconds=heartbeat_interval)
+        print(f"Heartbeat configured: every {heartbeat_interval}s -> {os.getenv('HEARTBEAT_WEBHOOK_URL')}")
+
+    # Initialize heartbeat start time
+    _heartbeat_state["start_time"] = datetime.now(BRUSSELS_TZ)
+
     scheduler.start()
     print("Scheduler started.")
 
@@ -741,20 +896,37 @@ async def lifespan(app: FastAPI):
     yield
     
     # Shutdown
+    print("\n🛑 Graceful shutdown initiated...")
+    
+    # Stop scheduler FIRST to prevent jobs from running during shutdown
+    scheduler.shutdown(wait=False)
+    print("   ✓ Scheduler stopped")
+    
+    # Stop Telegram polling
     telegram_bot.stop_polling()
+    print("   ✓ Telegram polling stopped")
+    
+    # Send shutdown notification to monitoring
+    await send_shutdown_webhook()
+    print("   ✓ Shutdown notification sent")
     
     # Save Persistence State
     save_state({
         "last_open_positions": _last_open_positions
     })
+    print("   ✓ State persisted")
     
+    # Notify Telegram users
     await telegram_service.notify_shutdown()
-    scheduler.shutdown()
+    print("   ✓ Telegram notification sent")
     
+    # Wait for polling task to finish
     try:
         await polling_task
     except asyncio.CancelledError:
         pass
+    
+    print("✅ Shutdown complete")
 
 
 app = FastAPI(title="TopStep Trading Bot", version="2.0.0", lifespan=lifespan)

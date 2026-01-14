@@ -79,6 +79,11 @@ DATABASE_URL=sqlite:///./topstepbot.db
 
 # Optional
 NGROK_AUTHTOKEN=your_ngrok_token
+
+# Heartbeat Monitoring (Optional - for external systems like N8N)
+HEARTBEAT_WEBHOOK_URL=https://your-n8n.cloud/webhook/heartbeat
+HEARTBEAT_INTERVAL_SECONDS=60
+HEARTBEAT_AUTH_TOKEN=your_secret_token
 ```
 
 ### Start the Bot
@@ -195,6 +200,50 @@ Map TradingView tickers (e.g., `MNQ1!`) to TopStep contracts (e.g., `MNQH6`):
 | Startup Backup | On start | ✅ |
 
 Backups stored in `./backups/`
+
+---
+
+## 🔔 External Monitoring (Heartbeat)
+
+The bot can send periodic heartbeat pings to an external monitoring system (e.g., N8N, Healthchecks.io) to detect downtime.
+
+### Configuration
+```env
+HEARTBEAT_WEBHOOK_URL=https://your-monitoring-service.com/webhook
+HEARTBEAT_INTERVAL_SECONDS=60
+HEARTBEAT_AUTH_TOKEN=your_secret_token  # Sent as Authorization header value
+```
+
+### Payloads
+
+**Heartbeat (every 60s):**
+```json
+{
+  "bot_name": "TopStepBot",
+  "timestamp": "2026-01-14T11:18:00+01:00",
+  "uptime_seconds": 3600,
+  "uptime_formatted": "1h 0m",
+  "trading_enabled": true,
+  "active_accounts": 2,
+  "api_healthy": true,
+  "version": "2.0.0"
+}
+```
+
+**Graceful Shutdown (CTRL-C):**
+```json
+{
+  "bot_name": "TopStepBot",
+  "timestamp": "2026-01-14T12:18:00+01:00",
+  "event": "shutdown",
+  "reason": "graceful",
+  "uptime_seconds": 7200,
+  "uptime_formatted": "2h 0m",
+  "version": "2.0.0"
+}
+```
+
+> **Tip**: In N8N, check for `event: "shutdown"` to avoid false alerts on planned restarts.
 
 ---
 

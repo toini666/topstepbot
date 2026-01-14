@@ -144,6 +144,8 @@ Account Settings (per account)
 | **Position Monitoring** | Detects closed positions every 5s for notifications |
 | **Orphan Detection** | Alerts for orders without matching positions |
 | **API Health Check** | Pings TopStep every 60s, alerts on failure |
+| **Heartbeat Monitoring** | Sends pings to external systems (N8N) for crash detection |
+| **Graceful Shutdown** | Notifies monitoring system on planned stops (CTRL-C) |
 | **Manual Trade Sync** | Detects and tracks manually executed trades |
 
 ---

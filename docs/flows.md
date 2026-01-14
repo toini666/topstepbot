@@ -14,9 +14,9 @@ This document details the exact sequences, validations, and API calls for all tr
 6. [Cross-Account Direction Check](#6-cross-account-direction-check)
 7. [Session Validation Logic](#7-session-validation-logic)
 8. [Position Sizing Calculation](#8-position-sizing-calculation)
-
 9. [Strategy Configuration Management](#9-strategy-configuration-management)
 10. [API Health Check Flow](#10-api-health-check-flow)
+11. [Heartbeat Monitoring Flow](#11-heartbeat-monitoring-flow)
 
 ---
 
@@ -628,3 +628,101 @@ Scheduled job every 60 seconds (backend).
       - Send DOWN notification (Telegram)
       - Set notified flag = True
 ```
+
+---
+
+## 11. Heartbeat Monitoring Flow
+
+### Purpose
+External uptime monitoring via webhook pings. Allows systems like N8N to detect bot crashes and send alerts when heartbeats stop arriving.
+
+### Configuration
+```env
+HEARTBEAT_WEBHOOK_URL=https://n8n.example.com/webhook/tradingbot/heartbeat
+HEARTBEAT_INTERVAL_SECONDS=60
+HEARTBEAT_AUTH_TOKEN=your_secret_token
+```
+
+### Heartbeat Job (Every 60s)
+
+```
+1. Check if HEARTBEAT_WEBHOOK_URL is configured
+   - IF not set: Skip (feature disabled)
+   
+2. Gather bot status:
+   a. Calculate uptime since startup
+   b. Get global trading_enabled status
+   c. Count active accounts
+   d. Get API health status
+   
+3. Build payload:
+   {
+     "bot_name": "TopStepBot",
+     "timestamp": "2026-01-14T11:18:00+01:00",
+     "uptime_seconds": 3600,
+     "uptime_formatted": "1h 0m",
+     "trading_enabled": true,
+     "active_accounts": 2,
+     "api_healthy": true,
+     "version": "2.0.0"
+   }
+   
+4. Build headers:
+   - Content-Type: application/json
+   - IF HEARTBEAT_AUTH_TOKEN set:
+     - Authorization: {token}
+     
+5. POST to webhook URL (timeout: 10s)
+
+6. Track failures (log only, no Telegram to avoid loops)
+```
+
+### Shutdown Notification
+
+On graceful shutdown (CTRL-C), sends special payload:
+
+```
+1. Detect shutdown signal (SIGINT/SIGTERM)
+
+2. Build shutdown payload:
+   {
+     "bot_name": "TopStepBot",
+     "timestamp": "2026-01-14T12:18:00+01:00",
+     "event": "shutdown",
+     "reason": "graceful",
+     "uptime_seconds": 7200,
+     "uptime_formatted": "2h 0m",
+     "version": "2.0.0"
+   }
+   
+3. POST to webhook URL (timeout: 5s)
+
+4. Continue with normal shutdown sequence
+```
+
+### N8N Integration Example
+
+```
+Workflow: Heartbeat Receiver
+├── Webhook Trigger (receives heartbeat)
+├── IF event == "shutdown":
+│   └── Update status: "Gracefully stopped" (no alert)
+├── ELSE:
+│   └── Update last_ping timestamp
+│
+Workflow: Alert Monitor (runs every 2-3 mins)
+├── Check: last_ping > 2 minutes ago?
+├── IF true AND status != "Gracefully stopped":
+│   └── Send Telegram Alert: "Bot crashed!"
+```
+
+### Payload Comparison
+
+| Field | Heartbeat | Shutdown |
+|-------|-----------|----------|
+| `event` | ❌ absent | `"shutdown"` |
+| `reason` | ❌ absent | `"graceful"` |
+| `trading_enabled` | ✅ | ❌ absent |
+| `active_accounts` | ✅ | ❌ absent |
+| `api_healthy` | ✅ | ❌ absent |
+| `uptime_*` | ✅ | ✅ |

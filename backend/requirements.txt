@@ -3,6 +3,7 @@ uvicorn[standard]
 pydantic
 sqlalchemy
 httpx
+aiohttp
 python-dotenv
 pytest
 pytz

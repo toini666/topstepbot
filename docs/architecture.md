@@ -234,6 +234,7 @@ Data export and analytics endpoints.
 | Position Monitor | Every 5s | Detect closed positions, update Trade status to CLOSED with PnL/fees, notify via Telegram |
 | Auto Flatten | Configurable time | Close all positions daily |
 | API Health Check | Every 60s | Pings API, tracks health, alerts on consecutive failures |
+| **Heartbeat** | Configurable (default 60s) | Sends ping to external monitoring (N8N) with bot status |
 | Database Backup | 03:00 UTC | Copy database file |
 | Log Cleanup | 03:15 UTC | Remove logs > 7 days |
 
@@ -470,6 +471,11 @@ TELEGRAM_ID=chat_id
 
 # Database
 DATABASE_URL=sqlite:///./topstepbot.db
+
+# Heartbeat Monitoring (Optional)
+HEARTBEAT_WEBHOOK_URL=https://your-monitoring.com/webhook
+HEARTBEAT_INTERVAL_SECONDS=60
+HEARTBEAT_AUTH_TOKEN=your_secret_token
 ```
 
 ### Global Settings (Database)
