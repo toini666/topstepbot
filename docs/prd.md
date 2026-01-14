@@ -42,7 +42,8 @@ TopStep Bot is an automated trading system that bridges TradingView alerts with 
 ```
 Global Settings (all accounts)
 ├── Market Hours (open/close times)
-├── Trading Days (M T W T F S S toggles)
+├── Weekend Markets Open (toggle for weekend market status)
+├── Trading Days (M T W T F S S toggles - user preference)
 ├── Blocked Trading Periods
 ├── Auto-Flatten Time
 ├── Trading Sessions (ASIA, UK, US)

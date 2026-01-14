@@ -314,49 +314,37 @@ class TelegramBot:
             
             account_id = int(setting.value)
             
-            # Use Risk Engine logic manually? or just call client?
-            # Client flatten is easiest.
-            # 1. Cancel Orders
-            await topstep_client.cancel_all_orders(account_id)
+            # Get account name
+            from backend.database import AccountSettings
+            account_settings = db.query(AccountSettings).filter(AccountSettings.account_id == account_id).first()
+            account_name = account_settings.account_name if account_settings and account_settings.account_name else str(account_id)
+            
+            # 1. Cancel Orders and count
+            orders_cancelled = await topstep_client.cancel_all_orders(account_id)
             
             # 2. Close Positions
             positions = await topstep_client.get_open_positions(account_id)
-            count = 0
+            positions_closed = 0
             for pos in positions:
-                # Invert side? 
-                # contractId is needed.
-                # TopStepClient likely handles flattening? No, we implemented 'flatten_position' usually.
-                # Let's use the raw implementation here to be safe and explicit.
                 contract_id = pos.get('contractId')
                 qty = pos.get('size', pos.get('quantity'))
-                # Fix: Use 'type' for direction (1=Long, 2=Short)
-                # If Long (1), we SELL. If Short (2), we BUY.
                 p_type = pos.get('type')
                 
-                action = "SELL" # Default Close Long
-                if str(p_type) == '2': # Short
-                    action = "BUY"
-                elif str(p_type) == '1': # Long
-                    action = "SELL"
-                else:
-                    # Fallback check
-                    raw_side = str(pos.get('side')).upper()
-                    if raw_side in ['1', '2', 'SELL', 'SHORT']:
-                        action = "BUY"
+                action = "SELL" if str(p_type) == '1' else "BUY"
                 
                 await topstep_client.place_order(
-                    ticker=contract_id, # Use ID directly
+                    ticker=contract_id,
                     action=action,
                     quantity=qty,
                     account_id=account_id,
-                    contract_id=contract_id # Optimization
+                    contract_id=contract_id
                 )
-                count += 1
+                positions_closed += 1
             
-            await self.reply(f"✅ Flatten Complete. Closed {count} positions and cancelled orders.")
+            await self.reply(f"✅ <b>Flatten Complete</b>\n📍 Closed {positions_closed} position(s)\n📋 Cancelled {orders_cancelled} order(s)\n💼 Account: {account_name}")
             
             # Log Action
-            db.add(Log(level="WARNING", message=f"Telegram: Flatten Executed (Closed {count} pos, Cancelled Orders)"))
+            db.add(Log(level="WARNING", message=f"Telegram: Flatten Executed on {account_name} ({positions_closed} pos, {orders_cancelled} orders)"))
             db.commit()
 
         except Exception as e:
@@ -370,15 +358,24 @@ class TelegramBot:
         db = SessionLocal()
         try:
             setting = db.query(Setting).filter(Setting.key == "selected_account_id").first()
-            if not setting: return
+            if not setting:
+                await self.reply("❌ No account selected.")
+                return
             account_id = int(setting.value)
             
-            await topstep_client.cancel_all_orders(account_id)
-            await self.reply("✅ All working orders cancelled.")
+            # Get account name
+            from backend.database import AccountSettings
+            account_settings = db.query(AccountSettings).filter(AccountSettings.account_id == account_id).first()
+            account_name = account_settings.account_name if account_settings and account_settings.account_name else str(account_id)
+            
+            count = await topstep_client.cancel_all_orders(account_id)
+            await self.reply(f"✅ Cancelled {count} order(s) on {account_name}")
             
             # Log Action
-            db.add(Log(level="WARNING", message="Telegram: All Orders Cancelled"))
+            db.add(Log(level="WARNING", message=f"Telegram: Cancelled {count} orders on {account_name}"))
             db.commit()
+        except Exception as e:
+            await self.reply(f"❌ Error: {e}")
         finally:
             db.close()
 
@@ -470,18 +467,18 @@ class TelegramBot:
                 await self.reply("⚠️ No accounts found")
                 return
 
-            # Get master switch
+            # Get per-account trading status
             db = SessionLocal()
             try:
-                switch = db.query(Setting).filter(Setting.key == "master_switch").first()
-                is_on = switch and switch.value == "ON"
-                status_emoji = "🟢 ON" if is_on else "🔴 OFF"
+                from backend.database import AccountSettings
+                account_settings_map = {}
+                for acc_settings in db.query(AccountSettings).all():
+                    account_settings_map[acc_settings.account_id] = acc_settings.trading_enabled
             finally:
                 db.close()
 
-            msg = f"📊 <b>All Accounts Status</b>\nMaster Switch: {status_emoji}\n\n"
+            msg = f"📊 <b>All Accounts Status</b>\n\n"
             
-            total_balance = 0.0
             total_pnl = 0.0
             total_positions = 0
             
@@ -489,7 +486,10 @@ class TelegramBot:
                 acc_id = int(acc.get('id'))
                 acc_name = acc.get('name', str(acc_id))
                 balance = acc.get('balance', 0)
-                total_balance += balance
+                
+                # Trading status for this account
+                is_trading_on = account_settings_map.get(acc_id, False)
+                trading_status = "🟢" if is_trading_on else "🔴"
                 
                 # Get positions & PnL for this account
                 positions = await topstep_client.get_open_positions(acc_id)
@@ -497,13 +497,13 @@ class TelegramBot:
                 total_pnl += daily_pnl
                 total_positions += len(positions)
                 
-                pos_str = f"📈 {len(positions)} pos" if positions else "✅ Flat"
-                pnl_emoji = "🟢" if daily_pnl >= 0 else "🔴"
+                pos_str = f"{len(positions)} pos" if positions else "Flat"
                 
-                msg += f"<b>{acc_name}</b>\n"
-                msg += f"  💰 ${balance:,.2f} | {pnl_emoji} ${daily_pnl:,.2f} | {pos_str}\n"
+                msg += f"{trading_status} <b>{acc_name}</b>\n"
+                msg += f"   💰 ${balance:,.2f} | PnL: ${daily_pnl:,.2f} | {pos_str}\n"
             
-            msg += f"\n<b>TOTAL:</b> ${total_balance:,.2f} | PnL: ${total_pnl:,.2f} | {total_positions} positions"
+            pnl_total_emoji = "🟢" if total_pnl >= 0 else "🔴"
+            msg += f"\n<b>TOTAL:</b> {pnl_total_emoji} ${total_pnl:,.2f} PnL | {total_positions} position(s)"
             
             await self.reply(msg)
             
@@ -521,8 +521,7 @@ class TelegramBot:
                 await self.reply("⚠️ No accounts found")
                 return
             
-            total_positions = 0
-            total_orders = 0
+            results = []
             
             for acc in accounts_list:
                 acc_id = int(acc.get('id'))
@@ -531,17 +530,16 @@ class TelegramBot:
                 try:
                     # 1. Cancel all orders
                     orders_cancelled = await topstep_client.cancel_all_orders(acc_id)
-                    total_orders += orders_cancelled if isinstance(orders_cancelled, int) else 0
                     
                     # 2. Close all positions
                     positions = await topstep_client.get_open_positions(acc_id)
+                    positions_closed = 0
                     
                     for pos in positions:
                         contract_id = pos.get('contractId')
                         qty = pos.get('size', pos.get('quantity'))
                         p_type = pos.get('type')
                         
-                        # If Long (1), we SELL. If Short (2), we BUY.
                         action = "SELL" if str(p_type) == '1' else "BUY"
                         
                         await topstep_client.place_order(
@@ -551,15 +549,18 @@ class TelegramBot:
                             account_id=acc_id,
                             contract_id=contract_id
                         )
-                        total_positions += 1
+                        positions_closed += 1
+                    
+                    results.append(f"• {acc_name}: {positions_closed} pos, {orders_cancelled} orders")
                     
                 except Exception as e:
-                    await self.reply(f"⚠️ Error on {acc_name}: {e}")
+                    results.append(f"• {acc_name}: ⚠️ Error - {e}")
             
-            await self.reply(f"✅ <b>Flatten Complete</b>\nClosed {total_positions} positions across all accounts.")
+            msg = "✅ <b>Flatten Complete</b>\n" + "\n".join(results)
+            await self.reply(msg)
             
             # Log Action
-            db.add(Log(level="WARNING", message=f"Telegram: Flatten ALL Executed ({total_positions} positions)"))
+            db.add(Log(level="WARNING", message=f"Telegram: Flatten ALL Executed"))
             db.commit()
             
         except Exception as e:
@@ -576,18 +577,20 @@ class TelegramBot:
                 await self.reply("⚠️ No accounts found")
                 return
             
-            total_cancelled = 0
+            results = []
             
             for acc in accounts_list:
                 acc_id = int(acc.get('id'))
+                acc_name = acc.get('name', str(acc_id))
                 try:
-                    result = await topstep_client.cancel_all_orders(acc_id)
-                    if isinstance(result, int):
-                        total_cancelled += result
+                    count = await topstep_client.cancel_all_orders(acc_id)
+                    results.append(f"• {acc_name}: {count} order(s)")
                 except Exception as e:
+                    results.append(f"• {acc_name}: ⚠️ Error")
                     print(f"Cancel error for account {acc_id}: {e}")
             
-            await self.reply(f"✅ Cancelled orders on all accounts.")
+            msg = "✅ <b>Cancelled Orders</b>\n" + "\n".join(results)
+            await self.reply(msg)
             
             # Log Action
             db.add(Log(level="WARNING", message=f"Telegram: Cancel ALL Orders Executed"))

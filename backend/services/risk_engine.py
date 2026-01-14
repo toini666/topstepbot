@@ -60,7 +60,10 @@ class RiskEngine:
         settings["market_open_time"] = self._get_setting("market_open_time", "00:00")
         settings["market_close_time"] = self._get_setting("market_close_time", "22:00")
         
-        # Trading days (default: Mon-Fri)
+        # Weekend markets open (NEW: separate from trading_days)
+        settings["weekend_markets_open"] = self._get_setting("weekend_markets_open", "false").lower() == "true"
+        
+        # Trading days (default: Mon-Fri) - user preference, not market status
         td_json = self._get_setting("trading_days", '["MON","TUE","WED","THU","FRI"]')
         try:
             settings["trading_days"] = json.loads(td_json)
@@ -175,9 +178,45 @@ class RiskEngine:
     # VALIDATION CHECKS
     # =========================================================================
     
+    def check_market_open(self) -> Tuple[bool, str]:
+        """
+        Check if market is actually open (hours + weekend_markets_open setting).
+        This is for display purposes in the UI banner.
+        Does NOT check trading_days (user preference) or blocked_periods.
+        Returns (is_open, reason).
+        """
+        now_bru = datetime.now(BRUSSELS_TZ)
+        now_time = now_bru.time()
+        settings = self.get_global_settings()
+        
+        # Weekend check based on weekend_markets_open setting
+        if now_bru.weekday() >= 5:  # Saturday=5, Sunday=6
+            if not settings.get("weekend_markets_open", False):
+                day_full = now_bru.strftime("%A")
+                return False, f"Market closed ({day_full})"
+        
+        # Market hours check
+        try:
+            open_h, open_m = map(int, settings["market_open_time"].split(':'))
+            close_h, close_m = map(int, settings["market_close_time"].split(':'))
+            market_open = time(open_h, open_m)
+            market_close = time(close_h, close_m)
+            
+            if now_time < market_open:
+                return False, f"Market Closed (Before {settings['market_open_time']})"
+            if now_time >= market_close:
+                return False, f"Market Closed (After {settings['market_close_time']})"
+        except Exception as e:
+            print(f"Market hours parse error: {e}")
+            if now_time >= time(22, 0):
+                return False, "Market Closed (> 22:00)"
+        
+        return True, "OK"
+    
     def check_market_hours(self) -> Tuple[bool, str]:
         """
-        Check if market is open (within configured hours and on allowed days).
+        Check if TRADING is allowed (user preference via trading_days + market hours).
+        Used for trade validation, NOT for UI banner.
         Returns (allowed, reason).
         """
         now_bru = datetime.now(BRUSSELS_TZ)
@@ -186,7 +225,7 @@ class RiskEngine:
         # Get settings
         settings = self.get_global_settings()
         
-        # Day of week check (replaces hardcoded weekend check)
+        # Day of week check (user preference)
         day_names = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"]
         current_day = day_names[now_bru.weekday()]
         enabled_days = settings.get("trading_days", ["MON", "TUE", "WED", "THU", "FRI"])

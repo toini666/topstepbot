@@ -209,6 +209,7 @@ class GlobalSettingsResponse(BaseModel):
     auto_flatten_time: str = "21:55"
     market_open_time: str = "00:00"
     market_close_time: str = "22:00"
+    weekend_markets_open: bool = False  # Are markets open on weekends?
     trading_days: List[str] = ["MON", "TUE", "WED", "THU", "FRI"]
     enforce_single_position_per_asset: bool = True
     block_cross_account_opposite: bool = True
@@ -221,6 +222,7 @@ class GlobalSettingsUpdate(BaseModel):
     auto_flatten_time: Optional[str] = None
     market_open_time: Optional[str] = None
     market_close_time: Optional[str] = None
+    weekend_markets_open: Optional[bool] = None  # Are markets open on weekends?
     trading_days: Optional[List[str]] = None
     enforce_single_position_per_asset: Optional[bool] = None
     block_cross_account_opposite: Optional[bool] = None

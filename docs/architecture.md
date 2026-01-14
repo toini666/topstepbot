@@ -97,7 +97,8 @@ class RiskEngine:
     get_current_session() → Optional[str]
     
     # Validation Checks
-    check_market_hours() → Tuple[bool, str]  # Uses configurable trading_days
+    check_market_open() → Tuple[bool, str]      # Market status (hours + weekend_markets_open)
+    check_market_hours() → Tuple[bool, str]     # Trading allowed (trading_days + hours)
     check_blocked_periods() → Tuple[bool, str]
     check_account_enabled(account_id) → Tuple[bool, str]
     check_strategy_enabled(account_id, strategy) → Tuple[bool, str]
@@ -301,7 +302,7 @@ The bot provides remote control and monitoring via Telegram.
 | Command | Description |
 |---------|-------------|
 | `/status` | Current account balance, PnL, positions |
-| `/status_all` | All accounts overview (balance, PnL, positions count) |
+| `/status_all` | All accounts: trading status, balance, PnL, positions |
 | `/accounts` | List all available accounts with IDs |
 
 ### Control Commands
@@ -312,18 +313,18 @@ The bot provides remote control and monitoring via Telegram.
 | `/off` | Disable trading on selected account |
 | `/on_all` | Enable trading on ALL accounts |
 | `/off_all` | Disable trading on ALL accounts |
-| `/login` | Connect to TopStep |
-| `/logout` | Disconnect |
+| `/login` | Connect to TopStep API |
+| `/logout` | Disconnect from TopStep API |
 | `/switch [ID]` | Switch active account |
 
 ### Emergency Commands
 
 | Command | Description |
 |---------|-------------|
-| `/cancel_orders` | Cancel orders on current account |
-| `/cancel_all` | Cancel orders on ALL accounts |
-| `/flatten` | Flatten current account |
-| `/flatten_all` | 🚨 Flatten ALL accounts |
+| `/cancel_orders` | Cancel orders on current account (shows count) |
+| `/cancel_all` | Cancel orders on ALL accounts (per-account breakdown) |
+| `/flatten` | Flatten current account (shows positions + orders count) |
+| `/flatten_all` | 🚨 Flatten ALL accounts (per-account breakdown) |
 
 ### Startup Notification
 On bot startup, sends a summary of any open positions across all accounts instead of individual "Position Opened" notifications.
@@ -477,10 +478,11 @@ DATABASE_URL=sqlite:///./topstepbot.db
 |-----|---------|-------------|
 | `market_open_time` | "00:00" | Market opens (Brussels TZ) |
 | `market_close_time` | "22:00" | Market closes |
+| `weekend_markets_open` | false | Are futures markets open on weekends? |
 | `blocked_periods_enabled` | true | Enable time blocks |
 | `blocked_periods` | [] | JSON array of time blocks |
 | `auto_flatten_enabled` | false | Daily auto-flatten |
 | `auto_flatten_time` | "21:55" | Flatten time |
-| `trading_days` | ["MON","TUE","WED","THU","FRI"] | Days when trading is allowed |
+| `trading_days` | ["MON","TUE","WED","THU","FRI"] | Days when user wants to trade |
 | `enforce_single_position_per_asset` | true | Block duplicate positions on same ticker |
 | `block_cross_account_opposite` | true | Block opposing positions across accounts |

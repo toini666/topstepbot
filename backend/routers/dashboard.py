@@ -52,19 +52,24 @@ def get_connection_status():
 
 @router.get("/dashboard/market-status")
 def get_market_status(db: Session = Depends(get_db)):
-    """Check if market is open using RiskEngine logic."""
+    """Check if market is open and if trading is allowed."""
     risk_engine = RiskEngine(db)
-    is_open, reason = risk_engine.check_market_hours()
     
-    # Also check blocked periods
-    if is_open:
-        is_open, reason = risk_engine.check_blocked_periods()
+    # Market status (for UI banner) - based on market hours + weekend_markets_open
+    is_market_open, market_reason = risk_engine.check_market_open()
+    
+    # Trading allowed (for trade validation) - based on trading_days + market hours + blocked periods
+    is_trading_allowed, trading_reason = risk_engine.check_market_hours()
+    if is_trading_allowed:
+        is_trading_allowed, trading_reason = risk_engine.check_blocked_periods()
     
     current_session = risk_engine.get_current_session()
     
     return {
-        "is_open": is_open,
-        "reason": reason,
+        "is_open": is_market_open,
+        "reason": market_reason,
+        "is_trading_allowed": is_trading_allowed,
+        "trading_reason": trading_reason,
         "current_session": current_session
     }
 
@@ -86,6 +91,7 @@ def get_global_config(db: Session = Depends(get_db)):
         auto_flatten_time=settings.get("auto_flatten_time", "21:55"),
         market_open_time=settings.get("market_open_time", "00:00"),
         market_close_time=settings.get("market_close_time", "22:00"),
+        weekend_markets_open=settings.get("weekend_markets_open", False),
         trading_days=settings.get("trading_days", ["MON", "TUE", "WED", "THU", "FRI"]),
         enforce_single_position_per_asset=settings.get("enforce_single_position_per_asset", True),
         block_cross_account_opposite=settings.get("block_cross_account_opposite", True)
@@ -123,7 +129,13 @@ def update_global_config(req: GlobalSettingsUpdate, db: Session = Depends(get_db
     if req.market_close_time is not None:
         set_setting("market_close_time", req.market_close_time)
     
-    # New settings
+    # Weekend markets toggle
+    if req.weekend_markets_open is not None:
+        set_setting("weekend_markets_open", "true" if req.weekend_markets_open else "false")
+        status = "OPEN" if req.weekend_markets_open else "CLOSED"
+        log_messages.append(f"Weekend markets set to {status}")
+    
+    # Trading days (user preference)
     if req.trading_days is not None:
         set_setting("trading_days", json.dumps(req.trading_days))
         log_messages.append(f"Trading days updated to [{','.join(req.trading_days)}]")

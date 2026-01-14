@@ -35,6 +35,7 @@ export const useTopStep = () => {
         auto_flatten_time: "21:55",
         market_open_time: "00:00",
         market_close_time: "22:00",
+        weekend_markets_open: false,
         trading_days: ['MON', 'TUE', 'WED', 'THU', 'FRI'],
         enforce_single_position_per_asset: true,
         block_cross_account_opposite: true
@@ -42,7 +43,12 @@ export const useTopStep = () => {
     const [accountSettings, setAccountSettings] = useState<Record<number, AccountSettings>>({});
     const [tradingSessions, setTradingSessions] = useState<TradingSession[]>([]);
     const [strategies, setStrategies] = useState<Strategy[]>([]);
-    const [marketStatus, setMarketStatus] = useState<MarketStatus>({ is_open: false, reason: 'Connecting...' });
+    const [marketStatus, setMarketStatus] = useState<MarketStatus>({
+        is_open: false,
+        reason: 'Connecting...',
+        is_trading_allowed: false,
+        trading_reason: 'Connecting...'
+    });
 
     // UI State
     const [selectedAccountId, setSelectedAccountId] = useState<number | null>(null);

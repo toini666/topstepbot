@@ -24,6 +24,7 @@ export function ConfigModal({ isOpen, onClose, config, onSave }: ConfigModalProp
     const [autoFlattenTime, setAutoFlattenTime] = useState("21:55");
     const [marketOpenTime, setMarketOpenTime] = useState("00:00");
     const [marketCloseTime, setMarketCloseTime] = useState("22:00");
+    const [weekendMarketsOpen, setWeekendMarketsOpen] = useState(false);
 
     // New settings
     const [tradingDays, setTradingDays] = useState<string[]>(['MON', 'TUE', 'WED', 'THU', 'FRI']);
@@ -49,6 +50,7 @@ export function ConfigModal({ isOpen, onClose, config, onSave }: ConfigModalProp
             setAutoFlattenTime(config.auto_flatten_time || "21:55");
             setMarketOpenTime(config.market_open_time || "00:00");
             setMarketCloseTime(config.market_close_time || "22:00");
+            setWeekendMarketsOpen(config.weekend_markets_open ?? false);
             setTradingDays(config.trading_days || ['MON', 'TUE', 'WED', 'THU', 'FRI']);
             setEnforceSinglePosition(config.enforce_single_position_per_asset ?? true);
             setBlockCrossAccount(config.block_cross_account_opposite ?? true);
@@ -133,6 +135,7 @@ export function ConfigModal({ isOpen, onClose, config, onSave }: ConfigModalProp
                 auto_flatten_time: autoFlattenTime,
                 market_open_time: marketOpenTime,
                 market_close_time: marketCloseTime,
+                weekend_markets_open: weekendMarketsOpen,
                 trading_days: tradingDays,
                 enforce_single_position_per_asset: enforceSinglePosition,
                 block_cross_account_opposite: blockCrossAccount
@@ -241,6 +244,20 @@ export function ConfigModal({ isOpen, onClose, config, onSave }: ConfigModalProp
                                         value={marketCloseTime}
                                         onChange={setMarketCloseTime}
                                     />
+                                </div>
+
+                                {/* Weekend Markets Toggle */}
+                                <div className="flex items-center justify-between bg-slate-950 p-3 rounded-xl border border-slate-800">
+                                    <div>
+                                        <span className="text-sm text-slate-300">Weekend Markets Open</span>
+                                        <p className="text-[10px] text-slate-500">Are futures markets open on Saturday/Sunday?</p>
+                                    </div>
+                                    <button
+                                        onClick={() => setWeekendMarketsOpen(!weekendMarketsOpen)}
+                                        className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${weekendMarketsOpen ? 'bg-indigo-500' : 'bg-slate-700'}`}
+                                    >
+                                        <span className={`${weekendMarketsOpen ? 'translate-x-5' : 'translate-x-1'} inline-block h-3 w-3 transform rounded-full bg-white transition-transform`} />
+                                    </button>
                                 </div>
                             </div>
 

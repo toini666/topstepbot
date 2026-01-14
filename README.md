@@ -15,7 +15,7 @@ A professional-grade automated trading system for TopStepX. Executes TradingView
 - **Position Sizing**: Auto-calculates quantity based on risk per trade
 - **Session Filters**: Block trading during specific sessions (ASIA, UK, US)
 - **Blocked Periods**: Define custom time windows to prevent trading
-- **Master Switch**: Global kill switch for all trading
+- **Trading Days**: Per-day toggles for when you want to trade
 
 ### 📈 Trade Lifecycle
 - **SIGNAL**: Open new positions with SL/TP orders
@@ -33,14 +33,15 @@ A professional-grade automated trading system for TopStepX. Executes TradingView
 | Command | Description |
 |---------|-------------|
 | `/status` | Current account status |
-| `/status_all` | All accounts overview |
+| `/status_all` | All accounts: trading status, PnL, positions |
 | `/accounts` | List accounts with IDs |
 | `/switch [ID]` | Change active account |
-| `/on` / `/off` | Master switch control |
-| `/flatten` | Flatten current account |
-| `/flatten_all` | 🚨 Flatten ALL accounts |
-| `/cancel_orders` | Cancel current account orders |
-| `/cancel_all` | Cancel ALL account orders |
+| `/on` / `/off` | Enable/disable trading (current account) |
+| `/on_all` / `/off_all` | Enable/disable trading (ALL accounts) |
+| `/flatten` | Flatten current account (shows position + order count) |
+| `/flatten_all` | 🚨 Flatten ALL accounts (per-account breakdown) |
+| `/cancel_orders` | Cancel orders (shows count) |
+| `/cancel_all` | Cancel ALL account orders (per-account breakdown) |
 
 ---
 

@@ -118,7 +118,8 @@ export interface GlobalConfig {
     auto_flatten_time: string;
     market_open_time: string;
     market_close_time: string;
-    trading_days: string[];  // ['MON', 'TUE', 'WED', 'THU', 'FRI']
+    weekend_markets_open: boolean;  // Are markets open on weekends?
+    trading_days: string[];  // ['MON', 'TUE', 'WED', 'THU', 'FRI'] - user preference
     enforce_single_position_per_asset: boolean;
     block_cross_account_opposite: boolean;
 }
@@ -202,8 +203,10 @@ export interface TickerMap {
 // =============================================================================
 
 export interface MarketStatus {
-    is_open: boolean;
-    reason: string;
+    is_open: boolean;              // Is the market actually open (hours + weekend_markets_open)
+    reason: string;                // Reason for market status
+    is_trading_allowed: boolean;   // Is trading allowed (trading_days + blocked periods)
+    trading_reason: string;        // Reason if trading is blocked
     current_session?: string;
 }
 
