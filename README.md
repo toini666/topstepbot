@@ -220,7 +220,8 @@ HEARTBEAT_AUTH_TOKEN=your_secret_token  # Sent as Authorization header value
 ```json
 {
   "bot_name": "TopStepBot",
-  "timestamp": "2026-01-14T11:18:00+01:00",
+  "timestamp": "2026-01-15T12:31:00+01:00",
+  "timestamp_unix": 1736939460,
   "uptime_seconds": 3600,
   "uptime_formatted": "1h 0m",
   "trading_enabled": true,
@@ -234,7 +235,8 @@ HEARTBEAT_AUTH_TOKEN=your_secret_token  # Sent as Authorization header value
 ```json
 {
   "bot_name": "TopStepBot",
-  "timestamp": "2026-01-14T12:18:00+01:00",
+  "timestamp": "2026-01-15T14:31:00+01:00",
+  "timestamp_unix": 1736946660,
   "event": "shutdown",
   "reason": "graceful",
   "uptime_seconds": 7200,
@@ -243,7 +245,7 @@ HEARTBEAT_AUTH_TOKEN=your_secret_token  # Sent as Authorization header value
 }
 ```
 
-> **Tip**: In N8N, check for `event: "shutdown"` to avoid false alerts on planned restarts.
+> **Tip**: In N8N, check for `event: "shutdown"` to avoid false alerts on planned restarts. Use `timestamp_unix` for easier date manipulation.
 
 ---
 

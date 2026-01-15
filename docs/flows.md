@@ -649,16 +649,22 @@ HEARTBEAT_AUTH_TOKEN=your_secret_token
 1. Check if HEARTBEAT_WEBHOOK_URL is configured
    - IF not set: Skip (feature disabled)
    
-2. Gather bot status:
-   a. Calculate uptime since startup
+2. Detect sleep/wake:
+   - IF last heartbeat was > 2 minutes ago:
+     - Reset start_time (uptime restarts from 0)
+     - Log "Sleep detected"
+   
+3. Gather bot status:
+   a. Calculate uptime since startup (or last wake)
    b. Get global trading_enabled status
    c. Count active accounts
    d. Get API health status
    
-3. Build payload:
+4. Build payload:
    {
      "bot_name": "TopStepBot",
-     "timestamp": "2026-01-14T11:18:00+01:00",
+     "timestamp": "2026-01-15T12:31:00+01:00",
+     "timestamp_unix": 1736939460,
      "uptime_seconds": 3600,
      "uptime_formatted": "1h 0m",
      "trading_enabled": true,
@@ -667,14 +673,14 @@ HEARTBEAT_AUTH_TOKEN=your_secret_token
      "version": "2.0.0"
    }
    
-4. Build headers:
+5. Build headers:
    - Content-Type: application/json
    - IF HEARTBEAT_AUTH_TOKEN set:
      - Authorization: {token}
      
-5. POST to webhook URL (timeout: 10s)
+6. POST to webhook URL (timeout: 10s)
 
-6. Track failures (log only, no Telegram to avoid loops)
+7. Track failures (log only, no Telegram to avoid loops)
 ```
 
 ### Shutdown Notification
@@ -687,7 +693,8 @@ On graceful shutdown (CTRL-C), sends special payload:
 2. Build shutdown payload:
    {
      "bot_name": "TopStepBot",
-     "timestamp": "2026-01-14T12:18:00+01:00",
+     "timestamp": "2026-01-15T14:31:00+01:00",
+     "timestamp_unix": 1736946660,
      "event": "shutdown",
      "reason": "graceful",
      "uptime_seconds": 7200,
@@ -708,7 +715,7 @@ Workflow: Heartbeat Receiver
 ├── IF event == "shutdown":
 │   └── Update status: "Gracefully stopped" (no alert)
 ├── ELSE:
-│   └── Update last_ping timestamp
+│   └── Update last_ping using timestamp_unix
 │
 Workflow: Alert Monitor (runs every 2-3 mins)
 ├── Check: last_ping > 2 minutes ago?
@@ -720,6 +727,8 @@ Workflow: Alert Monitor (runs every 2-3 mins)
 
 | Field | Heartbeat | Shutdown |
 |-------|-----------|----------|
+| `timestamp` | ✅ ISO string | ✅ ISO string |
+| `timestamp_unix` | ✅ integer | ✅ integer |
 | `event` | ❌ absent | `"shutdown"` |
 | `reason` | ❌ absent | `"graceful"` |
 | `trading_enabled` | ✅ | ❌ absent |

@@ -658,10 +658,19 @@ async def heartbeat_job():
     
     db = SessionLocal()
     try:
+        now = datetime.now(BRUSSELS_TZ)
+        
+        # Detect sleep: if last heartbeat was > 2 minutes ago, reset start_time
+        if _heartbeat_state["last_sent"]:
+            time_since_last = (now - _heartbeat_state["last_sent"]).total_seconds()
+            if time_since_last > 120:  # More than 2 minutes = likely sleep/wake
+                print(f"💤 Sleep detected ({int(time_since_last)}s gap). Resetting uptime.")
+                _heartbeat_state["start_time"] = now
+        
         # Calculate uptime
         uptime_seconds = 0
         if _heartbeat_state["start_time"]:
-            uptime_seconds = (datetime.now(BRUSSELS_TZ) - _heartbeat_state["start_time"]).total_seconds()
+            uptime_seconds = (now - _heartbeat_state["start_time"]).total_seconds()
         
         # Get global trading status
         trading_enabled = True
@@ -679,10 +688,11 @@ async def heartbeat_job():
         # Get API health status
         api_healthy = _api_health.get("is_healthy", True)
         
-        # Build payload
+        # Build payload with both timestamp formats for flexibility
         payload = {
             "bot_name": "TopStepBot",
-            "timestamp": datetime.now(BRUSSELS_TZ).isoformat(),
+            "timestamp": now.isoformat(),
+            "timestamp_unix": int(now.timestamp()),
             "uptime_seconds": int(uptime_seconds),
             "uptime_formatted": format_uptime(uptime_seconds),
             "trading_enabled": trading_enabled,
@@ -747,15 +757,18 @@ async def send_shutdown_webhook():
         return
     
     try:
+        now = datetime.now(BRUSSELS_TZ)
+        
         # Calculate final uptime
         uptime_seconds = 0
         if _heartbeat_state["start_time"]:
-            uptime_seconds = (datetime.now(BRUSSELS_TZ) - _heartbeat_state["start_time"]).total_seconds()
+            uptime_seconds = (now - _heartbeat_state["start_time"]).total_seconds()
         
-        # Build payload
+        # Build payload with both timestamp formats for flexibility
         payload = {
             "bot_name": "TopStepBot",
-            "timestamp": datetime.now(BRUSSELS_TZ).isoformat(),
+            "timestamp": now.isoformat(),
+            "timestamp_unix": int(now.timestamp()),
             "event": "shutdown",
             "reason": "graceful",
             "uptime_seconds": int(uptime_seconds),
