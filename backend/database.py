@@ -138,6 +138,33 @@ class AccountStrategyConfig(Base):
 
 
 # =============================================================================
+# DISCORD NOTIFICATION SETTINGS
+# =============================================================================
+
+class DiscordNotificationSettings(Base):
+    """Per-account Discord notification settings."""
+    __tablename__ = "discord_notification_settings"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    account_id = Column(Integer, unique=True, index=True)
+    
+    # Global Discord settings
+    enabled = Column(Boolean, default=False)
+    webhook_url = Column(String, nullable=True)
+    
+    # Notification toggles
+    notify_position_open = Column(Boolean, default=True)
+    notify_position_close = Column(Boolean, default=True)
+    notify_daily_summary = Column(Boolean, default=False)
+    
+    # Daily summary time (HH:MM format)
+    daily_summary_time = Column(String, default="21:00")
+    
+    created_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc))
+    updated_at = Column(DateTime, onupdate=lambda: datetime.datetime.now(datetime.timezone.utc))
+
+
+# =============================================================================
 # TRADE TRACKING
 # =============================================================================
 

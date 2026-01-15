@@ -122,6 +122,12 @@ Account Settings (per account)
 | **Orphaned Orders** | Warning for orders without positions |
 | **Trading Toggled** | Account name, new status (via /on, /off, /on_all, /off_all) |
 
+### 8. Discord Integration
+- **Platform**: Rich embed notifications via Webhooks
+- **Content**: Position Open/Close (with visual PnL cues), Daily Summaries
+- **Configuration**: Per-account toggles for enabled/disabled, specific notification types, and summary scheduling.
+
+
 ### 8. Data & Analytics
 
 | Feature | Description |

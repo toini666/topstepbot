@@ -6,6 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [2026-01-16] - Discord Notifications & UI Refinement
+
+### Added
+- **Discord Integration**: Rich webhooks for Position Open/Close and Daily Summaries with visual PnL cues
+- **Discord Avatar**: Custom generated flat-design robot avatar
+- **Strategy & Timeframe**: Added to position close notifications for better tracking
+
+### Changed
+- **ConfigModal**: New premium "Account Selector" dropdown in settings
+- **Project Structure**: Consolidated debug scripts and tests into `scripts/debug/`
+- **Documentation**: Updated architecture and PRD with Discord features
+
+---
+
 ## [2026-01-15] - Ngrok Detection, Reconciliation & Dependencies
 
 ### Added

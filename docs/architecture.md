@@ -40,7 +40,8 @@ topstepbot/
 │       ├── telegram_bot.py     # Telegram command handler
 │       ├── maintenance_service.py # Backup & log cleanup
 │       ├── persistence_service.py # State persistence
-│       └── reconciliation_service.py # Manual trade reconciliation
+│       ├── reconciliation_service.py # Manual trade reconciliation
+│       └── discord_service.py # Discord notifications
 ├── frontend/
 │   ├── src/
 │   │   ├── App.tsx             # Main dashboard component
@@ -71,6 +72,7 @@ topstepbot/
 | `AccountSettings` | Per-account trading configuration |
 | `AccountStrategyConfig` | Strategy overrides per account |
 | `Trade` | Local trade records with full metadata |
+| `DiscordNotificationSettings` | Per-account Discord preferences |
 | `Log` | System event logs |
 
 #### Trade Model Fields
@@ -241,6 +243,7 @@ Data export and analytics endpoints.
 | **Ngrok URL Detection** | On startup | Detects URL changes, notifies via Terminal/Logs/Telegram |
 | Database Backup | 03:00 UTC | Copy database file |
 | Log Cleanup | 03:15 UTC | Remove logs > 7 days |
+| Discord Daily Summary | Configurable | Sends account summary to Discord |
 
 ---
 

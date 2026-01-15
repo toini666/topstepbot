@@ -211,8 +211,26 @@ export interface MarketStatus {
 }
 
 // =============================================================================
+// DISCORD NOTIFICATION SETTINGS
+// =============================================================================
+
+export interface DiscordNotificationSettings {
+    id?: number;
+    account_id: number;
+    enabled: boolean;
+    webhook_url: string;
+    notify_position_open: boolean;
+    notify_position_close: boolean;
+    notify_daily_summary: boolean;
+    daily_summary_time: string;
+    created_at?: string;
+    updated_at?: string;
+}
+
+// =============================================================================
 // LEGACY COMPATIBILITY (Config alias)
 // =============================================================================
 
 /** @deprecated Use GlobalConfig instead */
 export type Config = GlobalConfig;
+

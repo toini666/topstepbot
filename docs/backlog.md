@@ -12,7 +12,8 @@ This document outlines the roadmap to evolve the current functional prototype in
 ## 2. Observability & Logging (Traceability)
 *Goal: Know exactly what happened, when, and why.*
 - [ ] **More logs in Telegram**: Add monitoring logs in Telegram in case of issue
-- [ ] **Add logging in Discord channel**: Add notifications of trades / daily summary in dedicated Discord channel
+- [x] **Add logging in Discord channel**: Add notifications of trades / daily summary in dedicated Discord channel
+
 
 ## 3. Data & Analytics (The "Journal")
 *Goal: Improve performance through data analysis.*

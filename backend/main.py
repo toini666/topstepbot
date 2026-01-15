@@ -16,6 +16,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from backend.services.risk_engine import RiskEngine
 from backend.services.topstep_client import topstep_client
 from backend.services.telegram_service import telegram_service
+from backend.services.discord_service import discord_service
 from backend.services.telegram_bot import telegram_bot
 from backend.services.maintenance_service import backup_database, clean_logs, check_and_run_startup_backup
 from backend.services.persistence_service import save_state, load_state, save_ngrok_url, get_last_ngrok_url
@@ -270,6 +271,22 @@ async def monitor_closed_positions_job():
                                         quantity=open_trade.quantity, # Initial Qty
                                         daily_pnl=final_daily_pnl
                                     )
+                                    
+                                    # Discord notification
+                                    await discord_service.notify_position_closed(
+                                        account_id=account_id,
+                                        symbol=open_trade.ticker or target_symbol,
+                                        side=side_str,
+                                        entry_price=open_trade.entry_price or 0,
+                                        exit_price=exit_px,
+                                        pnl=pnl_val,
+                                        quantity=open_trade.quantity,
+                                        fees=total_fees,
+                                        strategy=open_trade.strategy or "-",
+                                        timeframe=open_trade.timeframe or "-",
+                                        account_name=account_name,
+                                        daily_pnl=final_daily_pnl
+                                    )
                                     print(f"✅ Trade #{open_trade.id} marked as CLOSED (PnL: ${pnl_val:.2f})")
                                 
                                 elif is_partial:
@@ -377,13 +394,30 @@ async def monitor_closed_positions_job():
                                     db.add(manual_trade)
                                     db.commit()
                                     print(f"📝 Created Trade #{manual_trade.id} for MANUAL position: {tv_ticker} x{fill_qty} @ {fill_price}")
+                                    open_trade = manual_trade
                                 
+                                # Prepare notification data
+                                strat = open_trade.strategy if open_trade else "MANUAL"
+                                tf = open_trade.timeframe if open_trade else "-"
+
                                 await telegram_service.notify_position_opened(
                                     symbol=f"{matching_fill.get('symbol', curr_cid)} ({account_name})",
                                     side=side_str,
                                     quantity=matching_fill.get('size', 1),
                                     price=fill_price,
                                     order_id=str(matching_fill.get('orderId', ''))
+                                )
+                                
+                                # Discord notification
+                                await discord_service.notify_position_opened(
+                                    account_id=account_id,
+                                    symbol=matching_fill.get('symbol', curr_cid),
+                                    side=side_str,
+                                    quantity=matching_fill.get('size', 1),
+                                    price=fill_price,
+                                    strategy=strat,
+                                    timeframe=tf,
+                                    account_name=account_name
                                 )
                 
                 # Update state for this account
@@ -794,6 +828,96 @@ async def send_shutdown_webhook():
         print(f"⚠️ Shutdown notification error: {e}")
 
 
+async def discord_daily_summary_job():
+    """
+    Checks if any account has reached its configured Discord daily summary time.
+    Sends daily summary with P&L, trade count, and balance.
+    Only sends if trading day is enabled in global settings.
+    """
+    from backend.database import SessionLocal, Log, DiscordNotificationSettings, Trade
+    db = SessionLocal()
+    
+    try:
+        # Check if today is a trading day
+        risk_engine = RiskEngine(db)
+        settings = risk_engine.get_global_settings()
+        trading_days = settings.get("trading_days", ["MON", "TUE", "WED", "THU", "FRI"])
+        
+        now_brussels = datetime.now(BRUSSELS_TZ)
+        day_abbr = now_brussels.strftime("%a").upper()[:3]  # MON, TUE, etc.
+        
+        if day_abbr not in trading_days:
+            # Not a trading day, skip
+            return
+        
+        current_time = now_brussels.strftime("%H:%M")
+        
+        # Get all Discord settings with daily summary enabled
+        all_discord_settings = db.query(DiscordNotificationSettings).filter(
+            DiscordNotificationSettings.enabled == True,
+            DiscordNotificationSettings.notify_daily_summary == True
+        ).all()
+        
+        if not all_discord_settings:
+            return
+        
+        for discord_settings in all_discord_settings:
+            # Check if current time matches the configured summary time
+            if discord_settings.daily_summary_time != current_time:
+                continue
+            
+            account_id = discord_settings.account_id
+            
+            try:
+                # Get account info
+                all_accounts = await topstep_client.get_accounts()
+                account_info = next((a for a in all_accounts if a.get('id') == account_id), None)
+                
+                if not account_info:
+                    continue
+                
+                account_name = account_info.get('name', str(account_id))
+                balance = account_info.get('balance', 0)
+                
+                # Calculate today's P&L from API
+                recent_trades = await topstep_client.get_historical_trades(account_id, days=1)
+                
+                today_pnl = 0.0
+                today_fees = 0.0
+                trade_count = 0
+                
+                for t in recent_trades:
+                    pnl = t.get('profitAndLoss') or t.get('pnl')
+                    fees = t.get('fees')
+                    if pnl is not None:
+                        today_pnl += float(pnl)
+                        trade_count += 1
+                    if fees is not None:
+                        today_fees += float(fees)
+                
+                net_pnl = today_pnl - today_fees
+                
+                # Send the summary
+                await discord_service.send_daily_summary(
+                    account_id=account_id,
+                    account_name=account_name,
+                    pnl=net_pnl,
+                    trade_count=trade_count,
+                    balance=balance
+                )
+                
+                print(f"📊 Discord daily summary sent for account {account_name}")
+                
+            except Exception as e:
+                print(f"Error sending Discord daily summary for account {account_id}: {e}")
+                continue
+    
+    except Exception as e:
+        print(f"Discord daily summary job error: {e}")
+    finally:
+        db.close()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
@@ -890,6 +1014,9 @@ async def lifespan(app: FastAPI):
     
     # API Health Check (every 60 seconds)
     scheduler.add_job(api_health_check_job, 'interval', seconds=60)
+    
+    # Discord Daily Summary (every minute, checks configured times per account)
+    scheduler.add_job(discord_daily_summary_job, 'interval', minutes=1)
 
     # Heartbeat Job (configurable interval, default 60s)
     heartbeat_interval = int(os.getenv("HEARTBEAT_INTERVAL_SECONDS", "60"))

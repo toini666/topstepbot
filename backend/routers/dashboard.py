@@ -17,7 +17,8 @@ import json
 
 from backend.database import (
     get_db, Trade, Log, Setting, TickerMap,
-    AccountSettings, AccountStrategyConfig, TradingSession, Strategy
+    AccountSettings, AccountStrategyConfig, TradingSession, Strategy,
+    DiscordNotificationSettings
 )
 from backend.schemas import (
     TradeResponse, LogResponse, AccountResponse,
@@ -29,6 +30,7 @@ from backend.schemas import (
     AccountStrategyConfigResponse, AccountStrategyConfigCreate, AccountStrategyConfigUpdate,
     TradingSessionResponse, TradingSessionCreate,
     AccountResponse,
+    DiscordNotificationSettingsUpdate, DiscordNotificationSettingsResponse,
     PositionResponse,
     OrderResponse,
     TradeResponse,
@@ -793,3 +795,78 @@ async def reconcile_apply(account_id: int, changes: List[dict], db: Session = De
     
     result = await apply_reconciliation(account_id, changes, db)
     return result
+
+
+# =============================================================================
+# DISCORD NOTIFICATION SETTINGS
+# =============================================================================
+
+@router.get("/settings/discord/{account_id}", response_model=DiscordNotificationSettingsResponse)
+def get_discord_settings(account_id: int, db: Session = Depends(get_db)):
+    """Get Discord notification settings for a specific account."""
+    settings = db.query(DiscordNotificationSettings).filter(
+        DiscordNotificationSettings.account_id == account_id
+    ).first()
+    
+    if not settings:
+        # Return default settings (not saved yet)
+        from datetime import datetime, timezone
+        return DiscordNotificationSettingsResponse(
+            id=0,
+            account_id=account_id,
+            enabled=False,
+            webhook_url=None,
+            notify_position_open=True,
+            notify_position_close=True,
+            notify_daily_summary=False,
+            daily_summary_time="21:00",
+            created_at=datetime.now(timezone.utc),
+            updated_at=None
+        )
+    
+    return settings
+
+
+@router.post("/settings/discord/{account_id}", response_model=DiscordNotificationSettingsResponse)
+def update_discord_settings(
+    account_id: int, 
+    req: DiscordNotificationSettingsUpdate, 
+    db: Session = Depends(get_db)
+):
+    """Create or update Discord notification settings for an account."""
+    settings = db.query(DiscordNotificationSettings).filter(
+        DiscordNotificationSettings.account_id == account_id
+    ).first()
+    
+    if not settings:
+        settings = DiscordNotificationSettings(account_id=account_id)
+        db.add(settings)
+    
+    # Update fields if provided
+    if req.enabled is not None:
+        settings.enabled = req.enabled
+    if req.webhook_url is not None:
+        settings.webhook_url = req.webhook_url
+    if req.notify_position_open is not None:
+        settings.notify_position_open = req.notify_position_open
+    if req.notify_position_close is not None:
+        settings.notify_position_close = req.notify_position_close
+    if req.notify_daily_summary is not None:
+        settings.notify_daily_summary = req.notify_daily_summary
+    if req.daily_summary_time is not None:
+        settings.daily_summary_time = req.daily_summary_time
+    
+    db.commit()
+    db.refresh(settings)
+    
+    # Log the update
+    status = "enabled" if settings.enabled else "disabled"
+    db.add(Log(
+        level="INFO", 
+        message=f"Discord notifications {status} for account {account_id}",
+        details=json.dumps(req.model_dump(exclude_none=True))
+    ))
+    db.commit()
+    
+    return settings
+

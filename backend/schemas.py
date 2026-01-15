@@ -314,3 +314,37 @@ class TickerMapResponse(TickerMapBase):
 
     class Config:
         from_attributes = True
+
+
+# =============================================================================
+# DISCORD NOTIFICATION SETTINGS SCHEMAS
+# =============================================================================
+
+class DiscordNotificationSettingsBase(BaseModel):
+    """Discord notification settings for an account."""
+    enabled: bool = False
+    webhook_url: Optional[str] = None
+    notify_position_open: bool = True
+    notify_position_close: bool = True
+    notify_daily_summary: bool = False
+    daily_summary_time: str = "21:00"
+
+
+class DiscordNotificationSettingsUpdate(BaseModel):
+    enabled: Optional[bool] = None
+    webhook_url: Optional[str] = None
+    notify_position_open: Optional[bool] = None
+    notify_position_close: Optional[bool] = None
+    notify_daily_summary: Optional[bool] = None
+    daily_summary_time: Optional[str] = None
+
+
+class DiscordNotificationSettingsResponse(DiscordNotificationSettingsBase):
+    id: int
+    account_id: int
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+

@@ -29,7 +29,13 @@ A professional-grade automated trading system for TopStepX. Executes TradingView
 - **Order History**: All orders with status updates
 - **System Logs**: Full audit trail of all actions
 
+### 🔔 Notifications
+- **Telegram Bot**: Full control and real-time monitoring
+- **Discord Webhooks**: Customizable rich embeds for positions and daily summaries
+- **Visuals**: PnL-based colors, strategy details, and per-account filtering
+
 ### 🤖 Telegram Bot Control
+
 | Command | Description |
 |---------|-------------|
 | `/status` | Current account status |
