@@ -1,5 +1,6 @@
 import json
 import os
+from typing import Optional
 from backend.database import Log, SessionLocal
 
 PERSISTENCE_FILE = "persistence.json"
@@ -37,3 +38,23 @@ def _log_error(message):
         db.commit()
     finally:
         db.close()
+
+
+def save_ngrok_url(url: str):
+    """
+    Saves the Ngrok URL to persistence.
+    Merges with existing state to avoid overwriting other data.
+    """
+    state = load_state()
+    state["last_ngrok_url"] = url
+    save_state(state)
+
+
+def get_last_ngrok_url() -> Optional[str]:
+    """
+    Retrieves the last known Ngrok URL from persistence.
+    Returns None if not found.
+    """
+    state = load_state()
+    return state.get("last_ngrok_url")
+

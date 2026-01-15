@@ -108,5 +108,13 @@ echo "👉 Keep this terminal open while trading."
 echo "👉 Press Ctrl+C to stop."
 echo "==================================================="
 
+# Send Ngrok URL to backend for change detection
+if [ -n "$NGROK_URL" ] && [ "$NGROK_URL" != "Not available (Install 'ngrok')" ]; then
+    sleep 2  # Wait for backend to be fully ready
+    curl -s -X POST "http://localhost:8000/api/ngrok-url" \
+        -H "Content-Type: application/json" \
+        -d "{\"url\": \"$NGROK_URL\"}" > /dev/null 2>&1 &
+fi
+
 # Keep script running
 wait

@@ -235,6 +235,7 @@ Data export and analytics endpoints.
 | Auto Flatten | Configurable time | Close all positions daily |
 | API Health Check | Every 60s | Pings API, tracks health, alerts on consecutive failures |
 | **Heartbeat** | Configurable (default 60s) | Sends ping to external monitoring (N8N) with bot status |
+| **Ngrok URL Detection** | On startup | Detects URL changes, notifies via Terminal/Logs/Telegram |
 | Database Backup | 03:00 UTC | Copy database file |
 | Log Cleanup | 03:15 UTC | Remove logs > 7 days |
 

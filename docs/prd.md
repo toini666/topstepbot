@@ -145,6 +145,7 @@ Account Settings (per account)
 | **Orphan Detection** | Alerts for orders without matching positions |
 | **API Health Check** | Pings TopStep every 60s, alerts on failure |
 | **Heartbeat Monitoring** | Sends pings to external systems (N8N) for crash detection |
+| **Ngrok URL Detection** | Notifies user when webhook URL changes (Terminal, Logs, Telegram) |
 | **Graceful Shutdown** | Notifies monitoring system on planned stops (CTRL-C) |
 | **Manual Trade Sync** | Detects and tracks manually executed trades |
 
@@ -181,7 +182,7 @@ Account Settings (per account)
 
 | Layer | Technology |
 |-------|------------|
-| **Backend** | Python 3.9+, FastAPI, SQLAlchemy, SQLite |
+| **Backend** | Python 3.12+, FastAPI, SQLAlchemy, SQLite |
 | **Frontend** | React 18, TypeScript, Vite, TailwindCSS v4 |
 | **Scheduling** | APScheduler |
 | **Notifications** | Telegram Bot API |

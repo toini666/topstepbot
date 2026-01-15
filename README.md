@@ -48,7 +48,7 @@ A professional-grade automated trading system for TopStepX. Executes TradingView
 ## 🚀 Quick Start
 
 ### Prerequisites
-- Python 3.9+
+- Python 3.12+
 - Node.js 18+ & npm
 - ngrok (for webhook URL)
 
@@ -90,7 +90,7 @@ HEARTBEAT_AUTH_TOKEN=your_secret_token
 ```bash
 ./start_bot.sh
 ```
-This handles: Backend API → Frontend → Ngrok → Sleep prevention
+This handles: Backend API → Frontend → Ngrok → Sleep prevention → **Ngrok URL change detection**
 
 **Access Points:**
 - Dashboard: http://localhost:5173

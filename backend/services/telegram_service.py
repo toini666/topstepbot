@@ -11,6 +11,7 @@ Updated for multi-account execution with:
 import httpx
 import os
 import asyncio
+from typing import Optional
 from backend.database import SessionLocal, Log
 
 
@@ -357,6 +358,20 @@ class TelegramService:
             f"⏰ <b>Force Flatten Complete</b>\n"
             f"Flattened {accounts_count} account(s)\n"
             f"<i>All positions closed, orders cancelled</i>"
+        )
+        await self.send_message(msg)
+
+    async def notify_ngrok_url_changed(self, old_url: Optional[str], new_url: str):
+        """Notify user that the Ngrok webhook URL has changed."""
+        old_display = old_url if old_url else "(first run)"
+        
+        msg = (
+            f"⚠️ <b>Webhook URL Changed!</b>\n\n"
+            f"📤 Old: <code>{old_display}</code>\n"
+            f"📥 New: <code>{new_url}</code>\n\n"
+            f"<b>Action Required:</b>\n"
+            f"Update your TradingView alerts to use:\n"
+            f"<code>{new_url}/api/webhook</code>"
         )
         await self.send_message(msg)
 

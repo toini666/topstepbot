@@ -18,7 +18,7 @@ from backend.services.topstep_client import topstep_client
 from backend.services.telegram_service import telegram_service
 from backend.services.telegram_bot import telegram_bot
 from backend.services.maintenance_service import backup_database, clean_logs, check_and_run_startup_backup
-from backend.services.persistence_service import save_state, load_state
+from backend.services.persistence_service import save_state, load_state, save_ngrok_url, get_last_ngrok_url
 import asyncio
 import aiohttp
 import json
@@ -968,3 +968,59 @@ def read_root():
 @app.get("/health")
 def health_check():
     return {"status": "ok"}
+
+
+@app.post("/api/ngrok-url")
+async def set_ngrok_url(payload: dict):
+    """
+    Receives the current Ngrok URL from start_bot.sh.
+    Detects if URL has changed and notifies user via:
+    - Terminal (print)
+    - System Logs (DB)
+    - Telegram
+    """
+    from backend.database import SessionLocal, Log
+    
+    new_url = payload.get("url", "").strip()
+    if not new_url:
+        return {"status": "error", "message": "No URL provided"}
+    
+    # Get last known URL
+    last_url = get_last_ngrok_url()
+    
+    # Check for change
+    if last_url and last_url != new_url:
+        # URL has changed - notify on all channels
+        print(f"⚠️  NGROK URL CHANGED!")
+        print(f"   Old: {last_url}")
+        print(f"   New: {new_url}")
+        print(f"   👉 Update your TradingView webhooks to: {new_url}/api/webhook")
+        
+        # Log to database
+        db = SessionLocal()
+        try:
+            db.add(Log(
+                level="WARNING",
+                message=f"Ngrok URL changed: {last_url} -> {new_url}"
+            ))
+            db.commit()
+        finally:
+            db.close()
+        
+        # Send Telegram notification
+        await telegram_service.notify_ngrok_url_changed(last_url, new_url)
+        
+        # Save new URL
+        save_ngrok_url(new_url)
+        
+        return {"status": "changed", "old_url": last_url, "new_url": new_url}
+    
+    elif not last_url:
+        # First run - just save
+        print(f"📝 Ngrok URL saved: {new_url}")
+        save_ngrok_url(new_url)
+        return {"status": "saved", "url": new_url}
+    
+    else:
+        # URL unchanged
+        return {"status": "unchanged", "url": new_url}
