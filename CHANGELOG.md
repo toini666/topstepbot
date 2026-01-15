@@ -6,7 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
-## [Unreleased]
+## [2026-01-15] - Ngrok Detection, Reconciliation & Dependencies
 
 ### Added
 - **Ngrok URL Change Detection**: Automatically detects when the Ngrok webhook URL changes and notifies via Terminal, System Logs, and Telegram
@@ -14,18 +14,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **Manual Trade Reconciliation**: Dashboard button to preview and apply trade corrections with TopStep API (disabled during open positions)
 
 ### Changed
-- Updated `dependency-check` workflow to include Python/Node version checks
-- Updated documentation to reflect Python 3.12+ requirement
-
----
-
-## [2026-01-15] - Dependency & Security Update
-
-### Changed
 - Upgraded all backend Python dependencies to latest versions
 - Upgraded all frontend Node.js dependencies to latest versions
 - Migrated Tailwind CSS from v3 to v4
-- Updated documentation to reflect new tech stack
+- Updated `dependency-check` workflow to include Python/Node version checks
+- Updated documentation to reflect Python 3.12+ requirement
 
 ---
 
