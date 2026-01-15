@@ -28,4 +28,4 @@ This document outlines the roadmap to evolve the current functional prototype in
 - [ ] **Automated tests**: setup workflow of automated test to verify everything is still working (core features) after a development
 - [ ] **Execution optimization**: optimize workflow to have the minimum execution time between trading alert and trade execution
 - [ ] **Ngrok URL change monitoring**: Check if URL changed and notify user
-- [ ] **Tech stack security**: Verify and update dependencies to avoid vulnerabilities
+- [x] **Tech stack security**: Verify and update dependencies to avoid vulnerabilities

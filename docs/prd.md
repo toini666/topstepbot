@@ -182,7 +182,7 @@ Account Settings (per account)
 | Layer | Technology |
 |-------|------------|
 | **Backend** | Python 3.9+, FastAPI, SQLAlchemy, SQLite |
-| **Frontend** | React 18, TypeScript, Vite, TailwindCSS |
+| **Frontend** | React 18, TypeScript, Vite, TailwindCSS v4 |
 | **Scheduling** | APScheduler |
 | **Notifications** | Telegram Bot API |
 | **External API** | TopStepX REST API |

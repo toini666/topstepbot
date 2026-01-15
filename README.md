@@ -159,7 +159,7 @@ https://your-ngrok-url.ngrok-free.app/api/webhook
 
 ### Stack
 - **Backend**: FastAPI + SQLAlchemy + APScheduler
-- **Frontend**: React 18 + TypeScript + Vite
+- **Frontend**: React 18 + TypeScript + Vite + TailwindCSS v4
 - **Database**: SQLite with auto-backup
 
 ---
