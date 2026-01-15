@@ -17,6 +17,3 @@ dist/
 
 # Logs
 *.log
-
-# Agent
-.agent/
