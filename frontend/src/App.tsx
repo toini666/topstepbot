@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import type { Order } from './types';
 import { useTopStep } from './hooks/useTopStep';
-import { Activity, CheckCircle, TrendingUp, DollarSign, Settings, AlertTriangle, X, Terminal, ChevronDown, ChevronRight, FileText, Copy, Layers, Power } from 'lucide-react';
+import { Activity, CheckCircle, TrendingUp, DollarSign, Settings, AlertTriangle, X, Terminal, ChevronDown, ChevronRight, FileText, Copy, Layers, Power, RefreshCw } from 'lucide-react';
 import axios from 'axios';
 import { format } from 'date-fns';
 import { Toaster, toast } from 'sonner';
@@ -10,15 +10,22 @@ import { ConfigModal } from './components/ConfigModal';
 import { MockWebhookModal } from './components/MockWebhookModal';
 import { StrategiesManager } from './components/StrategiesManager';
 import { RiskInput } from './components/RiskInput';
+import ReconciliationModal from './components/ReconciliationModal';
 import { aggregateTrades } from './utils/tradeAggregator';
 import { API_BASE } from './config';
 
 function App() {
-  const { trades, logs, accounts, positions, orders, historicalTrades, selectedAccountId, setSelectedAccountId, connect, logout, loadMoreLogs, isConnected, loading, selectedAccountSettings, toggleAccountTrading, config, updateConfig, historyFilter, setHistoryFilter, marketStatus, strategies, updateAccountSettings, accountSettings, ordersByAccount, positionsByAccount } = useTopStep();
+  const { trades, logs, accounts, positions, orders, historicalTrades, selectedAccountId, setSelectedAccountId, connect, logout, loadMoreLogs, isConnected, loading, selectedAccountSettings, toggleAccountTrading, config, updateConfig, historyFilter, setHistoryFilter, marketStatus, strategies, updateAccountSettings, accountSettings, ordersByAccount, positionsByAccount, previewReconciliation, applyReconciliation } = useTopStep();
   const [activeTab, setActiveTab] = useState<'trading' | 'logs' | 'strategies'>('trading');
   const [expandedLogs, setExpandedLogs] = useState<Set<number>>(new Set());
   const [selectedStrategyFilter, setSelectedStrategyFilter] = useState<string>('ALL');
   const [strategyDropdownOpen, setStrategyDropdownOpen] = useState(false);
+
+  // Reconciliation Modal State
+  const [reconcileModalOpen, setReconcileModalOpen] = useState(false);
+  const [reconcileLoading, setReconcileLoading] = useState(false);
+  const [reconcileChanges, setReconcileChanges] = useState<any[]>([]);
+  const [reconcileSummary, setReconcileSummary] = useState({ trades_to_close: 0, pnl_updates: 0, total_pnl_change: 0 });
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -188,6 +195,26 @@ function App() {
       }
     });
     setModalOpen(true);
+  };
+
+  const handleReconcile = async () => {
+    if (!selectedAccountId) return;
+    setReconcileLoading(true);
+    setReconcileModalOpen(true);
+
+    const result = await previewReconciliation(selectedAccountId);
+    if (result.success) {
+      setReconcileChanges(result.proposed_changes || []);
+      setReconcileSummary(result.summary || { trades_to_close: 0, pnl_updates: 0, total_pnl_change: 0 });
+    }
+    setReconcileLoading(false);
+  };
+
+  const handleApplyReconcile = async () => {
+    if (!selectedAccountId) return;
+    await applyReconciliation(selectedAccountId, reconcileChanges);
+    setReconcileModalOpen(false);
+    setReconcileChanges([]);
   };
 
   const handleDisconnect = () => {
@@ -581,70 +608,82 @@ function App() {
               <h2 className="text-xl font-semibold mb-6 flex items-center gap-2">
                 <DollarSign className="w-5 h-5 text-emerald-400" />
                 Closed Trades (History)
-                <div className="ml-auto flex bg-slate-800 rounded-lg p-1 text-xs font-medium">
+                <div className="ml-auto flex items-center gap-2">
+                  {/* Reconcile Button */}
                   <button
-                    onClick={() => setHistoryFilter('today')}
-                    className={`px-3 py-1 rounded-md transition-all ${historyFilter === 'today' ? 'bg-indigo-500 text-white shadow' : 'text-slate-400 hover:text-slate-200'}`}
+                    onClick={handleReconcile}
+                    disabled={!selectedAccountId || !isConnected || positions.length > 0}
+                    className="p-2 rounded-lg text-slate-400 hover:text-indigo-400 hover:bg-indigo-500/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed border border-slate-700 hover:border-indigo-500/30 disabled:hover:text-slate-400 disabled:hover:bg-transparent disabled:hover:border-slate-700"
+                    title={positions.length > 0 ? "Close all positions before reconciling" : "Sync with TopStep"}
                   >
-                    Today
-                  </button>
-                  <button
-                    onClick={() => setHistoryFilter('week')}
-                    className={`px-3 py-1 rounded-md transition-all ${historyFilter === 'week' ? 'bg-indigo-500 text-white shadow' : 'text-slate-400 hover:text-slate-200'}`}
-                  >
-                    7 Days
+                    <RefreshCw className="w-4 h-4" />
                   </button>
 
-                  <div className="w-px h-4 bg-slate-700 mx-2 self-center"></div>
-
-                  <div className="relative group-strategy-selector">
+                  <div className="flex bg-slate-800 rounded-lg p-1 text-xs font-medium">
                     <button
-                      onClick={() => setStrategyDropdownOpen(!strategyDropdownOpen)}
-                      className="flex items-center gap-2 bg-slate-800 text-slate-300 text-xs font-medium px-3 py-1.5 rounded-md border border-slate-700 hover:bg-slate-700 hover:text-white transition-colors"
+                      onClick={() => setHistoryFilter('today')}
+                      className={`px-3 py-1 rounded-md transition-all ${historyFilter === 'today' ? 'bg-indigo-500 text-white shadow' : 'text-slate-400 hover:text-slate-200'}`}
                     >
-                      <span>{selectedStrategyFilter === 'ALL' ? 'All Strategies' : (strategies.find(s => s.tv_id === selectedStrategyFilter)?.name || selectedStrategyFilter)}</span>
-                      <ChevronDown className={`w-3 h-3 transition-transform duration-200 ${strategyDropdownOpen ? 'rotate-180' : ''}`} />
+                      Today
+                    </button>
+                    <button
+                      onClick={() => setHistoryFilter('week')}
+                      className={`px-3 py-1 rounded-md transition-all ${historyFilter === 'week' ? 'bg-indigo-500 text-white shadow' : 'text-slate-400 hover:text-slate-200'}`}
+                    >
+                      7 Days
                     </button>
 
-                    {strategyDropdownOpen && (
-                      <div className="absolute top-full right-0 mt-2 w-48 bg-slate-800 border border-slate-700 rounded-xl shadow-xl overflow-hidden z-20 animate-fade-in-down">
-                        <div className="max-h-60 overflow-y-auto custom-scrollbar p-1">
-                          <button
-                            onClick={() => {
-                              setSelectedStrategyFilter('ALL');
-                              setStrategyDropdownOpen(false);
-                            }}
-                            className={`w-full text-left px-3 py-2 rounded-lg flex items-center justify-between transition-colors text-xs ${selectedStrategyFilter === 'ALL'
-                              ? 'bg-indigo-500/10 text-indigo-400'
-                              : 'text-slate-300 hover:bg-slate-700/50'
-                              }`}
-                          >
-                            <span>All Strategies</span>
-                            {selectedStrategyFilter === 'ALL' && <CheckCircle className="w-3 h-3" />}
-                          </button>
-                          {[...new Set(aggregatedTrades.map(t => t.strategy).filter(Boolean))].map(strat => {
-                            const stratInfo = strategies.find(s => s.tv_id === strat);
-                            const displayName = stratInfo?.name || strat;
-                            return (
-                              <button
-                                key={strat}
-                                onClick={() => {
-                                  setSelectedStrategyFilter(strat || '');
-                                  setStrategyDropdownOpen(false);
-                                }}
-                                className={`w-full text-left px-3 py-2 rounded-lg flex items-center justify-between transition-colors text-xs ${selectedStrategyFilter === strat
-                                  ? 'bg-indigo-500/10 text-indigo-400'
-                                  : 'text-slate-300 hover:bg-slate-700/50'
-                                  }`}
-                              >
-                                <span>{displayName}</span>
-                                {selectedStrategyFilter === strat && <CheckCircle className="w-3 h-3" />}
-                              </button>
-                            );
-                          })}
+                    <div className="w-px h-4 bg-slate-700 mx-2 self-center"></div>
+
+                    <div className="relative group-strategy-selector">
+                      <button
+                        onClick={() => setStrategyDropdownOpen(!strategyDropdownOpen)}
+                        className="flex items-center gap-2 bg-slate-800 text-slate-300 text-xs font-medium px-3 py-1.5 rounded-md border border-slate-700 hover:bg-slate-700 hover:text-white transition-colors"
+                      >
+                        <span>{selectedStrategyFilter === 'ALL' ? 'All Strategies' : (strategies.find(s => s.tv_id === selectedStrategyFilter)?.name || selectedStrategyFilter)}</span>
+                        <ChevronDown className={`w-3 h-3 transition-transform duration-200 ${strategyDropdownOpen ? 'rotate-180' : ''}`} />
+                      </button>
+
+                      {strategyDropdownOpen && (
+                        <div className="absolute top-full right-0 mt-2 w-48 bg-slate-800 border border-slate-700 rounded-xl shadow-xl overflow-hidden z-20 animate-fade-in-down">
+                          <div className="max-h-60 overflow-y-auto custom-scrollbar p-1">
+                            <button
+                              onClick={() => {
+                                setSelectedStrategyFilter('ALL');
+                                setStrategyDropdownOpen(false);
+                              }}
+                              className={`w-full text-left px-3 py-2 rounded-lg flex items-center justify-between transition-colors text-xs ${selectedStrategyFilter === 'ALL'
+                                ? 'bg-indigo-500/10 text-indigo-400'
+                                : 'text-slate-300 hover:bg-slate-700/50'
+                                }`}
+                            >
+                              <span>All Strategies</span>
+                              {selectedStrategyFilter === 'ALL' && <CheckCircle className="w-3 h-3" />}
+                            </button>
+                            {[...new Set(aggregatedTrades.map(t => t.strategy).filter(Boolean))].map(strat => {
+                              const stratInfo = strategies.find(s => s.tv_id === strat);
+                              const displayName = stratInfo?.name || strat;
+                              return (
+                                <button
+                                  key={strat}
+                                  onClick={() => {
+                                    setSelectedStrategyFilter(strat || '');
+                                    setStrategyDropdownOpen(false);
+                                  }}
+                                  className={`w-full text-left px-3 py-2 rounded-lg flex items-center justify-between transition-colors text-xs ${selectedStrategyFilter === strat
+                                    ? 'bg-indigo-500/10 text-indigo-400'
+                                    : 'text-slate-300 hover:bg-slate-700/50'
+                                    }`}
+                                >
+                                  <span>{displayName}</span>
+                                  {selectedStrategyFilter === strat && <CheckCircle className="w-3 h-3" />}
+                                </button>
+                              );
+                            })}
+                          </div>
                         </div>
-                      </div>
-                    )}
+                      )}
+                    </div>
                   </div>
                 </div>
               </h2>
@@ -922,6 +961,19 @@ function App() {
         <MockWebhookModal
           isOpen={mockModalOpen}
           onClose={() => setMockModalOpen(false)}
+        />
+
+        {/* Reconciliation Modal */}
+        <ReconciliationModal
+          isOpen={reconcileModalOpen}
+          onClose={() => {
+            setReconcileModalOpen(false);
+            setReconcileChanges([]);
+          }}
+          changes={reconcileChanges}
+          summary={reconcileSummary}
+          onApply={handleApplyReconcile}
+          isLoading={reconcileLoading}
         />
 
         <Toaster theme="dark" position="top-right" richColors />

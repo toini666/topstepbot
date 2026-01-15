@@ -20,7 +20,7 @@ This document outlines the roadmap to evolve the current functional prototype in
 - [ ] **Equity Curve Plotting**: A chart in the dashboard showing P&L evolution over the day/week.
 - [ ] **Win/Loss & Expectancy Stats**: Auto-calculate Sharpe Ratio, Profit Factor, and Average Win/Loss on the Stats panel.
 - [ ] **Stats per strategy**: Dashboard with stats about each strategy.
-- [ ] **Reconciliation button**: Add a button on trade history to reconcile trades with Topstep trades API
+- [x] **Reconciliation button**: Add a button on trade history to reconcile trades with Topstep trades API
 
 ## 4. Infrastructure & DevOps
 *Goal: Stability and ease of deployment.*

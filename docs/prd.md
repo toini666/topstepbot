@@ -105,7 +105,7 @@ Account Settings (per account)
 | **Account Selector** | Switch between accounts, trading toggle |
 | **Open Positions** | Live positions with strategy/timeframe, close button |
 | **Account Details** | Balance, risk per trade (editable), trading status |
-| **Trade History** | Aggregated trades (entry + partials = 1 line), strategy filter, PnL/fees display |
+| **Trade History** | Aggregated trades (entry + partials = 1 line), strategy filter, PnL/fees display, **manual reconciliation button** |
 | **Order History** | Working and filled orders |
 | **System Logs** | Timestamped logs with load more pagination |
 
@@ -130,6 +130,7 @@ Account Settings (per account)
 | **Manual Trades** | Automatically detects and records execution of non-bot trades (Checks for OPEN or PENDING status to avoid duplicates) |
 | **Daily PnL** | Real-time Net PnL calculation (Gross - Fees) synced with TopStep session |
 | **Strict Reconciliation** | DB corrections based on raw API truth data for 100% accuracy |
+| **Manual Reconciliation** | Dashboard button to preview and apply trade corrections with TopStep API |
 | **Export Endpoint** | JSON/CSV export with filters |
 | **Statistics API** | Win rate, profit factor, avg PnL, duration |
 | **Filter Options** | By strategy, timeframe, ticker, account, session, date |

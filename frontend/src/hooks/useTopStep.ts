@@ -296,6 +296,32 @@ export const useTopStep = () => {
         }
     };
 
+    const previewReconciliation = async (accountId: number) => {
+        try {
+            const res = await axios.post(`${API_BASE}/dashboard/reconcile/${accountId}/preview`);
+            return res.data;
+        } catch (error) {
+            console.error("Failed to preview reconciliation:", error);
+            toast.error("Failed to analyze trades");
+            return { success: false, proposed_changes: [], summary: { trades_to_close: 0, pnl_updates: 0, total_pnl_change: 0 } };
+        }
+    };
+
+    const applyReconciliation = async (accountId: number, changes: any[]) => {
+        try {
+            const res = await axios.post(`${API_BASE}/dashboard/reconcile/${accountId}/apply`, changes);
+            if (res.data.success) {
+                toast.success(res.data.message || "Reconciliation applied");
+                fetchData();
+            }
+            return res.data;
+        } catch (error) {
+            console.error("Failed to apply reconciliation:", error);
+            toast.error("Failed to apply changes");
+            return { success: false };
+        }
+    };
+
     // ==========================================================================
     // COMPUTED VALUES
     // ==========================================================================
@@ -368,6 +394,8 @@ export const useTopStep = () => {
         closePosition,
         flattenAccount,
         flattenAllAccounts,
+        previewReconciliation,
+        applyReconciliation,
         loadMoreLogs,
         refresh: fetchData,
 

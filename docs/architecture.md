@@ -39,7 +39,8 @@ topstepbot/
 │       ├── telegram_service.py # Telegram notifications
 │       ├── telegram_bot.py     # Telegram command handler
 │       ├── maintenance_service.py # Backup & log cleanup
-│       └── persistence_service.py # State persistence
+│       ├── persistence_service.py # State persistence
+│       └── reconciliation_service.py # Manual trade reconciliation
 ├── frontend/
 │   ├── src/
 │   │   ├── App.tsx             # Main dashboard component
@@ -208,6 +209,8 @@ REST API for frontend dashboard.
 | `/settings/sessions` | GET/POST | Trading sessions |
 | `/dashboard/account/{id}/flatten` | POST | Flatten single account |
 | `/dashboard/flatten-all` | POST | Flatten all accounts |
+| `/dashboard/reconcile/{id}/preview` | POST | Preview trade corrections (dry-run) |
+| `/dashboard/reconcile/{id}/apply` | POST | Apply trade corrections |
 
 ### 6. Export Router (`export.py`)
 

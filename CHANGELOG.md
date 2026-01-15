@@ -11,6 +11,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Added
 - **Ngrok URL Change Detection**: Automatically detects when the Ngrok webhook URL changes and notifies via Terminal, System Logs, and Telegram
 - **Python 3.12 Support**: Upgraded from Python 3.9 to Python 3.12 for improved performance
+- **Manual Trade Reconciliation**: Dashboard button to preview and apply trade corrections with TopStep API (disabled during open positions)
 
 ### Changed
 - Updated `dependency-check` workflow to include Python/Node version checks

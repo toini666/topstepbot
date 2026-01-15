@@ -36,6 +36,7 @@ from backend.schemas import (
 )
 from backend.services.topstep_client import topstep_client
 from backend.services.risk_engine import RiskEngine
+from backend.services.reconciliation_service import preview_reconciliation, apply_reconciliation
 
 router = APIRouter()
 
@@ -762,3 +763,33 @@ def update_ticker_map(map_id: int, updates: dict, db: Session = Depends(get_db))
     db.refresh(mapping)
     return {"success": True, "data": TickerMapResponse.model_validate(mapping).model_dump()}
 
+
+# =============================================================================
+# TRADE RECONCILIATION
+# =============================================================================
+
+@router.post("/dashboard/reconcile/{account_id}/preview")
+async def reconcile_preview(account_id: int, db: Session = Depends(get_db)):
+    """
+    Preview proposed reconciliation changes (dry-run).
+    Compares local DB trades with TopStep API data.
+    Returns proposed changes WITHOUT applying them.
+    """
+    db.add(Log(level="INFO", message=f"Reconciliation preview requested for account {account_id}"))
+    db.commit()
+    
+    result = await preview_reconciliation(account_id, db)
+    return result
+
+
+@router.post("/dashboard/reconcile/{account_id}/apply")
+async def reconcile_apply(account_id: int, changes: List[dict], db: Session = Depends(get_db)):
+    """
+    Apply reconciliation changes after user confirmation.
+    Expects the list of proposed_changes from the preview endpoint.
+    """
+    if not changes:
+        return {"success": True, "applied": {"closed": 0, "pnl_updated": 0}, "message": "No changes to apply"}
+    
+    result = await apply_reconciliation(account_id, changes, db)
+    return result
