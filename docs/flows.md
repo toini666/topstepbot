@@ -16,7 +16,9 @@ This document details the exact sequences, validations, and API calls for all tr
 8. [Position Sizing Calculation](#8-position-sizing-calculation)
 9. [Strategy Configuration Management](#9-strategy-configuration-management)
 10. [API Health Check Flow](#10-api-health-check-flow)
+10. [API Health Check Flow](#10-api-health-check-flow)
 11. [Heartbeat Monitoring Flow](#11-heartbeat-monitoring-flow)
+12. [Economic Calendar Flow](#12-economic-calendar-flow)
 
 ---
 
@@ -735,3 +737,31 @@ Workflow: Alert Monitor (runs every 2-3 mins)
 | `active_accounts` | ✅ | ❌ absent |
 | `api_healthy` | ✅ | ❌ absent |
 | `uptime_*` | ✅ | ✅ |
+
+---
+
+## 12. Economic Calendar Flow
+
+### Trigger
+Daily Scheduled Job at 07:00 (Europe/Brussels).
+
+### Sequence
+```
+1. Scheduler triggers check_calendar_job()
+2. Call CalendarService.fetch_calendar()
+   - GET XML from ForexFactory
+   - Parse XML to JSON
+   - Cache results
+3. Get Global Settings
+   - calendar_discord_enabled
+   - calendar_major_countries
+   - calendar_major_impacts
+4. IF enabled:
+   - Filter events by Country/Impact settings
+   - IF events found:
+     - Build Discord Embed with "Today's Major Events"
+     - Send Webhook
+5. Frontend "Calendar" tab:
+   - Fetches cached data via /api/calendar
+   - Displays filtered list based on user UI filters
+```

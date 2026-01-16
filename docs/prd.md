@@ -158,7 +158,18 @@ Account Settings (per account)
 
 ---
 
-## User Personas
+### 10. Economic Calendar
+- **Source**: ForexFactory (XML Feed)
+- **Features**:
+  - Daily 7 AM fetch + caching
+  - "Today's Major Events" dashboard card (High/Med impact)
+  - Weekly schedule table with filters (Impact, Country, Day/Week)
+  - Discord daily briefing (morning summary)
+- **Configuration**:
+  - Custom webhooks
+  - Define "Major" criteria (Countries + Impacts)
+
+### 11. User Personas
 
 ### Primary: Discretionary Prop Trader
 - Uses TradingView for chart analysis and alerts

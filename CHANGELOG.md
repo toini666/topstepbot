@@ -6,12 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
-## [2026-01-16] - Discord Notifications & UI Refinement
+## [2026-01-16] - Economic Calendar & Discord Improvements
 
 ### Added
-- **Discord Integration**: Rich webhooks for Position Open/Close and Daily Summaries with visual PnL cues
+- **Economic Calendar**: Automated daily event fetching (ForexFactory) and caching
+- **Calendar Dashboard**: dedicated tab with "Today's Highlights" and Weekly Schedule
+- **Calendar Filters**: Filter by Country, Impact, and Timeframe (Today/Week)
+- **Discord Briefing**: Daily morning summary of major economic events (configurable)
+- **Discord Integration**: Rich webhooks for Position Open/Close and Daily Summaries
 - **Discord Avatar**: Custom generated flat-design robot avatar
-- **Strategy & Timeframe**: Added to position close notifications for better tracking
+- **Strategy & Timeframe**: Added to position close notifications
 
 ### Changed
 - **ConfigModal**: New premium "Account Selector" dropdown in settings

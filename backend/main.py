@@ -10,7 +10,7 @@ Key Features:
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from backend.database import init_db, get_db, Setting, AccountSettings, seed_default_sessions, TickerMap
-from backend.routers import webhook, dashboard, strategies, export
+from backend.routers import webhook, dashboard, strategies, export, calendar
 from contextlib import asynccontextmanager
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from backend.services.risk_engine import RiskEngine
@@ -26,6 +26,10 @@ import json
 import os
 from datetime import datetime, time, timedelta, timezone
 import pytz
+
+from datetime import datetime, time, timedelta, timezone
+import pytz
+from backend.services.calendar_service import calendar_service
 
 # Scheduler Setup
 scheduler = AsyncIOScheduler()
@@ -1027,6 +1031,9 @@ async def lifespan(app: FastAPI):
     # Initialize heartbeat start time
     _heartbeat_state["start_time"] = datetime.now(BRUSSELS_TZ)
 
+    # Calendar Job (7:00 AM Brussels)
+    scheduler.add_job(calendar_service.check_calendar_job, 'cron', hour=7, minute=0, timezone=BRUSSELS_TZ)
+    
     scheduler.start()
     print("Scheduler started.")
 
@@ -1085,6 +1092,7 @@ app.include_router(webhook.router, prefix="/api")
 app.include_router(dashboard.router, prefix="/api")
 app.include_router(strategies.router, prefix="/api")
 app.include_router(export.router, prefix="/api")
+app.include_router(calendar.router, prefix="/api")
 
 
 @app.get("/")

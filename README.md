@@ -34,6 +34,12 @@ A professional-grade automated trading system for TopStepX. Executes TradingView
 - **Discord Webhooks**: Customizable rich embeds for positions and daily summaries
 - **Visuals**: PnL-based colors, strategy details, and per-account filtering
 
+### 📅 Economic Calendar
+- **Dashboard View**: Daily major events cards + full weekly table with filters
+- **Automated Fetch**: Daily sync with ForexFactory data
+- **Daily Briefing**: Morning Discord notification with today's high-impact events
+- **Timezone Smart**: Auto-converts to your local trading time (Brussels)
+
 ### 🤖 Telegram Bot Control
 
 | Command | Description |

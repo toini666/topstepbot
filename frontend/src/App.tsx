@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import type { Order } from './types';
 import { useTopStep } from './hooks/useTopStep';
-import { Activity, CheckCircle, TrendingUp, DollarSign, Settings, AlertTriangle, X, Terminal, ChevronDown, ChevronRight, FileText, Copy, Layers, Power, RefreshCw } from 'lucide-react';
+import { Activity, CheckCircle, TrendingUp, DollarSign, Settings, AlertTriangle, X, Terminal, ChevronDown, ChevronRight, FileText, Copy, Layers, Power, RefreshCw, Calendar as CalendarIcon } from 'lucide-react';
 import axios from 'axios';
 import { format } from 'date-fns';
 import { Toaster, toast } from 'sonner';
@@ -9,6 +9,7 @@ import { ConfirmationModal } from './components/ConfirmationModal';
 import { ConfigModal } from './components/ConfigModal';
 import { MockWebhookModal } from './components/MockWebhookModal';
 import { StrategiesManager } from './components/StrategiesManager';
+import { Calendar } from './components/Calendar';
 import { RiskInput } from './components/RiskInput';
 import ReconciliationModal from './components/ReconciliationModal';
 import { aggregateTrades } from './utils/tradeAggregator';
@@ -16,7 +17,7 @@ import { API_BASE } from './config';
 
 function App() {
   const { trades, logs, accounts, positions, orders, historicalTrades, selectedAccountId, setSelectedAccountId, connect, logout, loadMoreLogs, isConnected, loading, selectedAccountSettings, toggleAccountTrading, config, updateConfig, historyFilter, setHistoryFilter, marketStatus, strategies, updateAccountSettings, accountSettings, ordersByAccount, positionsByAccount, previewReconciliation, applyReconciliation } = useTopStep();
-  const [activeTab, setActiveTab] = useState<'trading' | 'logs' | 'strategies'>('trading');
+  const [activeTab, setActiveTab] = useState<'trading' | 'logs' | 'strategies' | 'calendar'>('trading');
   const [expandedLogs, setExpandedLogs] = useState<Set<number>>(new Set());
   const [selectedStrategyFilter, setSelectedStrategyFilter] = useState<string>('ALL');
   const [strategyDropdownOpen, setStrategyDropdownOpen] = useState(false);
@@ -428,6 +429,17 @@ function App() {
           >
             <Terminal className="w-4 h-4" />
             Mock API
+          </button>
+
+          <button
+            onClick={() => setActiveTab('calendar')}
+            className={`px-6 py-3 rounded-xl font-bold text-sm flex items-center gap-2 transition-all ${activeTab === 'calendar'
+              ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/20'
+              : 'bg-slate-900/50 text-slate-400 hover:text-white hover:bg-slate-800'
+              }`}
+          >
+            <CalendarIcon className="w-4 h-4" />
+            Calendar
           </button>
 
           <button
@@ -937,6 +949,9 @@ function App() {
 
         {/* STRATEGIES TAB */}
         {activeTab === 'strategies' && <StrategiesManager selectedAccountId={selectedAccountId} selectedAccountName={currentAccount?.name} />}
+
+        {/* CALENDAR TAB */}
+        {activeTab === 'calendar' && <Calendar />}
 
         {/* Confirmation Modal */}
         <ConfirmationModal

@@ -32,7 +32,8 @@ topstepbot/
 │   │   ├── webhook.py          # Signal processing (SIGNAL, PARTIAL, CLOSE)
 │   │   ├── dashboard.py        # UI API endpoints
 │   │   ├── strategies.py       # Strategy CRUD
-│   │   └── export.py           # Data export & statistics
+│   │   ├── export.py           # Data export & statistics
+│   │   └── calendar.py         # Calendar endpoints
 │   └── services/
 │       ├── topstep_client.py   # TopStepX API wrapper
 │       ├── risk_engine.py      # Risk management logic
@@ -41,7 +42,8 @@ topstepbot/
 │       ├── maintenance_service.py # Backup & log cleanup
 │       ├── persistence_service.py # State persistence
 │       ├── reconciliation_service.py # Manual trade reconciliation
-│       └── discord_service.py # Discord notifications
+│       ├── discord_service.py # Discord notifications
+│       └── calendar_service.py # Economic Calendar fetcher
 ├── frontend/
 │   ├── src/
 │   │   ├── App.tsx             # Main dashboard component
@@ -244,6 +246,7 @@ Data export and analytics endpoints.
 | Database Backup | 03:00 UTC | Copy database file |
 | Log Cleanup | 03:15 UTC | Remove logs > 7 days |
 | Discord Daily Summary | Configurable | Sends account summary to Discord |
+| **Economic Calendar** | Daily 07:00 | Fetches events & sends daily briefing |
 
 ---
 
@@ -498,4 +501,9 @@ HEARTBEAT_AUTH_TOKEN=your_secret_token
 | `auto_flatten_time` | "21:55" | Flatten time |
 | `trading_days` | ["MON","TUE","WED","THU","FRI"] | Days when user wants to trade |
 | `enforce_single_position_per_asset` | true | Block duplicate positions on same ticker |
+| `enforce_single_position_per_asset` | true | Block duplicate positions on same ticker |
 | `block_cross_account_opposite` | true | Block opposing positions across accounts |
+| `calendar_discord_enabled` | false | Enable daily calendar briefing |
+| `calendar_discord_url` | "" | Webhook URL for calendar |
+| `calendar_major_countries` | ["USD"] | Countries to highlight/notify |
+| `calendar_major_impacts` | ["High","Medium"] | Impacts to highlight/notify |

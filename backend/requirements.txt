@@ -8,3 +8,5 @@ python-dotenv
 pytest
 pytz
 alembic
+apscheduler
+xmltodict
