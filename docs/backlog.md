@@ -4,10 +4,8 @@ This document outlines the roadmap to evolve the current functional prototype in
 
 ## 1. Advanced Risk Management (The "Guardian Pro")
 *Goal: Protect capital with institutional-grade constraints.*
-- [x] **News Event Filter (Blocker)**: Automatically BLOCK trading 5 mins before/after specific events (NFP, CPI, FOMC).
 - [ ] **Consecutive Loss Kill Switch**: Pause trading for X minutes after N consecutive losses to prevent "tilt" or algo-spirals.
 - [ ] **Alerting when trading unallowed**: In case a max drawdown on a ticker is reached, CME could stop quotation or Topstep could forbid to trade around specific price levels
-- [x] **Manage Open position before blocked time**: global settings to define what to do on open positions when entering a blocked time trading zone
 
 ## 2. Observability & Logging (Traceability)
 *Goal: Know exactly what happened, when, and why.*
@@ -18,7 +16,6 @@ This document outlines the roadmap to evolve the current functional prototype in
 
 ## 3. Data & Analytics (The "Journal")
 *Goal: Improve performance through data analysis.*
-- [x] **Add unrealized PNL**: Add unrealized PNL in the dashboard *(current price + floating PnL per position, Telegram integration)*
 - [ ] **Equity Curve Plotting**: A chart in the dashboard showing P&L evolution over the day/week.
 - [ ] **Win/Loss & Expectancy Stats**: Auto-calculate Sharpe Ratio, Profit Factor, and Average Win/Loss on the Stats panel.
 - [ ] **Stats per strategy**: Dashboard with stats about each strategy.
@@ -32,10 +29,10 @@ This document outlines the roadmap to evolve the current functional prototype in
 
 ## 5. Quick fixes / bugs
 *Goal: Fix bugs and improve user experience.*
-- [ ] **Top bar layout**: Corriger / améliorer layout top bar
-- [ ] **Fix bug**: Remove double country icon in calendar filters
-- [ ] **Fix bug**: Fix modal that does not go till bottom
-- [ ] **Footer**: Add footer to the UI
+- [x] **Top bar layout**: Corriger / améliorer layout top bar
+- [x] **Fix bug**: Remove double country icon in calendar filters
+- [x] **Fix bug**: Fix modal that does not go till bottom
+- [x] **Footer**: Add footer to the UI
 
 
 

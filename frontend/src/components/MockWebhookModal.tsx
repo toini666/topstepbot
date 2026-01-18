@@ -78,7 +78,7 @@ export function MockWebhookModal({ isOpen, onClose }: MockWebhookModalProps) {
     const showSide = formData.type !== 'CLOSE';
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
+        <div className="fixed inset-0 z-50 h-screen w-screen flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
             <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md shadow-2xl p-6">
                 <div className="flex justify-between items-center mb-6">
                     <h2 className="text-xl font-bold text-white flex items-center gap-2">
@@ -101,9 +101,9 @@ export function MockWebhookModal({ isOpen, onClose }: MockWebhookModalProps) {
                                 className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-white flex justify-between items-center focus:outline-none focus:border-blue-500 hover:bg-slate-900 transition-colors"
                             >
                                 <span className={`font-mono ${formData.type === 'SIGNAL' ? 'text-emerald-400' :
-                                        formData.type === 'PARTIAL' ? 'text-amber-400' :
-                                            formData.type === 'CLOSE' ? 'text-red-400' :
-                                                'text-slate-400'
+                                    formData.type === 'PARTIAL' ? 'text-amber-400' :
+                                        formData.type === 'CLOSE' ? 'text-red-400' :
+                                            'text-slate-400'
                                     }`}>{formData.type}</span>
                                 <ChevronDown className={`w-4 h-4 text-slate-500 transition-transform ${typeOpen ? 'rotate-180' : ''}`} />
                             </button>
@@ -119,11 +119,11 @@ export function MockWebhookModal({ isOpen, onClose }: MockWebhookModalProps) {
                                                 setTypeOpen(false);
                                             }}
                                             className={`w-full text-left px-4 py-2 flex items-center justify-between transition-colors hover:bg-slate-700/50 ${formData.type === opt
-                                                    ? opt === 'SIGNAL' ? 'text-emerald-400 bg-emerald-500/10'
-                                                        : opt === 'PARTIAL' ? 'text-amber-400 bg-amber-500/10'
-                                                            : opt === 'CLOSE' ? 'text-red-400 bg-red-500/10'
-                                                                : 'text-slate-400 bg-slate-500/10'
-                                                    : 'text-slate-300'
+                                                ? opt === 'SIGNAL' ? 'text-emerald-400 bg-emerald-500/10'
+                                                    : opt === 'PARTIAL' ? 'text-amber-400 bg-amber-500/10'
+                                                        : opt === 'CLOSE' ? 'text-red-400 bg-red-500/10'
+                                                            : 'text-slate-400 bg-slate-500/10'
+                                                : 'text-slate-300'
                                                 }`}
                                         >
                                             <span className="font-mono text-sm">{opt}</span>
@@ -285,9 +285,9 @@ export function MockWebhookModal({ isOpen, onClose }: MockWebhookModalProps) {
                     <button
                         type="submit"
                         className={`w-full font-bold py-3 rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 ${formData.type === 'SIGNAL' ? 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-900/30' :
-                                formData.type === 'PARTIAL' ? 'bg-amber-600 hover:bg-amber-700 shadow-amber-900/30' :
-                                    formData.type === 'CLOSE' ? 'bg-red-600 hover:bg-red-700 shadow-red-900/30' :
-                                        'bg-slate-600 hover:bg-slate-700 shadow-slate-900/30'
+                            formData.type === 'PARTIAL' ? 'bg-amber-600 hover:bg-amber-700 shadow-amber-900/30' :
+                                formData.type === 'CLOSE' ? 'bg-red-600 hover:bg-red-700 shadow-red-900/30' :
+                                    'bg-slate-600 hover:bg-slate-700 shadow-slate-900/30'
                             } text-white`}
                     >
                         <Play className="w-4 h-4" />

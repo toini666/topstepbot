@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import { X, Save, Plus, Trash2, Clock, Settings, Calendar, Bell, ChevronDown, CheckCircle, Power, Newspaper, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
-import type { GlobalConfig, TimeBlock, TickerMap, TradingSession, DiscordNotificationSettings, Account, NewsBlock } from '../types';
+import type { GlobalConfig, TimeBlock, TickerMap, TradingSession, Account, NewsBlock } from '../types';
 import { TickerMapping } from './TickerMapping';
 import { TimePicker } from './TimePicker';
 import { API_BASE } from '../config';
@@ -53,7 +53,6 @@ export function ConfigModal({ isOpen, onClose, config, onSave }: ConfigModalProp
     const [accounts, setAccounts] = useState<Account[]>([]);
     const [selectedNotifAccountId, setSelectedNotifAccountId] = useState<number | null>(null);
     const [accountDropdownOpen, setAccountDropdownOpen] = useState(false);
-    const [discordSettings, setDiscordSettings] = useState<DiscordNotificationSettings | null>(null);
     const [discordEnabled, setDiscordEnabled] = useState(false);
     const [webhookUrl, setWebhookUrl] = useState('');
     const [notifyPositionOpen, setNotifyPositionOpen] = useState(true);
@@ -94,7 +93,6 @@ export function ConfigModal({ isOpen, onClose, config, onSave }: ConfigModalProp
             initializedRef.current = false;
             setSessionsModified({});
             setSelectedNotifAccountId(null);
-            setDiscordSettings(null);
             setPositionActionDropdownOpen(false);
         }
     }, [isOpen, config]);
@@ -167,7 +165,6 @@ export function ConfigModal({ isOpen, onClose, config, onSave }: ConfigModalProp
         try {
             const res = await axios.get(`${API_BASE}/settings/discord/${accountId}`);
             const settings = res.data;
-            setDiscordSettings(settings);
             setDiscordEnabled(settings.enabled);
             setWebhookUrl(settings.webhook_url || '');
             setNotifyPositionOpen(settings.notify_position_open);
@@ -177,7 +174,6 @@ export function ConfigModal({ isOpen, onClose, config, onSave }: ConfigModalProp
         } catch (e) {
             console.error("Failed to fetch Discord settings", e);
             // Reset to defaults
-            setDiscordSettings(null);
             setDiscordEnabled(false);
             setWebhookUrl('');
             setNotifyPositionOpen(true);
@@ -324,7 +320,7 @@ export function ConfigModal({ isOpen, onClose, config, onSave }: ConfigModalProp
     };
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+        <div className="fixed inset-0 z-50 h-screen w-screen flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
             <div
                 className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-lg shadow-2xl relative overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col max-h-[90vh]"
                 onClick={(e) => e.stopPropagation()}

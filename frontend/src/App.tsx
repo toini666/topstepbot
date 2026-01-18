@@ -242,17 +242,22 @@ function App() {
           <img src="/robot_favicon.png" alt="Bot Logo" className="w-12 h-12 rounded-xl" />
           <div>
             <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-400 to-indigo-400 bg-clip-text text-transparent">TopStep Bot Toini666</h1>
-            <p className="text-slate-400 text-sm mt-1">
-              Status: <span className={`font-mono font-bold ${isConnected ? 'text-green-400' : 'text-orange-400'}`}>{isConnected ? 'ONLINE' : 'DISCONNECTED'}</span>
-              <span className="mx-2 text-slate-600">|</span>
-              Market: <span className={`font-mono font-bold ${isMarketOpen ? 'text-blue-400' : 'text-slate-500'}`}>{isMarketOpen ? 'OPEN' : 'CLOSED'}</span>
+            <div className="flex items-center gap-2 mt-2 flex-wrap">
+              <div className="flex items-center gap-2 bg-slate-800/50 px-3 py-1 rounded-full border border-slate-700/50 text-xs text-slate-400">
+                <span>Status:</span>
+                <span className={`font-mono font-bold ${isConnected ? 'text-green-400' : 'text-orange-400'}`}>{isConnected ? 'ONLINE' : 'DISCONNECTED'}</span>
+              </div>
+              <div className="flex items-center gap-2 bg-slate-800/50 px-3 py-1 rounded-full border border-slate-700/50 text-xs text-slate-400">
+                <span>Market:</span>
+                <span className={`font-mono font-bold ${isMarketOpen ? 'text-blue-400' : 'text-slate-500'}`}>{isMarketOpen ? 'OPEN' : 'CLOSED'}</span>
+              </div>
               {isMarketOpen && marketStatus.current_session && (
-                <>
-                  <span className="mx-2 text-slate-600">|</span>
-                  Session: <span className="font-mono font-bold text-amber-400">{marketStatus.current_session}</span>
-                </>
+                <div className="flex items-center gap-2 bg-slate-800/50 px-3 py-1 rounded-full border border-slate-700/50 text-xs text-slate-400">
+                  <span>Session:</span>
+                  <span className="font-mono font-bold text-amber-400">{marketStatus.current_session}</span>
+                </div>
               )}
-            </p>
+            </div>
           </div>
         </div>
 
@@ -307,16 +312,25 @@ function App() {
                         </button>
                       ))}
                     </div>
+
+                    {/* Disconnect Option */}
+                    <div className="border-t border-slate-700 mt-1 pt-1 bg-slate-900/50">
+                      <button
+                        onClick={() => {
+                          setAccountDropdownOpen(false);
+                          handleDisconnect();
+                        }}
+                        className="w-full text-left px-4 py-2 flex items-center gap-2 text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-colors"
+                      >
+                        <div className="p-0.5 rounded-full bg-red-500/10">
+                          <Power className="w-3 h-3" />
+                        </div>
+                        <span className="font-bold text-xs">Disconnect</span>
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>
-              <button
-                onClick={handleDisconnect}
-                className="bg-red-500/10 hover:bg-red-500/20 text-red-400 font-bold py-2 px-4 rounded-xl transition-all flex items-center gap-2 border border-red-500/20"
-                title="Disconnect"
-              >
-                <span className="text-sm">Disconnect</span>
-              </button>
             </div>
           )}
 
@@ -520,10 +534,10 @@ function App() {
                               {pos.currentPrice ? pos.currentPrice.toFixed(2) : '-'}
                             </td>
                             <td className={`py-3 px-4 text-right font-mono font-bold ${pos.unrealizedPnl === undefined || pos.unrealizedPnl === null
-                                ? 'text-slate-500'
-                                : pos.unrealizedPnl >= 0
-                                  ? 'text-green-400'
-                                  : 'text-red-400'
+                              ? 'text-slate-500'
+                              : pos.unrealizedPnl >= 0
+                                ? 'text-green-400'
+                                : 'text-red-400'
                               }`}>
                               {pos.unrealizedPnl !== undefined && pos.unrealizedPnl !== null
                                 ? `$${pos.unrealizedPnl.toFixed(2)}`
@@ -1007,8 +1021,12 @@ function App() {
         />
 
         <Toaster theme="dark" position="top-right" richColors />
-      </main >
-    </div >
+      </main>
+
+      <footer className="max-w-7xl mx-auto mt-12 mb-8 text-center text-slate-500 text-sm font-mono opacity-50 hover:opacity-100 transition-opacity">
+        top step trading bot made with love by toini666
+      </footer>
+    </div>
   );
 }
 

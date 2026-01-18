@@ -6,6 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [2026-01-18] - UI Refinements & Quick Fixes
+
+### Added
+- **Footer**: Added "Made with love" footer to the application.
+- **Top Bar**: Merged "Disconnect" button into Account Selector dropdown for cleaner interface.
+- **Top Bar**: Enhanced Status/Session indicators with badge styling.
+
+### Fixed
+- **Calendar**: Removed duplicate Globe icon in country filter dropdown.
+- **Modals**: Fixed backdrop blur height issue (fullscreen overlay).
+- **Cleanup**: Removed unused imports (`DiscordNotificationSettings`) in `ConfigModal`.
+
+---
+
 ## [2026-01-18] - News Trading Blocks & Position Action
 
 ### Added

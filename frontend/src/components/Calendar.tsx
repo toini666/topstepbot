@@ -154,8 +154,8 @@ export function Calendar() {
         <div
             onClick={onChange}
             className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all ${checked
-                    ? 'bg-indigo-500/10 border-indigo-500/30 text-white'
-                    : 'bg-slate-800/30 border-slate-800 text-slate-400 hover:border-slate-700'
+                ? 'bg-indigo-500/10 border-indigo-500/30 text-white'
+                : 'bg-slate-800/30 border-slate-800 text-slate-400 hover:border-slate-700'
                 }`}
         >
             <div className={`w-5 h-5 rounded-md border flex items-center justify-center transition-colors ${checked ? 'bg-indigo-500 border-indigo-500' : 'border-slate-600 bg-slate-900'
@@ -196,7 +196,7 @@ export function Calendar() {
 
             {/* Settings Modal */}
             {settingsOpen && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in">
+                <div className="fixed inset-0 z-50 h-screen w-screen flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in">
                     <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 w-full max-w-lg shadow-2xl animate-scale-in">
                         <div className="flex justify-between items-center mb-6">
                             <h3 className="text-xl font-bold text-white flex items-center gap-2">
@@ -385,7 +385,6 @@ export function Calendar() {
 
                         {/* Country Filter */}
                         <div className="flex items-center gap-2">
-                            <Globe className="w-4 h-4 text-slate-500" />
                             <Globe className="w-4 h-4 text-slate-500" />
                             <div className="relative">
                                 <button
