@@ -813,6 +813,51 @@ class TopStepClient:
         
         return count
 
+    async def get_current_price(self, contract_id: str):
+        """
+        Get the current/latest price for a contract using retrieveBars API.
+        Uses 1-second bars, fetching the last few seconds to get the most recent close price.
+        
+        Args:
+            contract_id: The TopStep contract ID (e.g., "MNQZ5")
+        
+        Returns:
+            The close price of the most recent bar, or None if unavailable.
+        """
+        await self._ensure_token()
+        
+        now = datetime.now(timezone.utc)
+        start_time = now - timedelta(seconds=10)  # Look back 10 seconds
+        
+        payload = {
+            "contractId": contract_id,
+            "live": True,
+            "startTime": start_time.isoformat(),
+            "endTime": now.isoformat(),
+            "unit": 1,  # 1 = Second
+            "unitNumber": 1,  # 1-second bars
+            "limit": 5,  # Get last 5 bars
+            "includePartialBar": True
+        }
+        
+        url = f"{self.base_url}/api/History/retrieveBars"
+        headers = {"Authorization": f"Bearer {self.token}"}
+        
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            try:
+                response = await client.post(url, headers=headers, json=payload)
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    bars = data.get("bars", [])
+                    if bars:
+                        # Return close price of most recent bar
+                        return bars[-1].get("close")
+            except Exception as e:
+                print(f"Get Current Price Error for {contract_id}: {e}")
+        
+        return None
+
     async def cancel_all_orders(self, account_id: int):
         """Fetches all working orders and cancels them."""
         # 1. Get Orders (using existing helper that fetches last 24h)

@@ -240,6 +240,8 @@ class PositionResponse(BaseModel):
     type: int  # 1=Long, 2=Short
     size: int
     averagePrice: float
+    currentPrice: Optional[float] = None  # Current market price
+    unrealizedPnl: Optional[float] = None  # Floating PnL
 
 
 class OrderResponse(BaseModel):

@@ -103,7 +103,7 @@ Account Settings (per account)
 |---------|----------|
 | **Header** | Connection status, market status, current session |
 | **Account Selector** | Switch between accounts, trading toggle |
-| **Open Positions** | Live positions with strategy/timeframe, close button |
+| **Open Positions** | Live positions with strategy/timeframe, **current price, unrealized PnL**, close button |
 | **Account Details** | Balance, risk per trade (editable), trading status |
 | **Trade History** | Aggregated trades (entry + partials = 1 line), strategy filter, PnL/fees display, **manual reconciliation button** |
 | **Order History** | Working and filled orders |
@@ -121,6 +121,8 @@ Account Settings (per account)
 | **Trade Rejection** | Ticker, reason, account |
 | **Orphaned Orders** | Warning for orders without positions |
 | **Trading Toggled** | Account name, new status (via /on, /off, /on_all, /off_all) |
+| **/status** | Balance, daily PnL, open positions with **unrealized PnL per position** |
+| **/status_all** | All accounts summary with **per-account and total unrealized PnL** |
 
 ### 8. Discord Integration
 - **Platform**: Rich embed notifications via Webhooks
@@ -135,6 +137,7 @@ Account Settings (per account)
 | **Trade Recording** | Trades matched by Symbol+Time for precise PnL aggregation (including partials) |
 | **Manual Trades** | Automatically detects and records execution of non-bot trades (Checks for OPEN or PENDING status to avoid duplicates) |
 | **Daily PnL** | Real-time Net PnL calculation (Gross - Fees) synced with TopStep session |
+| **Unrealized PnL** | Near real-time floating PnL for open positions (5s refresh) with current market prices |
 | **Strict Reconciliation** | DB corrections based on raw API truth data for 100% accuracy |
 | **Manual Reconciliation** | Dashboard button to preview and apply trade corrections with TopStep API |
 | **Export Endpoint** | JSON/CSV export with filters |

@@ -485,7 +485,9 @@ function App() {
                         <th className="py-3 px-4">Strategy</th>
                         <th className="py-3 px-4 text-center">Side</th>
                         <th className="py-3 px-4 text-center">Qty</th>
-                        <th className="py-3 px-4 text-right">Price</th>
+                        <th className="py-3 px-4 text-right">Entry</th>
+                        <th className="py-3 px-4 text-right">Current</th>
+                        <th className="py-3 px-4 text-right">PnL</th>
                         <th className="py-3 px-4 text-center">Action</th>
                       </tr>
                     </thead>
@@ -514,6 +516,19 @@ function App() {
                             </td>
                             <td className="py-3 px-4 text-center font-mono">{pos.size}</td>
                             <td className="py-3 px-4 text-right font-mono">{pos.averagePrice.toFixed(2)}</td>
+                            <td className="py-3 px-4 text-right font-mono text-slate-400">
+                              {pos.currentPrice ? pos.currentPrice.toFixed(2) : '-'}
+                            </td>
+                            <td className={`py-3 px-4 text-right font-mono font-bold ${pos.unrealizedPnl === undefined || pos.unrealizedPnl === null
+                                ? 'text-slate-500'
+                                : pos.unrealizedPnl >= 0
+                                  ? 'text-green-400'
+                                  : 'text-red-400'
+                              }`}>
+                              {pos.unrealizedPnl !== undefined && pos.unrealizedPnl !== null
+                                ? `$${pos.unrealizedPnl.toFixed(2)}`
+                                : '-'}
+                            </td>
                             <td className="py-3 px-4 text-center">
                               <button
                                 onClick={() => handleClosePosition(pos.contractId)}
@@ -528,7 +543,7 @@ function App() {
                       })}
                       {positions.length === 0 && (
                         <tr>
-                          <td colSpan={6} className="py-8 text-center text-slate-500 italic">No open positions.</td>
+                          <td colSpan={8} className="py-8 text-center text-slate-500 italic">No open positions.</td>
                         </tr>
                       )}
                     </tbody>

@@ -16,9 +16,9 @@ This document details the exact sequences, validations, and API calls for all tr
 8. [Position Sizing Calculation](#8-position-sizing-calculation)
 9. [Strategy Configuration Management](#9-strategy-configuration-management)
 10. [API Health Check Flow](#10-api-health-check-flow)
-10. [API Health Check Flow](#10-api-health-check-flow)
 11. [Heartbeat Monitoring Flow](#11-heartbeat-monitoring-flow)
 12. [Economic Calendar Flow](#12-economic-calendar-flow)
+13. [Unrealized PnL Flow](#13-unrealized-pnl-flow)
 
 ---
 
@@ -765,3 +765,92 @@ Daily Scheduled Job at 07:00 (Europe/Brussels).
    - Fetches cached data via /api/calendar
    - Displays filtered list based on user UI filters
 ```
+
+---
+
+## 13. Unrealized PnL Flow
+
+### Purpose
+Display floating (unrealized) PnL for open positions across Dashboard, API, and Telegram commands.
+
+### Components
+
+| Component | Purpose |
+|-----------|---------|
+| `price_cache.py` | In-memory cache with 5-second TTL for contract prices |
+| `topstep_client.get_current_price()` | Fetches latest price via `/api/History/retrieveBars` |
+| `calculate_unrealized_pnl()` | Calculates PnL from entry/current price and tick info |
+| `price_refresh_job()` | Scheduled job to refresh prices every 5s |
+
+### Price Refresh Job (Every 5s)
+
+```
+1. Get all accounts from TopStep
+2. FOR EACH account:
+   a. Get open positions
+   b. Collect unique contract IDs
+3. Call price_cache.refresh_prices(contract_ids)
+   - FOR EACH contract:
+     - Call get_current_price(contract_id)
+     - Uses /api/History/retrieveBars with 1-second bars
+     - Looks back 10 seconds, returns most recent close price
+     - Store in cache with timestamp
+```
+
+### PnL Calculation
+
+```python
+def calculate_unrealized_pnl(entry_price, current_price, quantity, is_long, tick_size, tick_value):
+    """
+    Formula: ((current - entry) / tick_size) × tick_value × quantity
+    For SHORT positions: negate the price difference
+    """
+    if is_long:
+        price_diff = current_price - entry_price
+    else:
+        price_diff = entry_price - current_price
+    
+    ticks = price_diff / tick_size
+    pnl = ticks * tick_value * quantity
+    return round(pnl, 2)
+```
+
+### Dashboard API Flow
+
+```
+GET /dashboard/positions/{account_id}
+
+1. Fetch positions from TopStep API
+2. FOR EACH position:
+   a. Get current_price from price_cache
+   b. Lookup TickerMap by ts_contract_id for tick_size/tick_value
+   c. Calculate unrealized_pnl using utility function
+3. Return enriched positions with currentPrice and unrealizedPnl fields
+```
+
+### Telegram Integration
+
+```
+/status command:
+├── Shows per-position unrealized PnL: "• MNQ: 🟢 LONG x2 @ 21500 | 🟢 $125.50"
+└── Shows total unrealized: "📊 Unrealized: 🟢 $250.00"
+
+/status_all command:
+├── Shows per-account unrealized when positions exist
+└── Shows total: "TOTAL: 🟢 $500 Realized | 🔴 -$25 Unrealized | 3 pos"
+```
+
+### Frontend Display
+
+The Open Positions table includes:
+- **Entry** column: Original entry price
+- **Current** column: Real-time price from cache
+- **PnL** column: Calculated unrealized PnL with green/red styling
+
+### Cache Strategy
+
+| Setting | Value | Reason |
+|---------|-------|--------|
+| TTL | 5 seconds | Balance between freshness and API limits |
+| Refresh Rate | Every 5s | Matches position monitor frequency |
+| Stale Handling | Returns None if expired | Frontend shows "-" for unavailable prices |

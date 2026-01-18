@@ -155,7 +155,10 @@ class TelegramBot:
             account_id = int(acc_setting.value)
             
             # Get account trading status from AccountSettings
-            from backend.database import AccountSettings
+            from backend.database import AccountSettings, TickerMap
+            from backend.services.price_cache import price_cache
+            from backend.services.risk_engine import calculate_unrealized_pnl
+            
             account_settings = db.query(AccountSettings).filter(AccountSettings.account_id == account_id).first()
             is_trading_on = account_settings and account_settings.trading_enabled
             status_emoji = "🟢 Trading ON" if is_trading_on else "🔴 Trading OFF"
@@ -182,6 +185,9 @@ class TelegramBot:
             positions = await topstep_client.get_open_positions(account_id)
             daily_pnl = await self._get_daily_pnl(account_id)
             
+            # Calculate total unrealized PnL
+            total_unrealized = 0.0
+            
             msg = (
                 f"📊 <b>System Status</b>\n"
                 f"{status_emoji}\n"
@@ -193,22 +199,53 @@ class TelegramBot:
             if positions:
                 msg += "📈 <b>Open Positions:</b>\n"
                 for p in positions:
-                    # API Key 'type': 1=Long, 2=Short
-                    # API Key 'averagePrice' for entry
                     raw_type = str(p.get('type', p.get('side'))) 
                     
                     if raw_type in ['1', 'Buy', 'LONG']: 
                         side_icon = "🟢 LONG"
+                        is_long = True
                     elif raw_type in ['2', 'Sell', 'SHORT']: 
                         side_icon = "🔴 SHORT"
+                        is_long = False
                     else: 
                         side_icon = f"⚪ {raw_type}"
+                        is_long = True
                     
-                    price = p.get('averagePrice', p.get('price'))
+                    entry_price = p.get('averagePrice', p.get('price'))
                     qty = p.get('size', p.get('quantity'))
                     contract = p.get('contractId', p.get('symbol'))
                     
-                    msg += f"• {contract}: {side_icon} x{qty} @ {price}\n"
+                    # Get unrealized PnL
+                    current_price = price_cache.get_price(contract)
+                    unrealized_pnl = None
+                    
+                    if current_price and entry_price:
+                        ticker_map = db.query(TickerMap).filter(
+                            TickerMap.ts_contract_id == contract
+                        ).first()
+                        
+                        if ticker_map:
+                            unrealized_pnl = calculate_unrealized_pnl(
+                                entry_price=entry_price,
+                                current_price=current_price,
+                                quantity=qty,
+                                is_long=is_long,
+                                tick_size=ticker_map.tick_size,
+                                tick_value=ticker_map.tick_value
+                            )
+                            total_unrealized += unrealized_pnl
+                    
+                    # Format position line with unrealized PnL
+                    if unrealized_pnl is not None:
+                        pnl_emoji = "🟢" if unrealized_pnl >= 0 else "🔴"
+                        msg += f"• {contract}: {side_icon} x{qty} @ {entry_price} | {pnl_emoji} ${unrealized_pnl:,.2f}\n"
+                    else:
+                        msg += f"• {contract}: {side_icon} x{qty} @ {entry_price}\n"
+                
+                # Add total unrealized
+                if total_unrealized != 0:
+                    unrealized_emoji = "🟢" if total_unrealized >= 0 else "🔴"
+                    msg += f"\n📊 Unrealized: {unrealized_emoji} <b>${total_unrealized:,.2f}</b>"
             else:
                 msg += "✅ No Open Positions"
                 
@@ -467,45 +504,85 @@ class TelegramBot:
                 await self.reply("⚠️ No accounts found")
                 return
 
-            # Get per-account trading status
+            # Get per-account trading status and prepare for PnL calculation
             db = SessionLocal()
             try:
-                from backend.database import AccountSettings
+                from backend.database import AccountSettings, TickerMap
+                from backend.services.price_cache import price_cache
+                from backend.services.risk_engine import calculate_unrealized_pnl
+                
                 account_settings_map = {}
                 for acc_settings in db.query(AccountSettings).all():
                     account_settings_map[acc_settings.account_id] = acc_settings.trading_enabled
+
+                msg = f"📊 <b>All Accounts Status</b>\n\n"
+                
+                total_pnl = 0.0
+                total_unrealized = 0.0
+                total_positions = 0
+                
+                for acc in accounts_list:
+                    acc_id = int(acc.get('id'))
+                    acc_name = acc.get('name', str(acc_id))
+                    balance = acc.get('balance', 0)
+                    
+                    # Trading status for this account
+                    is_trading_on = account_settings_map.get(acc_id, False)
+                    trading_status = "🟢" if is_trading_on else "🔴"
+                    
+                    # Get positions & PnL for this account
+                    positions = await topstep_client.get_open_positions(acc_id)
+                    daily_pnl = await self._get_daily_pnl(acc_id)
+                    total_pnl += daily_pnl
+                    total_positions += len(positions)
+                    
+                    # Calculate unrealized PnL for this account
+                    account_unrealized = 0.0
+                    for pos in positions:
+                        contract_id = pos.get('contractId')
+                        entry_price = pos.get('averagePrice', 0)
+                        qty = pos.get('size', 0)
+                        is_long = pos.get('type') == 1
+                        
+                        current_price = price_cache.get_price(contract_id)
+                        if current_price and entry_price:
+                            ticker_map = db.query(TickerMap).filter(
+                                TickerMap.ts_contract_id == contract_id
+                            ).first()
+                            
+                            if ticker_map:
+                                pnl = calculate_unrealized_pnl(
+                                    entry_price=entry_price,
+                                    current_price=current_price,
+                                    quantity=qty,
+                                    is_long=is_long,
+                                    tick_size=ticker_map.tick_size,
+                                    tick_value=ticker_map.tick_value
+                                )
+                                account_unrealized += pnl
+                    
+                    total_unrealized += account_unrealized
+                    
+                    pos_str = f"{len(positions)} pos" if positions else "Flat"
+                    
+                    msg += f"{trading_status} <b>{acc_name}</b>\n"
+                    if positions and account_unrealized != 0:
+                        unrealized_emoji = "🟢" if account_unrealized >= 0 else "🔴"
+                        msg += f"   💰 ${balance:,.2f} | PnL: ${daily_pnl:,.2f} | {unrealized_emoji} ${account_unrealized:,.2f} | {pos_str}\n"
+                    else:
+                        msg += f"   💰 ${balance:,.2f} | PnL: ${daily_pnl:,.2f} | {pos_str}\n"
+                
+                pnl_total_emoji = "🟢" if total_pnl >= 0 else "🔴"
+                unrealized_total_emoji = "🟢" if total_unrealized >= 0 else "🔴"
+                
+                msg += f"\n<b>TOTAL:</b> {pnl_total_emoji} ${total_pnl:,.2f} Realized"
+                if total_unrealized != 0:
+                    msg += f" | {unrealized_total_emoji} ${total_unrealized:,.2f} Unrealized"
+                msg += f" | {total_positions} pos"
+                
+                await self.reply(msg)
             finally:
                 db.close()
-
-            msg = f"📊 <b>All Accounts Status</b>\n\n"
-            
-            total_pnl = 0.0
-            total_positions = 0
-            
-            for acc in accounts_list:
-                acc_id = int(acc.get('id'))
-                acc_name = acc.get('name', str(acc_id))
-                balance = acc.get('balance', 0)
-                
-                # Trading status for this account
-                is_trading_on = account_settings_map.get(acc_id, False)
-                trading_status = "🟢" if is_trading_on else "🔴"
-                
-                # Get positions & PnL for this account
-                positions = await topstep_client.get_open_positions(acc_id)
-                daily_pnl = await self._get_daily_pnl(acc_id)
-                total_pnl += daily_pnl
-                total_positions += len(positions)
-                
-                pos_str = f"{len(positions)} pos" if positions else "Flat"
-                
-                msg += f"{trading_status} <b>{acc_name}</b>\n"
-                msg += f"   💰 ${balance:,.2f} | PnL: ${daily_pnl:,.2f} | {pos_str}\n"
-            
-            pnl_total_emoji = "🟢" if total_pnl >= 0 else "🔴"
-            msg += f"\n<b>TOTAL:</b> {pnl_total_emoji} ${total_pnl:,.2f} PnL | {total_positions} position(s)"
-            
-            await self.reply(msg)
             
         except Exception as e:
             await self.reply(f"❌ Error: {e}")

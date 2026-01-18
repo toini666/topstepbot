@@ -519,3 +519,42 @@ class RiskEngine:
         from backend.database import Log
         self.db.add(Log(level=level, message=message))
         self.db.commit()
+
+
+def calculate_unrealized_pnl(
+    entry_price: float,
+    current_price: float,
+    quantity: int,
+    is_long: bool,
+    tick_size: float,
+    tick_value: float
+) -> float:
+    """
+    Calculate unrealized PnL for a position.
+    
+    Formula: ((current - entry) / tick_size) × tick_value × quantity
+    For SHORT: negate the price difference
+    
+    Args:
+        entry_price: The average entry price
+        current_price: The current market price
+        quantity: Position size
+        is_long: True if LONG position, False if SHORT
+        tick_size: Contract tick size (e.g., 0.25 for MNQ)
+        tick_value: Value per tick (e.g., 0.50 for MNQ)
+    
+    Returns:
+        Unrealized PnL rounded to 2 decimal places
+    """
+    if tick_size == 0:
+        return 0.0
+    
+    if is_long:
+        price_diff = current_price - entry_price
+    else:
+        price_diff = entry_price - current_price
+    
+    ticks = price_diff / tick_size
+    pnl = ticks * tick_value * quantity
+    
+    return round(pnl, 2)

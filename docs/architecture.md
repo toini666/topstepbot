@@ -37,6 +37,7 @@ topstepbot/
 │   └── services/
 │       ├── topstep_client.py   # TopStepX API wrapper
 │       ├── risk_engine.py      # Risk management logic
+│       ├── price_cache.py      # Real-time price caching (5s TTL)
 │       ├── telegram_service.py # Telegram notifications
 │       ├── telegram_bot.py     # Telegram command handler
 │       ├── maintenance_service.py # Backup & log cleanup
@@ -115,6 +116,9 @@ class RiskEngine:
     # Position Sizing
     get_risk_amount(account_id, strategy) → float
     calculate_position_size(entry, sl, risk, tick_size, tick_value) → int
+
+# Standalone utility function
+calculate_unrealized_pnl(entry_price, current_price, quantity, is_long, tick_size, tick_value) → float
 ```
 
 #### Settings Hierarchy
@@ -145,6 +149,7 @@ Async HTTP client for TopStepX API with automatic token management.
 | POST | `/api/Order/cancel` | Cancel order |
 | POST | `/api/Contract/available` | List available contracts |
 | POST | `/api/Trade/search` | Get trade history |
+| POST | `/api/History/retrieveBars` | Get current price (1s bars) |
 
 #### Order Types
 ```python
@@ -239,6 +244,7 @@ Data export and analytics endpoints.
 | Job | Schedule | Function |
 |-----|----------|----------|
 | Position Monitor | Every 5s | Detect closed positions, update Trade status to CLOSED with PnL/fees, notify via Telegram |
+| **Price Refresh** | Every 5s | Fetches current prices for all open positions, updates price cache for unrealized PnL |
 | Auto Flatten | Configurable time | Close all positions daily |
 | API Health Check | Every 60s | Pings API, tracks health, alerts on consecutive failures |
 | **Heartbeat** | Configurable (default 60s) | Sends ping to external monitoring (N8N) with bot status |

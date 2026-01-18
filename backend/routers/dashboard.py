@@ -597,10 +597,49 @@ async def get_stats(db: Session = Depends(get_db)):
 # =============================================================================
 
 @router.get("/dashboard/positions/{account_id}", response_model=List[PositionResponse])
-async def get_positions(account_id: int):
-    """Get open positions for a specific account."""
+async def get_positions(account_id: int, db: Session = Depends(get_db)):
+    """Get open positions for a specific account with unrealized PnL."""
+    from backend.services.price_cache import price_cache
+    from backend.services.risk_engine import calculate_unrealized_pnl
+    
     positions = await topstep_client.get_open_positions(account_id)
-    return positions
+    
+    # Enrich positions with unrealized PnL
+    enriched_positions = []
+    
+    for pos in positions:
+        contract_id = pos.get("contractId")
+        entry_price = pos.get("averagePrice", 0)
+        quantity = pos.get("size", 0)
+        is_long = pos.get("type") == 1
+        
+        # Get current price from cache
+        current_price = price_cache.get_price(contract_id)
+        
+        unrealized_pnl = None
+        if current_price and entry_price:
+            # Get tick info from TickerMap
+            ticker_map = db.query(TickerMap).filter(
+                TickerMap.ts_contract_id == contract_id
+            ).first()
+            
+            if ticker_map:
+                unrealized_pnl = calculate_unrealized_pnl(
+                    entry_price=entry_price,
+                    current_price=current_price,
+                    quantity=quantity,
+                    is_long=is_long,
+                    tick_size=ticker_map.tick_size,
+                    tick_value=ticker_map.tick_value
+                )
+        
+        enriched_positions.append({
+            **pos,
+            "currentPrice": current_price,
+            "unrealizedPnl": unrealized_pnl
+        })
+    
+    return enriched_positions
 
 
 @router.get("/dashboard/orders/{account_id}", response_model=List[OrderResponse])

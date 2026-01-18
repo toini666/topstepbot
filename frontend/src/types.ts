@@ -52,6 +52,8 @@ export interface Position {
     type: number; // 1=Long, 2=Short
     size: number;
     averagePrice: number;
+    currentPrice?: number;     // Current market price
+    unrealizedPnl?: number;    // Floating PnL
 }
 
 export interface Order {

@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [2026-01-18] - Unrealized PnL Display
+
+### Added
+- **Unrealized PnL**: Real-time floating PnL display for open positions
+- **Price Cache Service**: In-memory caching of current contract prices with 5-second TTL
+- **Price Refresh Job**: Scheduled task fetching prices every 5 seconds using `/api/History/retrieveBars`
+- **Dashboard Current Price**: New "Current" column in Open Positions table showing live price
+- **Dashboard PnL Column**: New "PnL" column with green/red styling based on profit/loss
+- **Telegram `/status`**: Shows per-position unrealized PnL with emoji indicators
+- **Telegram `/status_all`**: Shows per-account and total unrealized PnL in summary
+
+---
 ## [2026-01-16] - Economic Calendar & Discord Improvements
 
 ### Added

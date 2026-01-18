@@ -30,6 +30,7 @@ import pytz
 from datetime import datetime, time, timedelta, timezone
 import pytz
 from backend.services.calendar_service import calendar_service
+from backend.services.price_cache import price_cache
 
 # Scheduler Setup
 scheduler = AsyncIOScheduler()
@@ -832,6 +833,30 @@ async def send_shutdown_webhook():
         print(f"⚠️ Shutdown notification error: {e}")
 
 
+async def price_refresh_job():
+    """
+    Refresh current prices for all active contracts.
+    Runs every 5 seconds to support near real-time unrealized PnL display.
+    """
+    try:
+        # Get all open positions across all accounts
+        accounts = await topstep_client.get_accounts()
+        active_contracts = set()
+        
+        for account in accounts:
+            positions = await topstep_client.get_open_positions(account.get("id"))
+            for pos in positions:
+                contract_id = pos.get("contractId")
+                if contract_id:
+                    active_contracts.add(contract_id)
+        
+        if active_contracts:
+            await price_cache.refresh_prices(list(active_contracts), topstep_client)
+    
+    except Exception as e:
+        print(f"Price refresh error: {e}")
+
+
 async def discord_daily_summary_job():
     """
     Checks if any account has reached its configured Discord daily summary time.
@@ -1011,6 +1036,7 @@ async def lifespan(app: FastAPI):
     # Add Scheduled Jobs
     scheduler.add_job(auto_flatten_job, 'interval', minutes=1)
     scheduler.add_job(monitor_closed_positions_job, 'interval', seconds=5)
+    scheduler.add_job(price_refresh_job, 'interval', seconds=5)
     
     # Maintenance Jobs
     scheduler.add_job(backup_database, 'cron', hour=3, minute=0)
