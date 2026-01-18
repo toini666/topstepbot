@@ -44,7 +44,7 @@ topstepbot/
 │       ├── persistence_service.py # State persistence
 │       ├── reconciliation_service.py # Manual trade reconciliation
 │       ├── discord_service.py # Discord notifications
-│       └── calendar_service.py # Economic Calendar fetcher
+│       └── calendar_service.py # Economic Calendar & News Block calculation
 ├── frontend/
 │   ├── src/
 │   │   ├── App.tsx             # Main dashboard component
@@ -105,7 +105,7 @@ class RiskEngine:
     # Validation Checks
     check_market_open() → Tuple[bool, str]      # Market status (hours + weekend_markets_open)
     check_market_hours() → Tuple[bool, str]     # Trading allowed (trading_days + hours)
-    check_blocked_periods() → Tuple[bool, str]
+    check_blocked_periods() → Tuple[bool, str]  # Manual blocks + Dynamic news blocks
     check_account_enabled(account_id) → Tuple[bool, str]
     check_strategy_enabled(account_id, strategy) → Tuple[bool, str]
     check_session_allowed(account_id, strategy) → Tuple[bool, str]  # Respects allow_outside_sessions
@@ -252,7 +252,9 @@ Data export and analytics endpoints.
 | Database Backup | 03:00 UTC | Copy database file |
 | Log Cleanup | 03:15 UTC | Remove logs > 7 days |
 | Discord Daily Summary | Configurable | Sends account summary to Discord |
-| **Economic Calendar** | Daily 07:00 | Fetches events & sends daily briefing |
+| Discord Daily Summary | Configurable | Sends account summary to Discord |
+| **Economic Calendar** | Daily 07:00 | Fetches events, calculates news blocks, sends briefing |
+| **Position Action** | Every 30s | Checks upcoming blocks, executes BREAKEVEN/FLATTEN |
 
 ---
 

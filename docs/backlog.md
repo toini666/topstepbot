@@ -4,10 +4,10 @@ This document outlines the roadmap to evolve the current functional prototype in
 
 ## 1. Advanced Risk Management (The "Guardian Pro")
 *Goal: Protect capital with institutional-grade constraints.*
-- [ ] **News Event Filter (Blocker)**: Automatically BLOCK trading 5 mins before/after specific events (NFP, CPI, FOMC).
+- [x] **News Event Filter (Blocker)**: Automatically BLOCK trading 5 mins before/after specific events (NFP, CPI, FOMC).
 - [ ] **Consecutive Loss Kill Switch**: Pause trading for X minutes after N consecutive losses to prevent "tilt" or algo-spirals.
 - [ ] **Alerting when trading unallowed**: In case a max drawdown on a ticker is reached, CME could stop quotation or Topstep could forbid to trade around specific price levels
-- [ ] **Manage Open position before blocked time**: global settings to define what to do on open positions when entering a blocked time trading zone
+- [x] **Manage Open position before blocked time**: global settings to define what to do on open positions when entering a blocked time trading zone
 
 ## 2. Observability & Logging (Traceability)
 *Goal: Know exactly what happened, when, and why.*

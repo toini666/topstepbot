@@ -625,6 +625,201 @@ async def auto_flatten_job():
         db.close()
 
 
+# Track handled blocks to prevent duplicate actions (reset daily by calendar job)
+_handled_position_action_blocks = set()
+
+
+async def position_action_job():
+    """
+    Checks for upcoming blocked periods and executes position actions.
+    Runs every 30 seconds.
+    
+    Actions:
+    - NOTHING: No action taken
+    - BREAKEVEN: Move SL to entry price for all positions
+    - FLATTEN: Close all positions and cancel all orders
+    """
+    global _handled_position_action_blocks
+    from backend.database import SessionLocal, Log
+    
+    db = SessionLocal()
+    
+    try:
+        risk_engine = RiskEngine(db)
+        settings = risk_engine.get_global_settings()
+        
+        action = settings.get("blocked_hours_position_action", "NOTHING")
+        if action == "NOTHING":
+            return
+        
+        buffer_minutes = settings.get("position_action_buffer_minutes", 1)
+        
+        # Check if we're approaching a blocked period
+        upcoming_block = risk_engine.get_upcoming_block(buffer_minutes)
+        
+        if not upcoming_block:
+            return
+        
+        # Create unique block ID for deduplication
+        block_id = f"{upcoming_block['start']}-{upcoming_block['end']}-{datetime.now(BRUSSELS_TZ).date()}"
+        
+        if block_id in _handled_position_action_blocks:
+            return  # Already handled this block today
+        
+        # Mark as handled BEFORE executing to prevent race conditions
+        _handled_position_action_blocks.add(block_id)
+        
+        block_type = upcoming_block.get("type", "manual")
+        block_event = upcoming_block.get("event")
+        reason = f"Entering {'news' if block_type == 'news' else 'manual'} block ({upcoming_block['start']}-{upcoming_block['end']})"
+        if block_event:
+            reason = f"News: {block_event} ({upcoming_block['start']}-{upcoming_block['end']})"
+        
+        print(f"🚨 Position Action Triggered: {action} - {reason}")
+        db.add(Log(level="WARNING", message=f"Position Action Triggered: {action} - {reason}"))
+        
+        # Execute the action
+        if action == "BREAKEVEN":
+            await execute_breakeven_all(db, reason)
+        elif action == "FLATTEN":
+            await execute_flatten_all(db, reason)
+        
+        db.commit()
+        
+    except Exception as e:
+        print(f"Position action job error: {e}")
+        import traceback
+        traceback.print_exc()
+    finally:
+        db.close()
+
+
+async def execute_breakeven_all(db, reason: str):
+    """
+    Move Stop Loss to entry price for all open positions across all accounts.
+    If already in loss, SL moves to entry which may trigger auto-close.
+    """
+    from backend.database import Log
+    
+    try:
+        all_accounts = await topstep_client.get_accounts()
+        total_modified = 0
+        total_skipped = 0
+        
+        for account in all_accounts:
+            account_id = account.get('id')
+            account_name = account.get('name', str(account_id))
+            
+            try:
+                positions = await topstep_client.get_open_positions(account_id)
+                orders = await topstep_client.get_orders(account_id)
+                
+                for pos in positions:
+                    contract_id = pos.get('contractId')
+                    entry_price = pos.get('averagePrice') or pos.get('price')
+                    pos_type = pos.get('type')  # 1=Long, 2=Short
+                    
+                    if not entry_price:
+                        total_skipped += 1
+                        continue
+                    
+                    # Find corresponding SL order
+                    sl_order = None
+                    for order in orders:
+                        if str(order.get('contractId')) == str(contract_id):
+                            order_type = order.get('type')  # Looking for STOP type
+                            if order_type in [2, "STOP", "SL"]:
+                                sl_order = order
+                                break
+                    
+                    if sl_order:
+                        # Modify SL to entry price
+                        try:
+                            await topstep_client.modify_order(
+                                account_id=account_id,
+                                order_id=sl_order.get('id'),
+                                price=entry_price
+                            )
+                            total_modified += 1
+                            await asyncio.sleep(0.1)  # Rate limit protection
+                        except Exception as e:
+                            db.add(Log(level="WARNING", message=f"BREAKEVEN: Failed to modify SL for {contract_id}: {e}"))
+                            total_skipped += 1
+                    else:
+                        # No SL order found - log warning
+                        db.add(Log(level="WARNING", message=f"BREAKEVEN: No SL order found for {contract_id} on {account_name}"))
+                        total_skipped += 1
+                        
+            except Exception as e:
+                db.add(Log(level="ERROR", message=f"BREAKEVEN: Error processing account {account_name}: {e}"))
+        
+        # Notification
+        message = (
+            f"🔒 <b>BREAKEVEN Executed</b>\n\n"
+            f"• Reason: {reason}\n"
+            f"• SL Orders Modified: {total_modified}\n"
+            f"• Skipped: {total_skipped}"
+        )
+        await telegram_service.send_message(message)
+        db.add(Log(level="INFO", message=f"BREAKEVEN Complete: {total_modified} modified, {total_skipped} skipped"))
+        
+    except Exception as e:
+        db.add(Log(level="ERROR", message=f"BREAKEVEN failed: {e}"))
+        await telegram_service.send_message(f"🚨 <b>BREAKEVEN Failed</b>\n\nError: {e}")
+
+
+async def execute_flatten_all(db, reason: str):
+    """
+    Close all positions and cancel all orders across all accounts.
+    Reuses logic from auto_flatten_job.
+    """
+    from backend.database import Log
+    
+    try:
+        all_accounts = await topstep_client.get_accounts()
+        total_positions_closed = 0
+        total_orders_cancelled = 0
+        
+        for account in all_accounts:
+            account_id = account.get('id')
+            account_name = account.get('name', str(account_id))
+            
+            try:
+                # Cancel all working orders
+                orders = await topstep_client.get_orders(account_id)
+                for order in orders:
+                    if order.get('status') in [1, 6]:
+                        await topstep_client.cancel_order(account_id, order.get('id'))
+                        total_orders_cancelled += 1
+                        await asyncio.sleep(0.1)  # Rate limit
+                
+                # Close all positions
+                positions = await topstep_client.get_open_positions(account_id)
+                for pos in positions:
+                    await topstep_client.close_position(account_id, pos.get('contractId'))
+                    total_positions_closed += 1
+                    await asyncio.sleep(0.1)  # Rate limit
+                
+                db.add(Log(level="WARNING", message=f"FLATTEN: Account {account_name} flattened"))
+                
+            except Exception as e:
+                db.add(Log(level="ERROR", message=f"FLATTEN failed for {account_name}: {e}"))
+        
+        # Notification
+        message = (
+            f"💨 <b>FLATTEN Executed</b>\n\n"
+            f"• Reason: {reason}\n"
+            f"• Positions Closed: {total_positions_closed}\n"
+            f"• Orders Cancelled: {total_orders_cancelled}"
+        )
+        await telegram_service.send_message(message)
+        db.add(Log(level="INFO", message=f"FLATTEN Complete: {total_positions_closed} positions, {total_orders_cancelled} orders"))
+        
+    except Exception as e:
+        db.add(Log(level="ERROR", message=f"FLATTEN failed: {e}"))
+        await telegram_service.send_message(f"🚨 <b>FLATTEN Failed</b>\n\nError: {e}")
+
+
 async def api_health_check_job():
     """
     Periodically checks TopStep API health using /api/Status/ping.
@@ -1047,6 +1242,9 @@ async def lifespan(app: FastAPI):
     
     # Discord Daily Summary (every minute, checks configured times per account)
     scheduler.add_job(discord_daily_summary_job, 'interval', minutes=1)
+    
+    # Position Action Job (every 30 seconds - checks for upcoming blocked periods)
+    scheduler.add_job(position_action_job, 'interval', seconds=30)
 
     # Heartbeat Job (configurable interval, default 60s)
     heartbeat_interval = int(os.getenv("HEARTBEAT_INTERVAL_SECONDS", "60"))

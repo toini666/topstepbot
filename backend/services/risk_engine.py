@@ -74,6 +74,15 @@ class RiskEngine:
         settings["enforce_single_position_per_asset"] = self._get_setting("enforce_single_position_per_asset", "true").lower() == "true"
         settings["block_cross_account_opposite"] = self._get_setting("block_cross_account_opposite", "true").lower() == "true"
         
+        # News Block Settings
+        settings["news_block_enabled"] = self._get_setting("news_block_enabled", "false").lower() == "true"
+        settings["news_block_before_minutes"] = int(self._get_setting("news_block_before_minutes", "5"))
+        settings["news_block_after_minutes"] = int(self._get_setting("news_block_after_minutes", "5"))
+        
+        # Position Action on Blocked Hours
+        settings["blocked_hours_position_action"] = self._get_setting("blocked_hours_position_action", "NOTHING")
+        settings["position_action_buffer_minutes"] = int(self._get_setting("position_action_buffer_minutes", "1"))
+        
         return settings
     
     def _get_setting(self, key: str, default: str = "") -> str:
@@ -256,6 +265,7 @@ class RiskEngine:
     def check_blocked_periods(self) -> Tuple[bool, str]:
         """
         Check if current time is in a blocked period.
+        Now checks BOTH manual blocks AND dynamic news blocks.
         Returns (allowed, reason).
         """
         settings = self.get_global_settings()
@@ -265,6 +275,7 @@ class RiskEngine:
         
         now_bru = datetime.now(BRUSSELS_TZ).time()
         
+        # Check manual blocked periods
         for block in settings.get("blocked_periods", []):
             # Respect the 'enabled' flag added recently
             if not block.get("enabled", True):
@@ -287,7 +298,89 @@ class RiskEngine:
                 print(f"Block parse error: {e}")
                 continue
         
+        # Check dynamic news blocks
+        from backend.services.calendar_service import calendar_service
+        news_blocks = calendar_service.get_today_news_blocks()
+        
+        for block in news_blocks:
+            try:
+                start_h, start_m = map(int, block["start"].split(':'))
+                end_h, end_m = map(int, block["end"].split(':'))
+                t_start = time(start_h, start_m)
+                t_end = time(end_h, end_m)
+                
+                # Handle midnight crossing
+                if t_start > t_end:
+                    if now_bru >= t_start or now_bru <= t_end:
+                        return False, f"News Block ({block.get('event', 'Event')} - {block['start']}-{block['end']})"
+                else:
+                    if t_start <= now_bru <= t_end:
+                        return False, f"News Block ({block.get('event', 'Event')} - {block['start']}-{block['end']})"
+            except Exception as e:
+                print(f"News block parse error: {e}")
+                continue
+        
         return True, "OK"
+    
+    def get_all_blocked_periods(self) -> List[Dict]:
+        """
+        Get combined list of all blocked periods (manual + dynamic news blocks).
+        Used by position_action_job to check upcoming blocks.
+        """
+        settings = self.get_global_settings()
+        all_blocks = []
+        
+        # Add manual blocks (if enabled)
+        if settings.get("blocked_periods_enabled", True):
+            for block in settings.get("blocked_periods", []):
+                if block.get("enabled", True):
+                    all_blocks.append({
+                        "start": block["start"],
+                        "end": block["end"],
+                        "type": "manual",
+                        "event": None
+                    })
+        
+        # Add dynamic news blocks
+        from backend.services.calendar_service import calendar_service
+        for block in calendar_service.get_today_news_blocks():
+            all_blocks.append({
+                "start": block["start"],
+                "end": block["end"],
+                "type": "news",
+                "event": block.get("event")
+            })
+        
+        return all_blocks
+    
+    def get_upcoming_block(self, buffer_minutes: int) -> Optional[Dict]:
+        """
+        Check if we're within buffer_minutes of entering a blocked period.
+        Returns the block info if action needed, None otherwise.
+        
+        Used by position_action_job to trigger BREAKEVEN/FLATTEN.
+        """
+        from datetime import timedelta
+        
+        now_bru = datetime.now(BRUSSELS_TZ)
+        all_blocks = self.get_all_blocked_periods()
+        
+        for block in all_blocks:
+            try:
+                start_h, start_m = map(int, block["start"].split(':'))
+                block_start = now_bru.replace(hour=start_h, minute=start_m, second=0, microsecond=0)
+                
+                # Calculate the trigger time (buffer_minutes before block starts)
+                trigger_time = block_start - timedelta(minutes=buffer_minutes)
+                
+                # Check if we're in the trigger window (between trigger_time and block_start)
+                if trigger_time <= now_bru < block_start:
+                    return block
+            except Exception as e:
+                print(f"Upcoming block check error: {e}")
+                continue
+        
+        return None
     
     def check_account_enabled(self, account_id: int) -> Tuple[bool, str]:
         """

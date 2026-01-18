@@ -97,7 +97,14 @@ def get_global_config(db: Session = Depends(get_db)):
         weekend_markets_open=settings.get("weekend_markets_open", False),
         trading_days=settings.get("trading_days", ["MON", "TUE", "WED", "THU", "FRI"]),
         enforce_single_position_per_asset=settings.get("enforce_single_position_per_asset", True),
-        block_cross_account_opposite=settings.get("block_cross_account_opposite", True)
+        block_cross_account_opposite=settings.get("block_cross_account_opposite", True),
+        # News Block Settings
+        news_block_enabled=settings.get("news_block_enabled", False),
+        news_block_before_minutes=settings.get("news_block_before_minutes", 5),
+        news_block_after_minutes=settings.get("news_block_after_minutes", 5),
+        # Position Action Settings
+        blocked_hours_position_action=settings.get("blocked_hours_position_action", "NOTHING"),
+        position_action_buffer_minutes=settings.get("position_action_buffer_minutes", 1)
     )
 
 
@@ -153,6 +160,26 @@ def update_global_config(req: GlobalSettingsUpdate, db: Session = Depends(get_db
         status = "ENABLED" if req.block_cross_account_opposite else "DISABLED"
         log_messages.append(f"Cross-account direction blocking {status}")
     
+    # News Block Settings
+    if req.news_block_enabled is not None:
+        set_setting("news_block_enabled", "true" if req.news_block_enabled else "false")
+        status = "ENABLED" if req.news_block_enabled else "DISABLED"
+        log_messages.append(f"News block {status}")
+    
+    if req.news_block_before_minutes is not None:
+        set_setting("news_block_before_minutes", str(req.news_block_before_minutes))
+    
+    if req.news_block_after_minutes is not None:
+        set_setting("news_block_after_minutes", str(req.news_block_after_minutes))
+    
+    # Position Action on Blocked Hours
+    if req.blocked_hours_position_action is not None:
+        set_setting("blocked_hours_position_action", req.blocked_hours_position_action)
+        log_messages.append(f"Blocked hours position action set to {req.blocked_hours_position_action}")
+    
+    if req.position_action_buffer_minutes is not None:
+        set_setting("position_action_buffer_minutes", str(req.position_action_buffer_minutes))
+    
     # Log changes
     for msg in log_messages:
         db.add(Log(level="INFO", message=f"Global Settings: {msg}"))
@@ -160,6 +187,24 @@ def update_global_config(req: GlobalSettingsUpdate, db: Session = Depends(get_db
     db.add(Log(level="INFO", message="Global Settings Updated", details=json.dumps(req.model_dump(), default=str)))
     db.commit()
     return {"status": "updated"}
+
+
+# =============================================================================
+# NEWS BLOCKS
+# =============================================================================
+
+@router.get("/dashboard/news-blocks")
+def get_news_blocks(db: Session = Depends(get_db)):
+    """Get today's calculated news blocks from calendar service."""
+    from backend.services.calendar_service import calendar_service
+    
+    risk_engine = RiskEngine(db)
+    settings = risk_engine.get_global_settings()
+    
+    return {
+        "enabled": settings.get("news_block_enabled", False),
+        "blocks": calendar_service.get_today_news_blocks()
+    }
 
 
 # =============================================================================

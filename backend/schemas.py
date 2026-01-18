@@ -213,6 +213,15 @@ class GlobalSettingsResponse(BaseModel):
     trading_days: List[str] = ["MON", "TUE", "WED", "THU", "FRI"]
     enforce_single_position_per_asset: bool = True
     block_cross_account_opposite: bool = True
+    
+    # News Block Settings
+    news_block_enabled: bool = False
+    news_block_before_minutes: int = 5
+    news_block_after_minutes: int = 5
+    
+    # Position Action on Blocked Hours
+    blocked_hours_position_action: str = "NOTHING"  # NOTHING, BREAKEVEN, FLATTEN
+    position_action_buffer_minutes: int = 1
 
 
 class GlobalSettingsUpdate(BaseModel):
@@ -226,6 +235,15 @@ class GlobalSettingsUpdate(BaseModel):
     trading_days: Optional[List[str]] = None
     enforce_single_position_per_asset: Optional[bool] = None
     block_cross_account_opposite: Optional[bool] = None
+    
+    # News Block Settings
+    news_block_enabled: Optional[bool] = None
+    news_block_before_minutes: Optional[int] = None
+    news_block_after_minutes: Optional[int] = None
+    
+    # Position Action on Blocked Hours
+    blocked_hours_position_action: Optional[str] = None
+    position_action_buffer_minutes: Optional[int] = None
 
 
 # =============================================================================

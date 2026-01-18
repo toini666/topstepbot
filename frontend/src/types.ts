@@ -113,6 +113,14 @@ export interface TimeBlock {
     enabled: boolean;
 }
 
+export interface NewsBlock {
+    start: string;       // HH:MM
+    end: string;         // HH:MM
+    event: string;       // Event name
+    country: string;     // USD, EUR, etc.
+    impact: string;      // High, Medium, Low
+}
+
 export interface GlobalConfig {
     blocked_periods_enabled: boolean;
     blocked_periods: TimeBlock[];
@@ -124,7 +132,17 @@ export interface GlobalConfig {
     trading_days: string[];  // ['MON', 'TUE', 'WED', 'THU', 'FRI'] - user preference
     enforce_single_position_per_asset: boolean;
     block_cross_account_opposite: boolean;
+
+    // News Block Settings
+    news_block_enabled: boolean;
+    news_block_before_minutes: number;
+    news_block_after_minutes: number;
+
+    // Position Action on Blocked Hours
+    blocked_hours_position_action: 'NOTHING' | 'BREAKEVEN' | 'FLATTEN';
+    position_action_buffer_minutes: number;
 }
+
 
 // =============================================================================
 // TRADING SESSIONS

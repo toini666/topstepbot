@@ -6,6 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [2026-01-18] - News Trading Blocks & Position Action
+
+### Added
+- **Dynamic News Blocks**: Automatically block trading around major economic events (configurable buffer)
+- **Position Action on Block**: Automatically `BREAKEVEN` or `FLATTEN` positions before entering a blocked period
+- **News Block UI**: New settings section in ConfigModal to manage news blockers and position actions
+- **News Block API**: New endpoint `/dashboard/news-blocks` to retrieve calculated daily blocks
+- **Notification**: Daily Telegram summary of effective news trading blocks
+- **Risk Engine Update**: `check_blocked_periods` now respects both manual and dynamic news blocks
+
+### Changed
+- **ConfigModal UI**: Refined layout moving News/Risk sections and implementing consistent UI patterns (toggles, inputs)
+
+---
+
 ## [2026-01-18] - Unrealized PnL Display
 
 ### Added

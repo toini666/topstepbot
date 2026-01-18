@@ -74,6 +74,8 @@ Account Settings (per account)
 | **Blocked Periods** | Custom time blocks where trading is disabled |
 | **Contract Limit** | Maximum contracts (micro-equivalent) per account |
 | **Force Flatten** | Manual and scheduled flatten-all capability |
+| **News Blocks** | Dynamic trading blocks based on major economic events |
+| **Position Action** | Action to take (Breakeven/Flatten) before entering blocked periods |
 
 ### 5. Alert Types
 
@@ -171,6 +173,17 @@ Account Settings (per account)
 - **Configuration**:
   - Custom webhooks
   - Define "Major" criteria (Countries + Impacts)
+- **News Blocks Integration**:
+  - Automatically converts major events into trading blocks
+  - Configurable buffer time before and after events
+
+### 12. Automated Position Actions
+- **Trigger**: Approach of any blocked period (Manual or News)
+- **Actions**:
+  - **NOTHING**: Default behavior
+  - **BREAKEVEN**: Moves SL to entry price for all open positions
+  - **FLATTEN**: Closes all positions and cancels orders
+- **Buffer**: Configurable minutes before block start to execute action
 
 ### 11. User Personas
 

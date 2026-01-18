@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
-import { X, Save, Plus, Trash2, Clock, Settings, Calendar, Bell, ChevronDown, CheckCircle, Power } from 'lucide-react';
+import { X, Save, Plus, Trash2, Clock, Settings, Calendar, Bell, ChevronDown, CheckCircle, Power, Newspaper, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
-import type { GlobalConfig, TimeBlock, TickerMap, TradingSession, DiscordNotificationSettings, Account } from '../types';
+import type { GlobalConfig, TimeBlock, TickerMap, TradingSession, DiscordNotificationSettings, Account, NewsBlock } from '../types';
 import { TickerMapping } from './TickerMapping';
 import { TimePicker } from './TimePicker';
 import { API_BASE } from '../config';
@@ -30,6 +30,17 @@ export function ConfigModal({ isOpen, onClose, config, onSave }: ConfigModalProp
     const [tradingDays, setTradingDays] = useState<string[]>(['MON', 'TUE', 'WED', 'THU', 'FRI']);
     const [enforceSinglePosition, setEnforceSinglePosition] = useState(true);
     const [blockCrossAccount, setBlockCrossAccount] = useState(true);
+
+    // News Block Settings
+    const [newsBlockEnabled, setNewsBlockEnabled] = useState(false);
+    const [newsBlockBefore, setNewsBlockBefore] = useState(5);
+    const [newsBlockAfter, setNewsBlockAfter] = useState(5);
+    const [newsBlocks, setNewsBlocks] = useState<NewsBlock[]>([]);
+
+    // Position Action Settings
+    const [positionAction, setPositionAction] = useState<'NOTHING' | 'BREAKEVEN' | 'FLATTEN'>('NOTHING');
+    const [positionActionBuffer, setPositionActionBuffer] = useState(1);
+    const [positionActionDropdownOpen, setPositionActionDropdownOpen] = useState(false);
 
     // Sessions
     const [sessions, setSessions] = useState<TradingSession[]>([]);
@@ -67,15 +78,24 @@ export function ConfigModal({ isOpen, onClose, config, onSave }: ConfigModalProp
             setTradingDays(config.trading_days || ['MON', 'TUE', 'WED', 'THU', 'FRI']);
             setEnforceSinglePosition(config.enforce_single_position_per_asset ?? true);
             setBlockCrossAccount(config.block_cross_account_opposite ?? true);
+            // News Block Settings
+            setNewsBlockEnabled(config.news_block_enabled ?? false);
+            setNewsBlockBefore(config.news_block_before_minutes ?? 5);
+            setNewsBlockAfter(config.news_block_after_minutes ?? 5);
+            // Position Action Settings
+            setPositionAction(config.blocked_hours_position_action ?? 'NOTHING');
+            setPositionActionBuffer(config.position_action_buffer_minutes ?? 1);
             fetchSessions();
             fetchMappings();
             fetchAccounts();
+            fetchNewsBlocks();
             initializedRef.current = true;
         } else if (!isOpen) {
             initializedRef.current = false;
             setSessionsModified({});
             setSelectedNotifAccountId(null);
             setDiscordSettings(null);
+            setPositionActionDropdownOpen(false);
         }
     }, [isOpen, config]);
 
@@ -86,10 +106,13 @@ export function ConfigModal({ isOpen, onClose, config, onSave }: ConfigModalProp
             if (accountDropdownOpen && !target.closest('.group-account-selector')) {
                 setAccountDropdownOpen(false);
             }
+            if (positionActionDropdownOpen && !target.closest('.group-position-action')) {
+                setPositionActionDropdownOpen(false);
+            }
         };
         document.addEventListener('mousedown', handleClickOutside);
         return () => document.removeEventListener('mousedown', handleClickOutside);
-    }, [accountDropdownOpen]);
+    }, [accountDropdownOpen, positionActionDropdownOpen]);
 
     const fetchSessions = async () => {
         try {
@@ -121,6 +144,15 @@ export function ConfigModal({ isOpen, onClose, config, onSave }: ConfigModalProp
             }
         } catch (e) {
             console.error("Failed to fetch accounts", e);
+        }
+    };
+
+    const fetchNewsBlocks = async () => {
+        try {
+            const res = await axios.get(`${API_BASE}/dashboard/news-blocks`);
+            setNewsBlocks(res.data.blocks || []);
+        } catch (e) {
+            console.error("Failed to fetch news blocks", e);
         }
     };
 
@@ -231,7 +263,14 @@ export function ConfigModal({ isOpen, onClose, config, onSave }: ConfigModalProp
                 weekend_markets_open: weekendMarketsOpen,
                 trading_days: tradingDays,
                 enforce_single_position_per_asset: enforceSinglePosition,
-                block_cross_account_opposite: blockCrossAccount
+                block_cross_account_opposite: blockCrossAccount,
+                // News Block Settings
+                news_block_enabled: newsBlockEnabled,
+                news_block_before_minutes: newsBlockBefore,
+                news_block_after_minutes: newsBlockAfter,
+                // Position Action Settings
+                blocked_hours_position_action: positionAction,
+                position_action_buffer_minutes: positionActionBuffer
             });
 
             // Save Sessions if modified
@@ -455,6 +494,153 @@ export function ConfigModal({ isOpen, onClose, config, onSave }: ConfigModalProp
                                 </div>
                             </div>
 
+                            {/* News Block Settings */}
+                            <div className={`space-y-3 transition-opacity ${!newsBlockEnabled ? "opacity-50" : ""}`}>
+                                <div className="flex justify-between items-center">
+                                    <div className="flex items-center gap-3">
+                                        <label className="text-sm font-semibold text-slate-300 flex items-center gap-2">
+                                            <Newspaper className="w-4 h-4 text-slate-400" />
+                                            News Trading Blocks
+                                        </label>
+                                        <button
+                                            onClick={() => setNewsBlockEnabled(!newsBlockEnabled)}
+                                            className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${newsBlockEnabled ? 'bg-indigo-500' : 'bg-slate-700'}`}
+                                        >
+                                            <span className={`${newsBlockEnabled ? 'translate-x-5' : 'translate-x-1'} inline-block h-3 w-3 transform rounded-full bg-white transition-transform`} />
+                                        </button>
+                                    </div>
+                                </div>
+
+                                {newsBlockEnabled && (
+                                    <div className="space-y-3 pl-6">
+                                        <p className="text-[10px] text-slate-500 italic">
+                                            Automatically block trading around major economic events based on calendar settings.
+                                        </p>
+                                        <div className="flex items-center gap-4">
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-sm text-slate-400">Block</span>
+                                                <input
+                                                    type="number"
+                                                    value={newsBlockBefore}
+                                                    onChange={(e) => setNewsBlockBefore(Number(e.target.value))}
+                                                    className="w-16 bg-slate-950 border border-slate-700 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-indigo-500 transition-colors font-mono text-center"
+                                                    min={0}
+                                                />
+                                                <span className="text-sm text-slate-400">min before</span>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-sm text-slate-400">and</span>
+                                                <input
+                                                    type="number"
+                                                    value={newsBlockAfter}
+                                                    onChange={(e) => setNewsBlockAfter(Number(e.target.value))}
+                                                    className="w-16 bg-slate-950 border border-slate-700 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-indigo-500 transition-colors font-mono text-center"
+                                                    min={0}
+                                                />
+                                                <span className="text-sm text-slate-400">min after</span>
+                                            </div>
+                                        </div>
+
+                                        {/* Today's News Blocks Display */}
+                                        {newsBlocks.length > 0 ? (
+                                            <div className="space-y-2">
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-xs font-semibold text-slate-400">Today's Blocks</span>
+                                                    <span className="text-[10px] bg-amber-500/20 text-amber-400 px-1.5 py-0.5 rounded">Today only</span>
+                                                </div>
+                                                <div className="space-y-1">
+                                                    {newsBlocks.map((block, idx) => (
+                                                        <div key={idx} className="flex items-center gap-2 text-xs bg-slate-950 p-2 rounded-lg">
+                                                            <span className={`w-2 h-2 rounded-full ${block.impact === 'High' ? 'bg-red-500' : block.impact === 'Medium' ? 'bg-amber-500' : 'bg-green-500'}`} />
+                                                            <span className="text-slate-500 font-mono">{block.start}-{block.end}</span>
+                                                            <span className="text-slate-400">{block.country}</span>
+                                                            <span className="text-slate-300 flex-1 truncate">{block.event}</span>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <p className="text-xs text-slate-500 italic py-1">No news blocks for today.</p>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Position Action on Blocked Hours */}
+                            <div className="space-y-3">
+                                <label className="text-sm font-semibold text-slate-300 flex items-center gap-2">
+                                    <AlertTriangle className="w-4 h-4 text-slate-400" />
+                                    Position Action on Blocked Hours
+                                </label>
+
+                                <div className="pl-6 space-y-3">
+                                    <div className="flex items-center gap-4">
+                                        {/* Custom Dropdown */}
+                                        <div className="relative group-position-action">
+                                            <button
+                                                onClick={() => setPositionActionDropdownOpen(!positionActionDropdownOpen)}
+                                                className="min-w-[200px] flex items-center justify-between bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white hover:border-indigo-500/50 transition-colors"
+                                            >
+                                                <span>
+                                                    {positionAction === 'NOTHING' && 'Do Nothing'}
+                                                    {positionAction === 'BREAKEVEN' && 'Move SL to Breakeven'}
+                                                    {positionAction === 'FLATTEN' && 'Flatten All Positions'}
+                                                </span>
+                                                <ChevronDown className={`w-4 h-4 text-slate-500 transition-transform duration-200 ${positionActionDropdownOpen ? 'rotate-180' : ''}`} />
+                                            </button>
+
+                                            {positionActionDropdownOpen && (
+                                                <div className="absolute top-full left-0 mt-2 w-full bg-slate-800 border border-slate-700 rounded-xl shadow-xl overflow-hidden z-20 animate-fade-in-down">
+                                                    <div className="p-1">
+                                                        {[
+                                                            { value: 'NOTHING', label: 'Do Nothing' },
+                                                            { value: 'BREAKEVEN', label: 'Move SL to Breakeven' },
+                                                            { value: 'FLATTEN', label: 'Flatten All Positions' }
+                                                        ].map((option) => (
+                                                            <button
+                                                                key={option.value}
+                                                                onClick={() => {
+                                                                    setPositionAction(option.value as any);
+                                                                    setPositionActionDropdownOpen(false);
+                                                                }}
+                                                                className={`w-full text-left px-3 py-2 rounded-lg flex items-center justify-between transition-colors text-sm ${positionAction === option.value
+                                                                    ? 'bg-indigo-500/10 text-indigo-400'
+                                                                    : 'text-slate-300 hover:bg-slate-700/50'
+                                                                    }`}
+                                                            >
+                                                                <span>{option.label}</span>
+                                                                {positionAction === option.value && <CheckCircle className="w-3.5 h-3.5" />}
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        {positionAction !== 'NOTHING' && (
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-sm text-slate-400">Buffer:</span>
+                                                <input
+                                                    type="number"
+                                                    value={positionActionBuffer}
+                                                    onChange={(e) => setPositionActionBuffer(Number(e.target.value))}
+                                                    className="w-16 bg-slate-950 border border-slate-700 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-indigo-500 transition-colors font-mono text-center"
+                                                    min={1}
+                                                />
+                                                <span className="text-sm text-slate-400">min</span>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {positionAction !== 'NOTHING' && (
+                                        <div className={`text-[10px] p-2 rounded-lg inline-block ${positionAction === 'FLATTEN' ? 'bg-red-500/10 text-red-400' : 'bg-amber-500/10 text-amber-400'}`}>
+                                            {positionAction === 'BREAKEVEN' && "Stop Loss will be moved to entry price for all open positions."}
+                                            {positionAction === 'FLATTEN' && "All positions will be closed and orders cancelled."}
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+
                             {/* Auto Flatten */}
                             <div className="space-y-3">
                                 <div className="flex justify-between items-center">
@@ -511,6 +697,7 @@ export function ConfigModal({ isOpen, onClose, config, onSave }: ConfigModalProp
                                     </button>
                                 </div>
                             </div>
+
                         </div>
                     )}
 

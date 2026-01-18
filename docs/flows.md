@@ -19,6 +19,7 @@ This document details the exact sequences, validations, and API calls for all tr
 11. [Heartbeat Monitoring Flow](#11-heartbeat-monitoring-flow)
 12. [Economic Calendar Flow](#12-economic-calendar-flow)
 13. [Unrealized PnL Flow](#13-unrealized-pnl-flow)
+14. [Position Action Flow](#14-position-action-flow)
 
 ---
 
@@ -49,6 +50,7 @@ TradingView         Webhook Router         RiskEngine          TopStep API
     │                     │◀─ (bool, reason) ───│                    │
     │                     │                     │                    │
     │                     │── check_blocked_periods()                │
+    │                     │   (Manual Blocks + News Blocks)          │
     │                     │◀─ (bool, reason) ───│                    │
     │                     │                     │                    │
     ├─────────────────────┼─ GET ACCOUNTS ──────┼────────────────────┤
@@ -768,7 +770,65 @@ Daily Scheduled Job at 07:00 (Europe/Brussels).
 
 ---
 
-## 13. Unrealized PnL Flow
+## 13. Webhook Validation
+
+### Purpose
+Ensure that incoming webhooks (e.g., from TradingView alerts) are legitimate and authorized.
+
+### Configuration
+```env
+WEBHOOK_AUTH_TOKEN=your_secret_webhook_token
+```
+
+### Validation Flow
+```
+1. Receive POST request at /webhook/tradingview
+2. Check for 'Authorization' header
+   - IF header missing or token invalid:
+     - Log WARNING "Unauthorized webhook attempt"
+     - Return 401 Unauthorized
+3. Parse webhook payload
+4. Process alert
+```
+
+---
+
+## 14. News Block Position Action Flow
+
+### Purpose
+Automatically manage positions based on upcoming news events. This is a specific implementation of the general `Position Action Flow` (Section 16).
+
+### Trigger
+Integrated into the `position_action_job` (every 30 seconds).
+
+### Sequence
+```
+1. Inside position_action_job, after checking for Manual Blocks:
+2. Call risk_engine.get_upcoming_news_block(buffer_minutes)
+   - Checks for high-impact news events from the Economic Calendar
+   - Considers `calendar_major_countries` and `calendar_major_impacts` settings
+   - Returns details of the next relevant news event if within buffer
+   
+3. IF News Block Found AND Not Already Handled:
+   
+   a. CASE "BREAKEVEN":
+      - Get open positions for all accounts
+      - Modify all Stop Loss orders to Entry Price
+      - Log "Moved to Breakeven due to upcoming news block"
+      - Notify via Telegram
+      
+   b. CASE "FLATTEN":
+      - Call execute_flatten_all()
+      - Closes all positions, cancels all orders
+      - Log "Flattened due to upcoming news block"
+      - Notify via Telegram
+      
+   c. Add news block ID to _handled_position_action_blocks (deduplication)
+```
+
+---
+
+## 15. Unrealized PnL Flow
 
 ### Purpose
 Display floating (unrealized) PnL for open positions across Dashboard, API, and Telegram commands.
@@ -795,6 +855,46 @@ Display floating (unrealized) PnL for open positions across Dashboard, API, and 
      - Uses /api/History/retrieveBars with 1-second bars
      - Looks back 10 seconds, returns most recent close price
      - Store in cache with timestamp
+
+---
+
+## 14. Position Action Flow
+
+### Trigger
+Scheduled job every 30 seconds (`position_action_job`).
+
+### Purpose
+Automatically protect open positions before entering a prohibited trading period (Manual Block or News Event) by moving to Breakeven or Flattening.
+
+### Configuration
+- `blocked_hours_position_action`: NOTHING / BREAKEVEN / FLATTEN
+- `position_action_buffer_minutes`: Minutes before block start (default: 1)
+
+### Sequence
+```
+1. Get Global Settings
+2. IF blocked_hours_position_action == "NOTHING": Return
+
+3. Check for upcoming block:
+   - Call risk_engine.get_upcoming_block(buffer_minutes)
+   - Checks both Manual Blocks and Dynamic News Blocks
+   
+4. IF Block Found AND Not Already Handled:
+   
+   a. CASE "BREAKEVEN":
+      - Get open positions for all accounts
+      - Modify all Stop Loss orders to Entry Price
+      - Log "Moved to Breakeven due to upcoming block"
+      - Notify via Telegram
+      
+   b. CASE "FLATTEN":
+      - Call execute_flatten_all()
+      - Closes all positions, cancels all orders
+      - Log "Flattened due to upcoming block"
+      - Notify via Telegram
+      
+   c. Add block ID to _handled_position_action_blocks (deduplication)
+```
 ```
 
 ### PnL Calculation

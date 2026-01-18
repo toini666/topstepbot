@@ -17,6 +17,7 @@ class CalendarService:
     def __init__(self):
         self._cache = None
         self._last_fetch = None
+        self._today_news_blocks: List[Dict] = []  # Dynamic news blocks for today
 
     async def fetch_calendar(self) -> List[Dict]:
         """
@@ -81,10 +82,112 @@ class CalendarService:
     def get_cached_calendar(self) -> List[Dict]:
         return self._cache or []
 
+    def get_today_news_blocks(self) -> List[Dict]:
+        """Return cached news blocks for today (for risk_engine to check)."""
+        return self._today_news_blocks or []
+
+    async def calculate_news_blocks(self, todays_events: List[Dict]) -> List[Dict]:
+        """
+        Calculate dynamic trading blocks based on today's major events.
+        Called after fetching calendar in check_calendar_job().
+        
+        Returns list of time blocks for today's major events.
+        """
+        db = SessionLocal()
+        try:
+            # Get settings
+            news_enabled = db.query(Setting).filter(Setting.key == "news_block_enabled").first()
+            if not news_enabled or news_enabled.value.lower() != "true":
+                self._today_news_blocks = []
+                return []
+            
+            before_setting = db.query(Setting).filter(Setting.key == "news_block_before_minutes").first()
+            after_setting = db.query(Setting).filter(Setting.key == "news_block_after_minutes").first()
+            
+            before_minutes = int(before_setting.value) if before_setting else 5
+            after_minutes = int(after_setting.value) if after_setting else 5
+            
+            # Get filtering settings (same as used for Discord summary)
+            impacts_setting = db.query(Setting).filter(Setting.key == "calendar_major_impacts").first()
+            countries_setting = db.query(Setting).filter(Setting.key == "calendar_major_countries").first()
+            
+            target_impacts = json.loads(impacts_setting.value) if impacts_setting and impacts_setting.value else ["High", "Medium"]
+            target_countries = json.loads(countries_setting.value) if countries_setting and countries_setting.value else ["USD"]
+            
+            blocks = []
+            for event in todays_events:
+                # Check if event matches major criteria
+                if event.get("impact") not in target_impacts:
+                    continue
+                if event.get("country") not in target_countries:
+                    continue
+                
+                event_time = event.get("time")
+                if not event_time or ":" not in event_time:
+                    continue
+                
+                try:
+                    # Parse event time
+                    hour, minute = map(int, event_time.split(":"))
+                    event_dt = datetime.now().replace(hour=hour, minute=minute, second=0, microsecond=0)
+                    
+                    # Calculate block start and end
+                    block_start = event_dt - timedelta(minutes=before_minutes)
+                    block_end = event_dt + timedelta(minutes=after_minutes)
+                    
+                    blocks.append({
+                        "start": block_start.strftime("%H:%M"),
+                        "end": block_end.strftime("%H:%M"),
+                        "event": event.get("title"),
+                        "country": event.get("country"),
+                        "impact": event.get("impact")
+                    })
+                except Exception as e:
+                    print(f"Error parsing event time: {e}")
+                    continue
+            
+            self._today_news_blocks = blocks
+            return blocks
+            
+        except Exception as e:
+            self._log_error(f"Failed to calculate news blocks: {e}")
+            return []
+        finally:
+            db.close()
+
+    async def notify_news_blocks(self, blocks: List[Dict]):
+        """Send Telegram notification with today's news blocks."""
+        if not blocks:
+            return
+        
+        try:
+            from backend.services.telegram_bot import telegram_service
+            
+            # Build message
+            lines = ["📅 <b>Today's News Trading Blocks</b>\n"]
+            lines.append("<i>Trading will be blocked around these events:</i>\n")
+            
+            impact_emoji = {"High": "🔴", "Medium": "🟠", "Low": "🟡"}
+            
+            for block in blocks:
+                emoji = impact_emoji.get(block.get("impact"), "⚪")
+                lines.append(
+                    f"{emoji} <code>{block['start']}-{block['end']}</code> "
+                    f"{block['country']} {block['event']}"
+                )
+            
+            message = "\n".join(lines)
+            await telegram_service.send_message(message)
+            self._log_info(f"News blocks notification sent: {len(blocks)} blocks")
+            
+        except Exception as e:
+            self._log_error(f"Failed to send news blocks notification: {e}")
+
     async def check_calendar_job(self):
         """
         Scheduled job to run at 7 AM.
         Fetches calendar and sends Discord notification for today's major events.
+        Also calculates news blocks if enabled.
         """
         print("📅 Running Daily Calendar Job...")
         events = await self.fetch_calendar()
@@ -97,6 +200,11 @@ class CalendarService:
         
         if todays_events:
             await self.send_discord_summary(todays_events)
+        
+        # Calculate and notify news blocks
+        blocks = await self.calculate_news_blocks(todays_events)
+        if blocks:
+            await self.notify_news_blocks(blocks)
 
     async def send_discord_summary(self, events: List[Dict]):
         """Send a summary of today's major events to Discord."""
