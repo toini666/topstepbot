@@ -658,8 +658,12 @@ async def get_positions(account_id: int, db: Session = Depends(get_db)):
         quantity = pos.get("size", 0)
         is_long = pos.get("type") == 1
         
-        # Get current price from cache
+        # Get current price from cache (allow stale as fallback)
         current_price = price_cache.get_price(contract_id)
+        if current_price is None:
+            # Try stale price as fallback
+            current_price = price_cache.get_price(contract_id, allow_stale=True)
+
         
         unrealized_pnl = None
         if current_price and entry_price:

@@ -16,14 +16,32 @@ fi
 
 # 1. Pre-start Cleanup
 echo "🧹 Cleaning up existing processes..."
-# Kill process occupying port 8000 (Backend)
+
+# Gracefully stop backend
+pkill -f "uvicorn backend.main:app" || true
+
+# Wait for backend to shut down (max 10 seconds)
+count=0
+while pgrep -f "uvicorn backend.main:app" > /dev/null; do
+    if [ $count -eq 0 ]; then
+        echo "   -> Waiting for graceful shutdown..."
+    fi
+    sleep 1
+    ((count++))
+    if [ $count -ge 10 ]; then
+        echo "   ⚠️ Shutdown timed out. Forcing kill..."
+        pkill -9 -f "uvicorn backend.main:app"
+        break
+    fi
+done
+
+# Ensure port 8000 is free
 if lsof -t -i :8000 >/dev/null; then
-    echo "   -> Killing process on port 8000..."
     lsof -t -i :8000 | xargs kill -9
 fi
-pkill -f "uvicorn backend.main:app" || true
+
 pkill -f "vite" || true
-sleep 2
+sleep 1
 
 # 2. Activate Python Environment
 echo "🐍 Activating Virtual Environment..."

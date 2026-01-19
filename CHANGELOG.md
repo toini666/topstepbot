@@ -20,6 +20,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [2026-01-19] - Shutdown & Reconciliation Fixes
+
+### Fixed
+- **Trade Reconciliation**: Fixed incorrect trade matching logic by implementing strict Fill-to-Round-Turn conversion.
+- **Trade Reconciliation**: Fixed PnL and Fees aggregation for partial closes.
+- **Trade Reconciliation**: Fixed "blue screen" crash in UI caused by missing `total_pnl_change` and undefined animations.
+- **Startup**: Fixed race condition where "Shutdown complete" logs appeared during new process startup.
+- **Startup**: Eliminated `asyncio.CancelledError` traceback during graceful shutdown.
+
+---
+
 ## [2026-01-18] - News Trading Blocks & Position Action
 
 ### Added

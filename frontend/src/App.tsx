@@ -159,7 +159,7 @@ function App() {
       action: async () => {
         try {
           if (!selectedAccountId) return;
-          const res = await axios.post(`${API_BASE}/dashboard/positions/close`, { contract_id: contractId });
+          const res = await axios.post(`${API_BASE}/dashboard/positions/${selectedAccountId}/close`, { contract_id: contractId });
           if (!res.data.success) {
             toast.error("Failed: " + res.data.message);
           } else {

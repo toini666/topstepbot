@@ -1037,8 +1037,13 @@ async def price_refresh_job():
         # Get all open positions across all accounts
         accounts = await topstep_client.get_accounts()
         active_contracts = set()
+        is_simulated = True  # Default to simulated
         
         for account in accounts:
+            # Check if any account is live (not simulated)
+            if not account.get("simulated", True):
+                is_simulated = False
+            
             positions = await topstep_client.get_open_positions(account.get("id"))
             for pos in positions:
                 contract_id = pos.get("contractId")
@@ -1046,10 +1051,15 @@ async def price_refresh_job():
                     active_contracts.add(contract_id)
         
         if active_contracts:
-            await price_cache.refresh_prices(list(active_contracts), topstep_client)
+            await price_cache.refresh_prices(
+                list(active_contracts), 
+                topstep_client, 
+                is_simulated=is_simulated
+            )
     
     except Exception as e:
         print(f"Price refresh error: {e}")
+
 
 
 async def discord_daily_summary_job():

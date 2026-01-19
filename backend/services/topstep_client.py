@@ -3,7 +3,16 @@ import os
 from datetime import datetime, timedelta, timezone
 import asyncio
 import json
+import logging
 from backend.database import SessionLocal, Log
+
+logger = logging.getLogger("topstepbot")
+
+
+class RateLimitError(Exception):
+    """Raised when API returns 429 Too Many Requests."""
+    pass
+
 
 class TopStepClient:
     def __init__(self):
@@ -15,8 +24,140 @@ class TopStepClient:
         
         self.token = None
         self.account_id = None
-        self.account_id = None
         self._contract_cache = {} # Cache for Contract Details
+        
+        # Rate limiting tracking
+        self._consecutive_errors = 0
+        self._rate_limit_alert_sent = False
+        self._last_rate_limit_time = None
+
+    async def _make_request(
+        self, 
+        method: str, 
+        url: str, 
+        payload: dict = None, 
+        headers: dict = None,
+        max_retries: int = 5,
+        log_on_success: bool = True
+    ) -> tuple:
+        """
+        Centralized HTTP request handler with exponential backoff for rate limiting.
+        
+        Args:
+            method: HTTP method (GET, POST, etc.)
+            url: Full URL to call
+            payload: JSON payload for POST requests
+            headers: HTTP headers
+            max_retries: Maximum number of retries for 429 errors
+            log_on_success: Whether to log successful calls
+            
+        Returns:
+            Tuple of (response_data: dict, status_code: int, success: bool)
+        """
+        base_delay = 1.0
+        
+        for attempt in range(max_retries):
+            try:
+                async with httpx.AsyncClient(timeout=15.0) as client:
+                    if method.upper() == "GET":
+                        response = await client.get(url, headers=headers)
+                    else:
+                        response = await client.post(url, json=payload, headers=headers)
+                    
+                    # Handle rate limiting (429)
+                    if response.status_code == 429:
+                        self._consecutive_errors += 1
+                        delay = min(base_delay * (2 ** attempt), 30)  # Max 30 seconds
+                        
+                        logger.warning(
+                            f"Rate limited (429) on {url}. "
+                            f"Attempt {attempt + 1}/{max_retries}. "
+                            f"Waiting {delay:.1f}s. Consecutive errors: {self._consecutive_errors}"
+                        )
+                        
+                        # Log to database
+                        self._log_api_call(method, url, payload, {"error": "Rate Limited"}, 429)
+                        
+                        # Send Telegram alert after 3 consecutive errors
+                        if self._consecutive_errors >= 3 and not self._rate_limit_alert_sent:
+                            await self._send_rate_limit_alert(url, self._consecutive_errors)
+                        
+                        self._last_rate_limit_time = datetime.now(timezone.utc)
+                        await asyncio.sleep(delay)
+                        continue
+                    
+                    # Handle auth errors
+                    if response.status_code == 401:
+                        self.token = None
+                        self._log_api_call(method, url, payload, None, 401)
+                        return (None, 401, False)
+                    
+                    # Handle other errors
+                    if response.status_code >= 400:
+                        self._consecutive_errors += 1
+                        self._log_api_call(method, url, payload, None, response.status_code)
+                        return (None, response.status_code, False)
+                    
+                    # Success - reset error counter
+                    self._consecutive_errors = 0
+                    self._rate_limit_alert_sent = False
+                    
+                    try:
+                        data = response.json()
+                        if log_on_success:
+                            self._log_api_call(method, url, payload, data, response.status_code)
+                        return (data, response.status_code, True)
+                    except json.JSONDecodeError:
+                        self._log_api_call(method, url, payload, {"raw": response.text}, response.status_code)
+                        return (None, response.status_code, False)
+                        
+            except httpx.TimeoutException:
+                self._consecutive_errors += 1
+                logger.error(f"Timeout on {url} (attempt {attempt + 1}/{max_retries})")
+                if attempt < max_retries - 1:
+                    await asyncio.sleep(base_delay * (2 ** attempt))
+                continue
+            except Exception as e:
+                self._consecutive_errors += 1
+                logger.error(f"Request error on {url}: {e}")
+                return (None, 0, False)
+        
+        # All retries exhausted
+        logger.error(f"All {max_retries} retries exhausted for {url}")
+        return (None, 429, False)
+
+    async def _send_rate_limit_alert(self, url: str, error_count: int):
+        """Send Telegram notification about rate limiting."""
+        try:
+            from backend.services.telegram_service import send_telegram_message
+            
+            message = (
+                f"⚠️ <b>API RATE LIMITING DETECTED</b>\n\n"
+                f"TopStep API is returning 429 errors.\n"
+                f"Consecutive errors: <code>{error_count}</code>\n"
+                f"Last endpoint: <code>{url.split('/')[-1]}</code>\n\n"
+                f"The bot is applying exponential backoff. "
+                f"If this persists, consider reducing API call frequency."
+            )
+            
+            await send_telegram_message(message)
+            self._rate_limit_alert_sent = True
+            
+            # Also log to database
+            db = SessionLocal()
+            try:
+                db.add(Log(
+                    level="ERROR",
+                    message=f"Rate Limit Alert: {error_count} consecutive 429 errors",
+                    details=json.dumps({"url": url, "error_count": error_count})
+                ))
+                db.commit()
+            finally:
+                db.close()
+                
+        except Exception as e:
+            logger.error(f"Failed to send rate limit alert: {e}")
+
 
     def _log_api_call(self, method: str, url: str, payload: dict = None, response: dict = None, status_code: int = 0):
         """Logs an API call to the database."""
@@ -813,13 +954,14 @@ class TopStepClient:
         
         return count
 
-    async def get_current_price(self, contract_id: str):
+    async def get_current_price(self, contract_id: str, is_simulated: bool = True):
         """
         Get the current/latest price for a contract using retrieveBars API.
         Uses 1-second bars, fetching the last few seconds to get the most recent close price.
         
         Args:
-            contract_id: The TopStep contract ID (e.g., "MNQZ5")
+            contract_id: The TopStep contract ID (e.g., "MNQH6")
+            is_simulated: If True, uses live=False for simulated accounts
         
         Returns:
             The close price of the most recent bar, or None if unavailable.
@@ -829,9 +971,15 @@ class TopStepClient:
         now = datetime.now(timezone.utc)
         start_time = now - timedelta(seconds=10)  # Look back 10 seconds
         
+        url = f"{self.base_url}/api/History/retrieveBars"
+        headers = {"Authorization": f"Bearer {self.token}"}
+        
+        # Sim accounts must use live=False, live accounts use live=True
+        live_flag = not is_simulated
+        
         payload = {
             "contractId": contract_id,
-            "live": True,
+            "live": live_flag,
             "startTime": start_time.isoformat(),
             "endTime": now.isoformat(),
             "unit": 1,  # 1 = Second
@@ -840,23 +988,28 @@ class TopStepClient:
             "includePartialBar": True
         }
         
-        url = f"{self.base_url}/api/History/retrieveBars"
-        headers = {"Authorization": f"Bearer {self.token}"}
+        # Use centralized request handler with rate limiting protection
+        data, status_code, success = await self._make_request(
+            "POST", url, payload, headers,
+            max_retries=2,  # Fewer retries for price fetching
+            log_on_success=False  # Don't log every price fetch (too noisy)
+        )
         
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            try:
-                response = await client.post(url, headers=headers, json=payload)
-                
-                if response.status_code == 200:
-                    data = response.json()
-                    bars = data.get("bars", [])
-                    if bars:
-                        # Return close price of most recent bar
-                        return bars[-1].get("close")
-            except Exception as e:
-                print(f"Get Current Price Error for {contract_id}: {e}")
+        if success and data and data.get("success"):
+            bars = data.get("bars", [])
+            if bars:
+                # Find the most recent bar with a valid close price
+                for bar in reversed(bars):
+                    close_price = bar.get("c") or bar.get("close")  # API uses 'c' for close
+                    if close_price is not None:
+                        return close_price
         
         return None
+
+
+
+
+
 
     async def cancel_all_orders(self, account_id: int):
         """Fetches all working orders and cancels them."""

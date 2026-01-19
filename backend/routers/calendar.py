@@ -54,8 +54,8 @@ def get_settings(db: Session = Depends(get_db)):
     }
 
 @router.post("/settings")
-def update_settings(settings: CalendarSettings, db: Session = Depends(get_db)):
-    """Update calendar settings."""
+async def update_settings(settings: CalendarSettings, db: Session = Depends(get_db)):
+    """Update calendar settings and recalculate news blocks."""
     # URL
     url_setting = db.query(Setting).filter(Setting.key == "calendar_discord_url").first()
     if not url_setting:
@@ -92,7 +92,19 @@ def update_settings(settings: CalendarSettings, db: Session = Depends(get_db)):
         impacts_setting.value = impacts_json
         
     db.commit()
+    
+    # Recalculate news blocks with new settings
+    await calendar_service.recalculate_news_blocks()
+    
     return {"status": "success"}
+
+
+@router.post("/recalculate-blocks")
+async def recalculate_blocks():
+    """Force recalculation of news blocks based on current settings."""
+    blocks = await calendar_service.recalculate_news_blocks()
+    return {"status": "success", "blocks_count": len(blocks), "blocks": blocks}
+
 
 @router.post("/test-notification")
 async def test_notification():

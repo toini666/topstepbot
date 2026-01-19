@@ -86,6 +86,33 @@ class CalendarService:
         """Return cached news blocks for today (for risk_engine to check)."""
         return self._today_news_blocks or []
 
+    async def recalculate_news_blocks(self) -> List[Dict]:
+        """
+        Recalculate news blocks based on cached calendar and current settings.
+        Call this after changing calendar settings to sync the blocks.
+        
+        Returns:
+            Updated list of news blocks
+        """
+        if not self._cache:
+            # Try to fetch if cache is empty
+            await self.fetch_calendar()
+        
+        if not self._cache:
+            logger.warning("Cannot recalculate news blocks: no calendar data")
+            return []
+        
+        # Get today's events from cache
+        today_str = datetime.now().strftime("%m-%d-%Y")
+        todays_events = [e for e in self._cache if e.get("date") == today_str]
+        
+        # Recalculate blocks
+        blocks = await self.calculate_news_blocks(todays_events)
+        logger.info(f"Recalculated news blocks: {len(blocks)} blocks for today")
+        
+        return blocks
+
+
     async def calculate_news_blocks(self, todays_events: List[Dict]) -> List[Dict]:
         """
         Calculate dynamic trading blocks based on today's major events.

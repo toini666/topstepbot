@@ -29,10 +29,6 @@ This document outlines the roadmap to evolve the current functional prototype in
 
 ## 5. Quick fixes / bugs
 *Goal: Fix bugs and improve user experience.*
-- [x] **Top bar layout**: Corriger / améliorer layout top bar
-- [x] **Fix bug**: Remove double country icon in calendar filters
-- [x] **Fix bug**: Fix modal that does not go till bottom
-- [x] **Footer**: Add footer to the UI
 
 
 
