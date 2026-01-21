@@ -5,6 +5,7 @@ import asyncio
 import json
 import logging
 from backend.database import SessionLocal, Log
+from backend.services.telegram_service import telegram_service
 
 logger = logging.getLogger("topstepbot")
 
@@ -827,13 +828,20 @@ class TopStepClient:
                 
                 if response.status_code != 200:
                     self._log_api_call("POST", url, payload, None, response.status_code)
+                    await telegram_service.notify_api_error("POST", url, {"error": f"HTTP {response.status_code}", "payload": payload}, response.status_code)
                     if response.status_code == 401: self.token = None 
                     return False
                 
                 try:
                     data = response.json()
                     self._log_api_call("POST", url, payload, data, response.status_code)
-                    return data.get("success", False)
+                    
+                    if data.get("success"):
+                        return True
+                    else:
+                        await telegram_service.notify_api_error("POST", url, data, response.status_code)
+                        return False
+
                 except json.JSONDecodeError:
                     return False
             except Exception as e:

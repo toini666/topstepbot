@@ -74,6 +74,29 @@ class TelegramService:
         msg = f"⚠️ <b>System Error</b>\n{error_msg}"
         await self.send_message(msg)
 
+    async def notify_api_error(self, method: str, url: str, error_payload: dict, status_code: int):
+        """Notify of API rejection/error."""
+        error_msg = error_payload.get("errorMessage") or error_payload.get("error") or "Unknown Error"
+        
+        msg = (
+            f"🚨 <b>API REJECTED</b>\n"
+            f"<b>{method} {url}</b> [{status_code}]\n"
+            f"Error: {error_msg}\n"
+        )
+        
+        # Add payload details if useful (truncated)
+        if error_payload:
+            import json
+            try:
+                # Pretty print but compacted
+                details = json.dumps(error_payload, indent=2)
+                if len(details) > 500: details = details[:500] + "..."
+                msg += f"<pre>{details}</pre>"
+            except:
+                pass
+                
+        await self.send_message(msg)
+
     # =========================================================================
     # SIGNAL NOTIFICATIONS (NEW: timeframe, strategy visible)
     # =========================================================================

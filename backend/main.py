@@ -727,18 +727,20 @@ async def execute_breakeven_all(db, reason: str):
                     sl_order = None
                     for order in orders:
                         if str(order.get('contractId')) == str(contract_id):
-                            order_type = order.get('type')  # Looking for STOP type
-                            if order_type in [2, "STOP", "SL"]:
+                            order_type = order.get('type')  # Looking for STOP type (4=Stop)
+                            # existing code checked 2/STOP/SL, adding 4.
+                            if order_type in [4, "STOP", "SL"]:
                                 sl_order = order
                                 break
                     
                     if sl_order:
                         # Modify SL to entry price
                         try:
+                            # Use stopPrice for Stop orders as required by API
                             await topstep_client.modify_order(
                                 account_id=account_id,
                                 order_id=sl_order.get('id'),
-                                price=entry_price
+                                stopPrice=entry_price
                             )
                             total_modified += 1
                             await asyncio.sleep(0.1)  # Rate limit protection
