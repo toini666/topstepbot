@@ -29,6 +29,7 @@ This document outlines the roadmap to evolve the current functional prototype in
 
 ## 5. Quick fixes / bugs
 *Goal: Fix bugs and improve user experience.*
+- [x] **API Rate Limit Handling**: Fix infinite retry loop on 429 errors with Circuit Breaker & Telegram alerts.
 
 
 

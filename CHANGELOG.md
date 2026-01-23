@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [2026-01-23] - API Resilience
+
+### Fixed
+- **API Rate Limiting**: Implemented Circuit Breaker pattern to stop infinite retry loops on 429 errors (60s cooldown).
+- **Notifications**: Fixed broken Telegram import preventing rate limit alerts.
+
 ## [2026-01-18] - UI Refinements & Quick Fixes
 
 ### Added

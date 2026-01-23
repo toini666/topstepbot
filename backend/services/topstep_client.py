@@ -31,6 +31,7 @@ class TopStepClient:
         self._consecutive_errors = 0
         self._rate_limit_alert_sent = False
         self._last_rate_limit_time = None
+        self._rate_limit_until = None # Circuit Breaker timestamp
 
     async def _make_request(
         self, 
@@ -43,18 +44,13 @@ class TopStepClient:
     ) -> tuple:
         """
         Centralized HTTP request handler with exponential backoff for rate limiting.
-        
-        Args:
-            method: HTTP method (GET, POST, etc.)
-            url: Full URL to call
-            payload: JSON payload for POST requests
-            headers: HTTP headers
-            max_retries: Maximum number of retries for 429 errors
-            log_on_success: Whether to log successful calls
-            
-        Returns:
-            Tuple of (response_data: dict, status_code: int, success: bool)
         """
+        # 1. CIRCUIT BREAKER CHECK
+        if self._rate_limit_until and datetime.now(timezone.utc) < self._rate_limit_until:
+            wait_time = (self._rate_limit_until - datetime.now(timezone.utc)).total_seconds()
+            logger.warning(f"Circuit Breaker Active. Skipping call to {url}. Wait {wait_time:.1f}s")
+            return (None, 429, False)
+
         base_delay = 1.0
         
         for attempt in range(max_retries):
@@ -65,27 +61,30 @@ class TopStepClient:
                     else:
                         response = await client.post(url, json=payload, headers=headers)
                     
-                    # Handle rate limiting (429)
+                    # Handle rate limiting (429) - TRIGGER CIRCUIT BREAKER
                     if response.status_code == 429:
                         self._consecutive_errors += 1
-                        delay = min(base_delay * (2 ** attempt), 30)  # Max 30 seconds
                         
-                        logger.warning(
-                            f"Rate limited (429) on {url}. "
-                            f"Attempt {attempt + 1}/{max_retries}. "
-                            f"Waiting {delay:.1f}s. Consecutive errors: {self._consecutive_errors}"
+                        # Enable Circuit Breaker for 60 seconds
+                        cooldown = 60
+                        self._rate_limit_until = datetime.now(timezone.utc) + timedelta(seconds=cooldown)
+                        
+                        logger.error(
+                            f"Rate limit hit (429) on {url}. Circuit Breaker ACTIVATED for {cooldown}s. "
+                            f"Consecutive errors: {self._consecutive_errors}"
                         )
                         
                         # Log to database
-                        self._log_api_call(method, url, payload, {"error": "Rate Limited"}, 429)
+                        self._log_api_call(method, url, payload, {"error": "Rate Limit Circuit Breaker Activated"}, 429)
                         
-                        # Send Telegram alert after 3 consecutive errors
-                        if self._consecutive_errors >= 3 and not self._rate_limit_alert_sent:
+                        # Send Telegram alert immediately
+                        if not self._rate_limit_alert_sent:
                             await self._send_rate_limit_alert(url, self._consecutive_errors)
                         
                         self._last_rate_limit_time = datetime.now(timezone.utc)
-                        await asyncio.sleep(delay)
-                        continue
+                        
+                        # ABORT RETRIES - STOP HAMMERING
+                        return (None, 429, False)
                     
                     # Handle auth errors
                     if response.status_code == 401:
@@ -99,9 +98,10 @@ class TopStepClient:
                         self._log_api_call(method, url, payload, None, response.status_code)
                         return (None, response.status_code, False)
                     
-                    # Success - reset error counter
+                    # Success - reset error counter & circuit breaker
                     self._consecutive_errors = 0
                     self._rate_limit_alert_sent = False
+                    self._rate_limit_until = None
                     
                     try:
                         data = response.json()
@@ -130,18 +130,19 @@ class TopStepClient:
     async def _send_rate_limit_alert(self, url: str, error_count: int):
         """Send Telegram notification about rate limiting."""
         try:
-            from backend.services.telegram_service import send_telegram_message
+            # Fix: Use the global instance imported at top of file
+            # from backend.services.telegram_service import telegram_service 
             
             message = (
                 f"⚠️ <b>API RATE LIMITING DETECTED</b>\n\n"
                 f"TopStep API is returning 429 errors.\n"
                 f"Consecutive errors: <code>{error_count}</code>\n"
                 f"Last endpoint: <code>{url.split('/')[-1]}</code>\n\n"
-                f"The bot is applying exponential backoff. "
-                f"If this persists, consider reducing API call frequency."
+                f"<b>CIRCUIT BREAKER ACTIVATED</b>\n"
+                f"Pausing all API calls for 60 seconds."
             )
             
-            await send_telegram_message(message)
+            await telegram_service.send_message(message)
             self._rate_limit_alert_sent = True
             
             # Also log to database

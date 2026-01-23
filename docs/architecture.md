@@ -456,6 +456,7 @@ Webhook requests from other IPs are rejected with HTTP 403.
 | Scenario | Handling |
 |----------|----------|
 | TopStep API 401 | Clear token, re-authenticate |
+| TopStep API 429 | Circuit Breaker (60s cooldown), Telegram Alert |
 | Order Rejection | Log reason, Telegram notification |
 | Contract Not Found | Fallback to ticker as contract ID |
 | Database Error | Rollback transaction, log error |
