@@ -477,13 +477,13 @@ async def handle_partial(alert: TradingViewAlert, db: Session) -> Dict[str, Any]
                 fill_price = response.get('fillPrice') or response.get('price')
                 
                 try:
-                    await asyncio.sleep(2.0)  # Wait for trade to settle
+                    await asyncio.sleep(4.0)  # Wait for trade to settle
                     recent_trades = await topstep_client.get_historical_trades(account_id, days=1)
                     
                     # Find the specific trade
                     # We look for a trade created very recently with matching qty and side
                     now_utc = datetime.now(timezone.utc)
-                    cutoff_time = now_utc - timedelta(seconds=15)
+                    cutoff_time = now_utc - timedelta(seconds=45)
                     
                     found_trade = None
                     for t in sorted(recent_trades, key=lambda x: x.get('creationTimestamp', ''), reverse=True):
@@ -518,6 +518,11 @@ async def handle_partial(alert: TradingViewAlert, db: Session) -> Dict[str, Any]
                         
                 except Exception as ex:
                     db.add(Log(level="WARNING", message=f"PARTIAL: Failed to fetch PnL: {ex}"))
+                
+                if not found_trade:
+                     # Debug logging to see what we missed
+                     details_str = "\n".join([f"{t.get('time') or t.get('creationTimestamp')} - {t.get('contractId')} x{t.get('quantity')}" for t in recent_trades[:5]])
+                     db.add(Log(level="DEBUG", message=f"PARTIAL: Trade not found in history. Looking for {clean_ticker} x{reduce_qty}. Recent: {details_str}"))
 
                 # Calculate Unrealized PnL (Latent)
                 unrealized_pnl = 0.0

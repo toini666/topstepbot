@@ -906,6 +906,7 @@ def get_discord_settings(account_id: int, db: Session = Depends(get_db)):
             webhook_url=None,
             notify_position_open=True,
             notify_position_close=True,
+            notify_partial_close=True,
             notify_daily_summary=False,
             daily_summary_time="21:00",
             created_at=datetime.now(timezone.utc),
@@ -939,6 +940,8 @@ def update_discord_settings(
         settings.notify_position_open = req.notify_position_open
     if req.notify_position_close is not None:
         settings.notify_position_close = req.notify_position_close
+    if req.notify_partial_close is not None:
+        settings.notify_partial_close = req.notify_partial_close
     if req.notify_daily_summary is not None:
         settings.notify_daily_summary = req.notify_daily_summary
     if req.daily_summary_time is not None:

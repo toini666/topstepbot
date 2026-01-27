@@ -899,15 +899,17 @@ function App() {
                   {logs.map((log) => {
                     const isExpanded = expandedLogs.has(log.id);
                     const hasDetails = !!log.details;
+                    const isLongMessage = log.message && log.message.length > 150;
+                    const canExpand = hasDetails || isLongMessage;
 
                     return (
-                      <div key={log.id} className={`flex flex-col hover:bg-slate-800/30 rounded px-2 -mx-2 transition-colors ${hasDetails ? 'cursor-pointer' : ''}`} onClick={() => hasDetails && toggleLog(log.id)}>
+                      <div key={log.id} className={`flex flex-col hover:bg-slate-800/30 rounded px-2 -mx-2 transition-colors ${canExpand ? 'cursor-pointer' : ''}`} onClick={() => canExpand && toggleLog(log.id)}>
                         <div className="flex gap-3 p-0.5">
                           <span className={`text-slate-500 shrink-0 flex items-center gap-1 w-32`}>
-                            {hasDetails && (
+                            {canExpand && (
                               isExpanded ? <ChevronDown className="w-3 h-3 text-slate-400" /> : <ChevronRight className="w-3 h-3 text-slate-400" />
                             )}
-                            {!hasDetails && <div className="w-3" />}
+                            {!canExpand && <div className="w-3" />}
                             {format(new Date(log.timestamp), 'dd/MM HH:mm:ss')}
                           </span>
                           <span className={`shrink-0 w-16 ${log.level === 'ERROR' ? 'text-red-400' :
@@ -916,7 +918,9 @@ function App() {
                             }`}>
                             [{log.level}]
                           </span>
-                          <span className="text-slate-300 break-words flex-1">{log.message}</span>
+                          <span className="text-slate-300 break-words flex-1">
+                            {isExpanded || !isLongMessage ? log.message : log.message.substring(0, 150) + '...'}
+                          </span>
                         </div>
 
                         {isExpanded && hasDetails && (

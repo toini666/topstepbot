@@ -10,7 +10,7 @@ interface MockWebhookModalProps {
 }
 
 const ALERT_TYPES = ['SETUP', 'SIGNAL', 'PARTIAL', 'CLOSE'] as const;
-const TIMEFRAMES = ['M1', 'M5', 'M15', 'H1', 'H4', 'D1'] as const;
+const TIMEFRAMES = ['M1', 'M2', 'M5', 'M15', 'H1', 'H4', 'D1'] as const;
 
 export function MockWebhookModal({ isOpen, onClose }: MockWebhookModalProps) {
     const [formData, setFormData] = useState({
@@ -74,7 +74,8 @@ export function MockWebhookModal({ isOpen, onClose }: MockWebhookModalProps) {
         }
     };
 
-    const showPrices = formData.type === 'SIGNAL' || formData.type === 'PARTIAL';
+    const showEntry = formData.type === 'SIGNAL' || formData.type === 'PARTIAL' || formData.type === 'CLOSE';
+    const showSlTp = formData.type === 'SIGNAL' || formData.type === 'PARTIAL';
     const showSide = formData.type !== 'CLOSE';
 
     return (
@@ -230,8 +231,8 @@ export function MockWebhookModal({ isOpen, onClose }: MockWebhookModalProps) {
                     </div>
 
                     {/* Price Fields */}
-                    {showPrices && (
-                        <div className="grid grid-cols-3 gap-4">
+                    {showEntry && (
+                        <div className={`grid gap-4 ${showSlTp ? 'grid-cols-3' : 'grid-cols-1'}`}>
                             <div>
                                 <label className="block text-xs font-bold text-slate-400 mb-1">Entry</label>
                                 <input
@@ -241,24 +242,28 @@ export function MockWebhookModal({ isOpen, onClose }: MockWebhookModalProps) {
                                     className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500 font-mono"
                                 />
                             </div>
-                            <div>
-                                <label className="block text-xs font-bold text-slate-400 mb-1">SL</label>
-                                <input
-                                    type="text"
-                                    value={formData.sl}
-                                    onChange={e => setFormData({ ...formData, sl: e.target.value })}
-                                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-red-400 focus:outline-none focus:border-red-500 font-mono"
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-xs font-bold text-slate-400 mb-1">TP</label>
-                                <input
-                                    type="text"
-                                    value={formData.tp}
-                                    onChange={e => setFormData({ ...formData, tp: e.target.value })}
-                                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-green-400 focus:outline-none focus:border-green-500 font-mono"
-                                />
-                            </div>
+                            {showSlTp && (
+                                <>
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-400 mb-1">SL</label>
+                                        <input
+                                            type="text"
+                                            value={formData.sl}
+                                            onChange={e => setFormData({ ...formData, sl: e.target.value })}
+                                            className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-red-400 focus:outline-none focus:border-red-500 font-mono"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-400 mb-1">TP</label>
+                                        <input
+                                            type="text"
+                                            value={formData.tp}
+                                            onChange={e => setFormData({ ...formData, tp: e.target.value })}
+                                            className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-green-400 focus:outline-none focus:border-green-500 font-mono"
+                                        />
+                                    </div>
+                                </>
+                            )}
                         </div>
                     )}
 

@@ -57,6 +57,7 @@ export function ConfigModal({ isOpen, onClose, config, onSave }: ConfigModalProp
     const [webhookUrl, setWebhookUrl] = useState('');
     const [notifyPositionOpen, setNotifyPositionOpen] = useState(true);
     const [notifyPositionClose, setNotifyPositionClose] = useState(true);
+    const [notifyPartialClose, setNotifyPartialClose] = useState(true);
     const [notifyDailySummary, setNotifyDailySummary] = useState(false);
     const [dailySummaryTime, setDailySummaryTime] = useState('21:00');
     const [savingDiscord, setSavingDiscord] = useState(false);
@@ -169,6 +170,7 @@ export function ConfigModal({ isOpen, onClose, config, onSave }: ConfigModalProp
             setWebhookUrl(settings.webhook_url || '');
             setNotifyPositionOpen(settings.notify_position_open);
             setNotifyPositionClose(settings.notify_position_close);
+            setNotifyPartialClose(settings.notify_partial_close);
             setNotifyDailySummary(settings.notify_daily_summary);
             setDailySummaryTime(settings.daily_summary_time || '21:00');
         } catch (e) {
@@ -178,6 +180,7 @@ export function ConfigModal({ isOpen, onClose, config, onSave }: ConfigModalProp
             setWebhookUrl('');
             setNotifyPositionOpen(true);
             setNotifyPositionClose(true);
+            setNotifyPartialClose(true);
             setNotifyDailySummary(false);
             setDailySummaryTime('21:00');
         }
@@ -193,6 +196,7 @@ export function ConfigModal({ isOpen, onClose, config, onSave }: ConfigModalProp
                 webhook_url: webhookUrl,
                 notify_position_open: notifyPositionOpen,
                 notify_position_close: notifyPositionClose,
+                notify_partial_close: notifyPartialClose,
                 notify_daily_summary: notifyDailySummary,
                 daily_summary_time: dailySummaryTime
             });
@@ -868,6 +872,18 @@ export function ConfigModal({ isOpen, onClose, config, onSave }: ConfigModalProp
                                                 className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${notifyPositionClose ? 'bg-indigo-500' : 'bg-slate-700'} disabled:opacity-50`}
                                             >
                                                 <span className={`${notifyPositionClose ? 'translate-x-5' : 'translate-x-1'} inline-block h-3 w-3 transform rounded-full bg-white transition-transform`} />
+                                            </button>
+                                        </div>
+
+                                        {/* Partial Close */}
+                                        <div className="flex items-center justify-between bg-slate-950 p-3 rounded-xl border border-slate-800">
+                                            <span className="text-sm text-slate-300">Partial Close</span>
+                                            <button
+                                                onClick={() => setNotifyPartialClose(!notifyPartialClose)}
+                                                disabled={!discordEnabled}
+                                                className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${notifyPartialClose ? 'bg-indigo-500' : 'bg-slate-700'} disabled:opacity-50`}
+                                            >
+                                                <span className={`${notifyPartialClose ? 'translate-x-5' : 'translate-x-1'} inline-block h-3 w-3 transform rounded-full bg-white transition-transform`} />
                                             </button>
                                         </div>
 

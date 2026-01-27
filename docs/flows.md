@@ -184,7 +184,7 @@ matching_trades = db.query(Trade).filter(
        - Query TopStep Trade History for exact Realized PnL & Fees
        - Calculate Unrealized PnL for remaining quantity
    m. Notify partial executed (Telegram) - includes Side, Reduced, Remaining, Realized PnL, Latent PnL
-   n. Notify partial executed (Discord) - if enabled
+   n. Notify partial executed (Discord) - if enabled (and notify_partial_close=True)
 5. Return processed accounts
 ```
 

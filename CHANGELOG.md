@@ -12,7 +12,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **Telegram**: Partial close notifications now include Realized PnL and Latent PnL (Remaining).
 - **Discord**: Added "Partial Close" notification type (enabled by default).
 - **Database**: Added `notify_partial_close` setting to `discord_notification_settings`.
-- **Webhook**: Implemented partial PnL fetching logic (2s delay for settlement).
+- **Webhook**: Implemented partial PnL fetching logic.
+- **UI**: Improved System Logs with expandable messages for long errors.
+- **UI**: Added 'M2' timeframe support to Mock Webhook modal.
+
+### Fixed
+- **Settings**: Fixed persistence issue for Discord settings (schema validation).
+- **Webhook**: Increased partial close PnL fetch delay to 4s for stability.
+- **Mock Webhook**: Fixed conditional rendering for price fields.
 
 ## [2026-01-23] - API Resilience
 

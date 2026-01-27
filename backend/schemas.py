@@ -346,6 +346,7 @@ class DiscordNotificationSettingsBase(BaseModel):
     webhook_url: Optional[str] = None
     notify_position_open: bool = True
     notify_position_close: bool = True
+    notify_partial_close: bool = True
     notify_daily_summary: bool = False
     daily_summary_time: str = "21:00"
 
@@ -355,6 +356,7 @@ class DiscordNotificationSettingsUpdate(BaseModel):
     webhook_url: Optional[str] = None
     notify_position_open: Optional[bool] = None
     notify_position_close: Optional[bool] = None
+    notify_partial_close: Optional[bool] = None
     notify_daily_summary: Optional[bool] = None
     daily_summary_time: Optional[str] = None
 

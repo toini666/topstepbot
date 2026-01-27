@@ -27,11 +27,11 @@ A professional-grade automated trading system for TopStepX. Executes TradingView
 - **Trade History**: Aggregated closed trades with strategy/timeframe
 - **Daily P&L**: Live profit tracking per account
 - **Order History**: All orders with status updates
-- **System Logs**: Full audit trail of all actions
+- **System Logs**: Full audit trail with expandable details and stack traces
 
 ### 🔔 Notifications
 - **Telegram Bot**: Full control and real-time monitoring
-- **Discord Webhooks**: Customizable rich embeds for positions and daily summaries
+- **Discord Webhooks**: Customizable rich embeds for positions, partial closes, and daily summaries
 - **Visuals**: PnL-based colors (including Realized vs Latent PnL for partials), strategy details, and per-account filtering
 
 ### 📅 Economic Calendar
