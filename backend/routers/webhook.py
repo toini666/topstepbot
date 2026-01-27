@@ -342,7 +342,10 @@ async def handle_partial(alert: TradingViewAlert, db: Session) -> Dict[str, Any]
     """
     strategy_name = alert.strat or "default"
     risk_engine = RiskEngine(db)
+
+    # Import services locally to avoid circular dependencies
     from backend.services.telegram_service import telegram_service
+    from backend.services.discord_service import discord_service
     
     # Notify PARTIAL signal received
     try:
@@ -372,6 +375,9 @@ async def handle_partial(alert: TradingViewAlert, db: Session) -> Dict[str, Any]
         return {"status": "skipped", "reason": "No matching position"}
     
     db.add(Log(level="INFO", message=f"PARTIAL: Found {len(matching_trades)} matching trade(s) for {alert.ticker}"))
+    
+    # Resolve tick info for calculations
+    _, tick_size, tick_value = await resolve_contract(alert.ticker, db)
     
     processed = []
     
@@ -427,7 +433,6 @@ async def handle_partial(alert: TradingViewAlert, db: Session) -> Dict[str, Any]
                 db.add(Log(level="INFO", message=f"PARTIAL: Reduced {reduce_qty} on {alert.ticker} for {account_name} (remaining: {remaining_qty})"))
                 
                 # CRITICAL: Sync SL/TP order quantities with remaining position
-                # This prevents over-closing when stop/TP is hit
                 try:
                     synced_count = await topstep_client.sync_order_quantities(
                         account_id=account_id,
@@ -466,31 +471,97 @@ async def handle_partial(alert: TradingViewAlert, db: Session) -> Dict[str, Any]
                     except Exception as e:
                         db.add(Log(level="ERROR", message=f"Failed to update SL/TP: {e}"))
                 
-                # Notify execution - get fill price from response if available
+                # Fetch Financial Data (PnL)
+                realized_pnl = 0.0
+                fees = 0.0
                 fill_price = response.get('fillPrice') or response.get('price')
                 
-                # If API response doesn't have fill price, fetch from recent trades
-                if not fill_price:
-                    try:
-                        import asyncio
-                        await asyncio.sleep(0.5)  # Small delay for trade to be recorded
-                        recent_trades = await topstep_client.get_historical_trades(account_id, days=1)
-                        clean_ticker = alert.ticker.replace("1!", "").replace("2!", "").upper()
-                        for t in sorted(recent_trades, key=lambda x: x.get('creationTimestamp', ''), reverse=True):
-                            if clean_ticker in str(t.get('contractId', '')).upper():
-                                fill_price = t.get('price') or t.get('fillPrice')
-                                break
-                    except Exception:
-                        pass
+                try:
+                    await asyncio.sleep(2.0)  # Wait for trade to settle
+                    recent_trades = await topstep_client.get_historical_trades(account_id, days=1)
+                    
+                    # Find the specific trade
+                    # We look for a trade created very recently with matching qty and side
+                    now_utc = datetime.now(timezone.utc)
+                    cutoff_time = now_utc - timedelta(seconds=15)
+                    
+                    found_trade = None
+                    for t in sorted(recent_trades, key=lambda x: x.get('creationTimestamp', ''), reverse=True):
+                        # Parse time
+                        t_created_str = t.get('creationTimestamp') or t.get('timestamp')
+                        if t_created_str:
+                            try:
+                                t_ts = datetime.fromisoformat(str(t_created_str).replace('Z', '+00:00'))
+                                if t_ts.tzinfo is None: t_ts = t_ts.replace(tzinfo=timezone.utc)
+                                
+                                if t_ts < cutoff_time:
+                                    continue
+                            except:
+                                pass
+                        
+                        # Check Contract
+                        if clean_ticker not in str(t.get('contractId', '')).upper():
+                            continue
+                            
+                        # Check Qty (approximate match or exact)
+                        t_qty = t.get('quantity') or t.get('qty') or 0
+                        if int(t_qty) != reduce_qty:
+                            continue
+                            
+                        found_trade = t
+                        break
+                    
+                    if found_trade:
+                        realized_pnl = found_trade.get('pnl') or found_trade.get('profitAndLoss') or 0.0
+                        fees = found_trade.get('fees') or 0.0
+                        fill_price = found_trade.get('price') or found_trade.get('fillPrice') or fill_price
+                        
+                except Exception as ex:
+                    db.add(Log(level="WARNING", message=f"PARTIAL: Failed to fetch PnL: {ex}"))
+
+                # Calculate Unrealized PnL (Latent)
+                unrealized_pnl = 0.0
+                if fill_price and trade.entry_price and tick_size > 0:
+                    price_diff = fill_price - trade.entry_price
+                    if matching_pos.get('type') == 2: # Short (TopStep type 2 usually 'Short', check docs if needed, but standard is 1=Long, 2=Short)
+                         # Wait, TopStep API 'type' enum? 
+                         # Usually standard: Side can be "BUY" or "SELL".
+                         # Let's trust trade.action for direction
+                         pass
+                    
+                    # Use trade action to be safe
+                    if trade.action == "SELL": # It was a SHORT
+                        price_diff = -price_diff
+                    
+                    unrealized_pnl = (price_diff / tick_size) * tick_value * remaining_qty
                 
+                # Notify Telegram
                 await telegram_service.notify_partial_executed(
                     ticker=alert.ticker,
                     reduced_qty=reduce_qty,
                     remaining_qty=remaining_qty,
                     account_name=account_name,
                     sl_moved_to_entry=sl_moved,
-                    side="LONG" if matching_pos.get('type') == 1 else "SHORT",
-                    fill_price=fill_price
+                    side=trade.action,
+                    fill_price=fill_price,
+                    realized_pnl=realized_pnl,
+                    unrealized_pnl=unrealized_pnl,
+                    fees=fees
+                )
+                
+                # Notify Discord
+                await discord_service.notify_partial_executed(
+                    account_id=account_id,
+                    ticker=alert.ticker,
+                    reduced_qty=reduce_qty,
+                    remaining_qty=remaining_qty,
+                    fill_price=fill_price,
+                    realized_pnl=realized_pnl,
+                    unrealized_pnl=unrealized_pnl,
+                    fees=fees,
+                    account_name=account_name,
+                    strategy=strategy_name,
+                    timeframe=alert.timeframe
                 )
                 
                 processed.append(account_name)
@@ -570,90 +641,90 @@ async def handle_close(alert: TradingViewAlert, db: Session) -> Dict[str, Any]:
             db.add(Log(level="ERROR", message=f"CLOSE failed for account {account_id}: {e}"))
             continue
             
-            if success:
-                # Cancel remaining orders for this contract
-                await topstep_client.cancel_all_orders(account_id)
-                
-                # Fetch recent trades to calculate final PnL/Fees
-                # This ensures the database record is complete
-                current_pnl = 0.0
-                current_fees = 0.0
-                exit_px = 0.0
-                
-                try:
-                    await asyncio.sleep(1.0) # Wait for fill to propagate
-                    recent_trades = await topstep_client.get_historical_trades(account_id, days=1)
-                    
-                    # Filter for trades relevant to this position
-                    # Logic mirrors monitor_closed_positions_job
-                    relevant_trades = []
-                    
-                    # Determine start time validation
-                    start_time_fallback = None
-                    trade_entry_time = trade.timestamp
-                    if trade_entry_time:
-                         if trade_entry_time.tzinfo is None:
-                             trade_entry_time = trade_entry_time.replace(tzinfo=timezone.utc)
-                         start_time_fallback = trade_entry_time - timedelta(seconds=5)
-                    
-                    for t in recent_trades:
-                        t_cid = str(t.get('contractId') or '')
-                        
-                        # Check Contract Match
-                        if clean_ticker in t_cid.upper() or t_cid == str(contract_id):
-                            # Check Time Match (if available)
-                            t_created_str = t.get('creationTimestamp') or t.get('timestamp') or t.get('time')
-                            if t_created_str:
-                                try:
-                                    t_created = datetime.fromisoformat(str(t_created_str).replace('Z', '+00:00'))
-                                    if t_created.tzinfo is None: t_created = t_created.replace(tzinfo=timezone.utc)
-                                    
-                                    if start_time_fallback and t_created >= start_time_fallback:
-                                        relevant_trades.append(t)
-                                except:
-                                    # If date parsing fails, include it (safest bet for now)
-                                    relevant_trades.append(t)
-                            else:
-                                relevant_trades.append(t)
-                    
-                    # Calculate proper totals
-                    current_pnl = sum((t.get('pnl') or t.get('profitAndLoss') or 0) for t in relevant_trades)
-                    current_fees = sum((t.get('fees') or 0) for t in relevant_trades)
-                    
-                    # Get exit price from the latest fill
-                    if relevant_trades:
-                        sorted_rel = sorted(relevant_trades, key=lambda x: x.get('creationTimestamp', ''), reverse=True)
-                        last_fill = sorted_rel[0]
-                        exit_px = last_fill.get('price') or last_fill.get('fillPrice') or 0
-                        
-                except Exception as ex:
-                    db.add(Log(level="WARNING", message=f"CLOSE: Failed to aggregate PnL: {ex}"))
-                
-                # Update trade record with final stats
-                trade.status = TradeStatus.CLOSED
-                trade.exit_time = datetime.now(timezone.utc)
-                if current_pnl != 0: trade.pnl = current_pnl
-                if current_fees != 0: trade.fees = current_fees
-                if exit_px != 0: trade.exit_price = exit_px
-                
-                # Get account name for notification
-                account_settings = db.query(AccountSettings).filter(AccountSettings.account_id == account_id).first()
-                account_name = (account_settings.account_name if account_settings and account_settings.account_name else str(account_id))
-                
-                db.add(Log(level="INFO", message=f"CLOSE: Position closed for {alert.ticker} on {account_name} (PnL: ${current_pnl:.2f})"))
-                
-                await telegram_service.notify_close_executed(
-                    ticker=alert.ticker,
-                    account_name=account_name,
-                    fill_price=exit_px if exit_px else None,
-                    pnl=current_pnl,
-                    fees=current_fees
-                )
-                
-                processed.append(account_name)
+        # Execute Close
+        success = await topstep_client.close_position(account_id, contract_id)
+        
+        if success:
+            # Cancel remaining orders for this contract
+            await topstep_client.cancel_all_orders(account_id)
             
-        except Exception as e:
-            db.add(Log(level="ERROR", message=f"CLOSE failed for account {account_id}: {e}"))
+            # Fetch recent trades to calculate final PnL/Fees
+            # This ensures the database record is complete
+            current_pnl = 0.0
+            current_fees = 0.0
+            exit_px = 0.0
+            
+            try:
+                await asyncio.sleep(1.0) # Wait for fill to propagate
+                recent_trades = await topstep_client.get_historical_trades(account_id, days=1)
+                    
+                # Filter for trades relevant to this position
+                # Logic mirrors monitor_closed_positions_job
+                relevant_trades = []
+                
+                # Determine start time validation
+                start_time_fallback = None
+                trade_entry_time = trade.timestamp
+                if trade_entry_time:
+                     if trade_entry_time.tzinfo is None:
+                         trade_entry_time = trade_entry_time.replace(tzinfo=timezone.utc)
+                     start_time_fallback = trade_entry_time - timedelta(seconds=5)
+                
+                for t in recent_trades:
+                    t_cid = str(t.get('contractId') or '')
+                    
+                    # Check Contract Match
+                    if clean_ticker in t_cid.upper() or t_cid == str(contract_id):
+                        # Check Time Match (if available)
+                        t_created_str = t.get('creationTimestamp') or t.get('timestamp') or t.get('time')
+                        if t_created_str:
+                            try:
+                                t_created = datetime.fromisoformat(str(t_created_str).replace('Z', '+00:00'))
+                                if t_created.tzinfo is None: t_created = t_created.replace(tzinfo=timezone.utc)
+                                
+                                if start_time_fallback and t_created >= start_time_fallback:
+                                    relevant_trades.append(t)
+                            except:
+                                # If date parsing fails, include it (safest bet for now)
+                                relevant_trades.append(t)
+                        else:
+                            relevant_trades.append(t)
+                
+                # Calculate proper totals
+                current_pnl = sum((t.get('pnl') or t.get('profitAndLoss') or 0) for t in relevant_trades)
+                current_fees = sum((t.get('fees') or 0) for t in relevant_trades)
+                
+                # Get exit price from the latest fill
+                if relevant_trades:
+                    sorted_rel = sorted(relevant_trades, key=lambda x: x.get('creationTimestamp', ''), reverse=True)
+                    last_fill = sorted_rel[0]
+                    exit_px = last_fill.get('price') or last_fill.get('fillPrice') or 0
+                    
+            except Exception as ex:
+                db.add(Log(level="WARNING", message=f"CLOSE: Failed to aggregate PnL: {ex}"))
+            
+            # Update trade record with final stats
+            trade.status = TradeStatus.CLOSED
+            trade.exit_time = datetime.now(timezone.utc)
+            if current_pnl != 0: trade.pnl = current_pnl
+            if current_fees != 0: trade.fees = current_fees
+            if exit_px != 0: trade.exit_price = exit_px
+            
+            # Get account name for notification
+            account_settings = db.query(AccountSettings).filter(AccountSettings.account_id == account_id).first()
+            account_name = (account_settings.account_name if account_settings and account_settings.account_name else str(account_id))
+            
+            db.add(Log(level="INFO", message=f"CLOSE: Position closed for {alert.ticker} on {account_name} (PnL: ${current_pnl:.2f})"))
+            
+            await telegram_service.notify_close_executed(
+                ticker=alert.ticker,
+                account_name=account_name,
+                fill_price=exit_px if exit_px else None,
+                pnl=current_pnl,
+                fees=current_fees
+            )
+            
+            processed.append(account_name)
     
     db.commit()
     

@@ -179,7 +179,12 @@ matching_trades = db.query(Trade).filter(
       - Prevents over-closing when SL/TP is triggered
    i. If move_sl_to_entry: call update_sl_tp_orders() with entry_price
    j. If alert has new SL/TP: update_sl_tp_orders()
-   k. Notify partial executed (Telegram) - includes side emoji & BE status
+   l. **Fetch PnL**:
+       - Wait 2s for settlement
+       - Query TopStep Trade History for exact Realized PnL & Fees
+       - Calculate Unrealized PnL for remaining quantity
+   m. Notify partial executed (Telegram) - includes Side, Reduced, Remaining, Realized PnL, Latent PnL
+   n. Notify partial executed (Discord) - if enabled
 5. Return processed accounts
 ```
 

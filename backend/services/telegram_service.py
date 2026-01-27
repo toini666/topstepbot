@@ -271,7 +271,10 @@ class TelegramService:
         account_name: str = None,
         sl_moved_to_entry: bool = False,
         side: str = None,
-        fill_price: float = None
+        fill_price: float = None,
+        realized_pnl: float = None,
+        unrealized_pnl: float = None,
+        fees: float = None
     ):
         """Notify partial take-profit executed."""
         account_tag = f" ({account_name})" if account_name else ""
@@ -294,6 +297,15 @@ class TelegramService:
         
         if fill_price:
             msg += f"\nFill Price: {fill_price}"
+            
+        if realized_pnl is not None:
+            net_pnl = realized_pnl - (fees or 0)
+            pnl_emoji = "💰" if net_pnl >= 0 else "💸"
+            msg += f"\n{pnl_emoji} <b>Realized: ${net_pnl:.2f}</b>"
+            
+        if unrealized_pnl is not None:
+            latent_emoji = "📈" if unrealized_pnl >= 0 else "📉"
+            msg += f"\n{latent_emoji} <i>Latent (Rem): ${unrealized_pnl:.2f}</i>"
         
         if sl_moved_to_entry:
             msg += "\n🎯 <i>SL moved to breakeven</i>"
@@ -304,7 +316,9 @@ class TelegramService:
         self,
         ticker: str,
         account_name: str = None,
-        fill_price: float = None
+        fill_price: float = None,
+        pnl: float = None,
+        fees: float = 0.0
     ):
         """Notify full position closed by CLOSE signal."""
         account_tag = f" ({account_name})" if account_name else ""
@@ -316,6 +330,13 @@ class TelegramService:
         
         if fill_price:
             msg += f"\nFill Price: {fill_price}"
+            
+        if pnl is not None:
+            pnl_emoji = "💰" if pnl >= 0 else "💸"
+            msg += f"\n{pnl_emoji} <b>PnL: ${pnl:.2f}</b>"
+            
+        if fees > 0:
+            msg += f"\n<i>Fees: ${fees:.2f}</i>"
         
         msg += f"\n<i>Position fully closed</i>"
         await self.send_message(msg)

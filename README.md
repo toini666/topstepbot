@@ -32,7 +32,7 @@ A professional-grade automated trading system for TopStepX. Executes TradingView
 ### 🔔 Notifications
 - **Telegram Bot**: Full control and real-time monitoring
 - **Discord Webhooks**: Customizable rich embeds for positions and daily summaries
-- **Visuals**: PnL-based colors, strategy details, and per-account filtering
+- **Visuals**: PnL-based colors (including Realized vs Latent PnL for partials), strategy details, and per-account filtering
 
 ### 📅 Economic Calendar
 - **Dashboard View**: Daily major events cards + full weekly table with filters

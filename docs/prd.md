@@ -93,6 +93,7 @@ Account Settings (per account)
 - **Purpose**: Take partial profits
 - **Matching**: By ticker + timeframe + strategy
 - **Action**: Reduces position via `partialCloseContract` API
+- **Feedback**: Returns Realized PnL (Closed portion) and Latent PnL (Remaining portion)
 
 #### CLOSE
 - **Purpose**: Close entire position
@@ -128,8 +129,8 @@ Account Settings (per account)
 
 ### 8. Discord Integration
 - **Platform**: Rich embed notifications via Webhooks
-- **Content**: Position Open/Close (with visual PnL cues), Daily Summaries
-- **Configuration**: Per-account toggles for enabled/disabled, specific notification types, and summary scheduling.
+- **Content**: Position Open/Close, **Partial Close** (with PnL breakdown), Daily Summaries
+- **Configuration**: Per-account toggles for enabled/disabled, specific notification types (`notify_partial_close`), and summary scheduling.
 
 
 ### 8. Data & Analytics

@@ -240,6 +240,67 @@ class DiscordService:
         await self.send_message(settings.webhook_url, embeds=[embed])
         self._log_info(f"Discord: Daily summary sent for account {account_id}")
 
+    async def notify_partial_executed(
+        self,
+        account_id: int,
+        ticker: str,
+        reduced_qty: int,
+        remaining_qty: int,
+        fill_price: float = None,
+        realized_pnl: float = None,
+        unrealized_pnl: float = None,
+        fees: float = 0.0,
+        account_name: str = None,
+        strategy: str = "-",
+        timeframe: str = "-"
+    ):
+        """Notify partial take-profit executed."""
+        settings = self.get_settings(account_id)
+        
+        if not settings or not settings.enabled:
+            return
+            
+        # Check newly added setting (handle case where DB might calculate defaults differently if missing)
+        if not getattr(settings, 'notify_partial_close', True):
+            return
+        
+        if not settings.webhook_url:
+            return
+            
+        # Determine color based on Realized P&L
+        net_pnl = (realized_pnl or 0) - fees
+        color = 0x22C55E if net_pnl >= 0 else 0xEF4444  # Green or Red
+        
+        pnl_emoji = "💰" if net_pnl >= 0 else "💸"
+        
+        description = (
+            f"**{ticker}**\n"
+            f"Clôture Partielle: {reduced_qty}\n"
+            f"Restant: {remaining_qty}\n"
+            f"Stratégie: {strategy}\n\n"
+        )
+        
+        if fill_price:
+            description += f"Prix: ${fill_price:,.2f}\n"
+            
+        if realized_pnl is not None:
+            description += f"{pnl_emoji} **Realized P&L: ${net_pnl:+,.2f}**\n"
+            
+        if unrealized_pnl is not None:
+            latent_emoji = "📈" if unrealized_pnl >= 0 else "📉"
+            description += f"{latent_emoji} Latent (Rem): ${unrealized_pnl:+,.2f}"
+            
+        embed = {
+            "title": "✂️ Fermeture Partielle",
+            "description": description,
+            "color": color,
+            "footer": {"text": f"Timeframe: {timeframe} • {account_name}"},
+            "timestamp": datetime.utcnow().isoformat(),
+        }
+        
+        await self.send_message(settings.webhook_url, embeds=[embed])
+        self._log_info(f"Discord: Partial close notification sent for {ticker} on account {account_id}")
+
 
 # Singleton instance
 discord_service = DiscordService()

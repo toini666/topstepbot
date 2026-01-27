@@ -156,6 +156,7 @@ class DiscordNotificationSettings(Base):
     notify_position_open = Column(Boolean, default=True)
     notify_position_close = Column(Boolean, default=True)
     notify_daily_summary = Column(Boolean, default=False)
+    notify_partial_close = Column(Boolean, default=True)
     
     # Daily summary time (HH:MM format)
     daily_summary_time = Column(String, default="21:00")

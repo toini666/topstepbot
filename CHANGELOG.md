@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [2026-01-27] - Partial Close Notifications
+    
+### Added
+- **Telegram**: Partial close notifications now include Realized PnL and Latent PnL (Remaining).
+- **Discord**: Added "Partial Close" notification type (enabled by default).
+- **Database**: Added `notify_partial_close` setting to `discord_notification_settings`.
+- **Webhook**: Implemented partial PnL fetching logic (2s delay for settlement).
+
 ## [2026-01-23] - API Resilience
 
 ### Fixed

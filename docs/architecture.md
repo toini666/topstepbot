@@ -195,6 +195,14 @@ Processes incoming TradingView alerts.
       - Calculate position size
       - Create Trade record
       - Execute in background
+
+5. For PARTIAL:
+   - Identify matching open trades
+   - Calculate reduction quantity based on strategy config
+   - Execute partial close via TopStep API
+   - Sync remaining SL/TP order quantities
+   - Fetch realized PnL via trade history lookup
+   - Notify Telegram and Discord (if enabled)
 ```
 
 ### 5. Dashboard Router (`dashboard.py`)
