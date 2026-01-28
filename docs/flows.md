@@ -180,8 +180,10 @@ matching_trades = db.query(Trade).filter(
    i. If move_sl_to_entry: call update_sl_tp_orders() with entry_price
    j. If alert has new SL/TP: update_sl_tp_orders()
    l. **Fetch PnL**:
-       - Wait 2s for settlement
-       - Query TopStep Trade History for exact Realized PnL & Fees
+       - Wait 4s for settlement
+       - Query TopStep Trade History (last 60s)
+       - Filter for closing trades (PnL != None) matching contract
+       - **Aggregate** Quantity, Realized PnL, and Fees from multiple fills
        - Calculate Unrealized PnL for remaining quantity
    m. Notify partial executed (Telegram) - includes Side, Reduced, Remaining, Realized PnL, Latent PnL
    n. Notify partial executed (Discord) - if enabled (and notify_partial_close=True)

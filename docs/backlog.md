@@ -30,6 +30,9 @@ This document outlines the roadmap to evolve the current functional prototype in
 ## 5. Quick fixes / bugs
 *Goal: Fix bugs and improve user experience.*
 - [x] **API Rate Limit Handling**: Fix infinite retry loop on 429 errors with Circuit Breaker & Telegram alerts.
+- [x] **Reconciliation**: Fixed duplicate trade detection using signature matching.
+- [x] **Partial PnL**: Fixed missing PnL in notifications by aggregating multiple fills and filtering by PnL existence.
+- [x] **Breakeven**: Fixed "Order not found" error by filtering for active orders only.
 
 
 

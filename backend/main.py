@@ -728,6 +728,11 @@ async def execute_breakeven_all(db, reason: str):
                     for order in orders:
                         if str(order.get('contractId')) == str(contract_id):
                             order_type = order.get('type')  # Looking for STOP type (4=Stop)
+                            # STATUS CHECK: Only modify active orders
+                            order_status = order.get('status')
+                            if order_status not in ["Working", "Accepted", 1, 6]:
+                                continue
+                                
                             # existing code checked 2/STOP/SL, adding 4.
                             if order_type in [4, "STOP", "SL"]:
                                 sl_order = order
@@ -737,19 +742,25 @@ async def execute_breakeven_all(db, reason: str):
                         # Modify SL to entry price
                         try:
                             # Use stopPrice for Stop orders as required by API
-                            await topstep_client.modify_order(
+                            success = await topstep_client.modify_order(
                                 account_id=account_id,
                                 order_id=sl_order.get('id'),
                                 stopPrice=entry_price
                             )
-                            total_modified += 1
+                            if success:
+                                total_modified += 1
+                            else:
+                                # Quiet failure or debug log
+                                db.add(Log(level="DEBUG", message=f"BREAKEVEN: Failed to modify SL for {contract_id} (API rejected)"))
+                                total_skipped += 1
+                            
                             await asyncio.sleep(0.1)  # Rate limit protection
                         except Exception as e:
                             db.add(Log(level="WARNING", message=f"BREAKEVEN: Failed to modify SL for {contract_id}: {e}"))
                             total_skipped += 1
                     else:
                         # No SL order found - log warning
-                        db.add(Log(level="WARNING", message=f"BREAKEVEN: No SL order found for {contract_id} on {account_name}"))
+                        # db.add(Log(level="WARNING", message=f"BREAKEVEN: No SL order found for {contract_id} on {account_name}"))
                         total_skipped += 1
                         
             except Exception as e:

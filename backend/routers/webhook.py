@@ -480,13 +480,23 @@ async def handle_partial(alert: TradingViewAlert, db: Session) -> Dict[str, Any]
                     await asyncio.sleep(4.0)  # Wait for trade to settle
                     recent_trades = await topstep_client.get_historical_trades(account_id, days=1)
                     
-                    # Find the specific trade
-                    # We look for a trade created very recently with matching qty and side
-                    now_utc = datetime.now(timezone.utc)
-                    cutoff_time = now_utc - timedelta(seconds=45)
+                    # Aggregate fills for this partial close
+                    # We summed fills until we reach the reduced_qty
+                    accumulated_qty = 0
+                    accumulated_pnl = 0.0
+                    accumulated_fees = 0.0
+                    last_fill_price = 0.0
                     
-                    found_trade = None
-                    for t in sorted(recent_trades, key=lambda x: x.get('creationTimestamp', ''), reverse=True):
+                    now_utc = datetime.now(timezone.utc)
+                    cutoff_time = now_utc - timedelta(seconds=60) # Look back 1 min
+                    
+                    # Sort by NEWEST first to find recent fills
+                    sorted_fills = sorted(recent_trades, key=lambda x: x.get('creationTimestamp', ''), reverse=True)
+                    
+                    for t in sorted_fills:
+                        if accumulated_qty >= reduce_qty:
+                            break
+                            
                         # Parse time
                         t_created_str = t.get('creationTimestamp') or t.get('timestamp')
                         if t_created_str:
@@ -502,27 +512,40 @@ async def handle_partial(alert: TradingViewAlert, db: Session) -> Dict[str, Any]
                         # Check Contract
                         if clean_ticker not in str(t.get('contractId', '')).upper():
                             continue
-                            
-                        # Check Qty (approximate match or exact)
-                        t_qty = t.get('quantity') or t.get('qty') or 0
-                        if int(t_qty) != reduce_qty:
-                            continue
-                            
-                        found_trade = t
-                        break
-                    
-                    if found_trade:
-                        realized_pnl = found_trade.get('pnl') or found_trade.get('profitAndLoss') or 0.0
-                        fees = found_trade.get('fees') or 0.0
-                        fill_price = found_trade.get('price') or found_trade.get('fillPrice') or fill_price
                         
+                        # Check if it's a closing trade (must have PnL)
+                        # We ignore Side because it can be ambiguous, but PnL checks are robust for Exits.
+                        raw_pnl = t.get('profitAndLoss')
+                        if raw_pnl is None:
+                            # Try 'pnl' key just in case
+                            raw_pnl = t.get('pnl')
+                        
+                        if raw_pnl is None:
+                            # No PnL means it's likely an entry or not a realized trade
+                            continue
+                        
+                        # Aggregate
+                        qty = int(t.get('size') or t.get('quantity') or t.get('qty') or 0)
+                        pnl = float(t.get('pnl') or t.get('profitAndLoss') or 0.0)
+                        fee = float(t.get('fees') or 0.0)
+                        price = float(t.get('price') or t.get('fillPrice') or 0.0)
+                        
+                        # If this fill is part of our partial close
+                        accumulated_qty += qty
+                        accumulated_pnl += pnl
+                        accumulated_fees += fee
+                        last_fill_price = price
+                        
+                    if accumulated_qty > 0:
+                        realized_pnl = accumulated_pnl
+                        fees = accumulated_fees
+                        fill_price = last_fill_price
+                        db.add(Log(level="INFO", message=f"PARTIAL: Aggregated {accumulated_qty} qty, PnL: ${realized_pnl:.2f}, Fees: ${fees:.2f}"))
+                    else:
+                        db.add(Log(level="WARNING", message=f"PARTIAL: No matching fills found for aggregation."))
+
                 except Exception as ex:
                     db.add(Log(level="WARNING", message=f"PARTIAL: Failed to fetch PnL: {ex}"))
-                
-                if not found_trade:
-                     # Debug logging to see what we missed
-                     details_str = "\n".join([f"{t.get('time') or t.get('creationTimestamp')} - {t.get('contractId')} x{t.get('quantity')}" for t in recent_trades[:5]])
-                     db.add(Log(level="DEBUG", message=f"PARTIAL: Trade not found in history. Looking for {clean_ticker} x{reduce_qty}. Recent: {details_str}"))
 
                 # Calculate Unrealized PnL (Latent)
                 unrealized_pnl = 0.0

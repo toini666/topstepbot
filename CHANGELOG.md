@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [2026-01-28] - Quick Fixes (Reconciliation/Partial/Breakeven)
+
+### Fixed
+- **Reconciliation**: Fixed duplicate trade detection using robust signature matching (Time/Price/Ticker/Side).
+- **Partial PnL**: Fixed zero PnL in notifications by filtering for "Closing" fills (via PnL existence) and using correct `size` key.
+- **Breakeven**: Fixed "Order not found" error by filtering for active orders only before modification.
+
 ## [2026-01-27] - Partial Close Notifications
     
 ### Added

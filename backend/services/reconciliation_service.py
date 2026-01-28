@@ -252,25 +252,87 @@ async def preview_reconciliation(account_id: int, db: Session) -> Dict[str, Any]
         else:
             orphan_db_trades.append(trade)
     
-    # 6. Check for orphan trades (entry time matches an exit fill time)
+    # 6. Check for orphan trades (Delete if duplicate or invalid)
+    # Group matched trades for duplicate detection
+    matched_trade_sigs = []
+    for trade_id in matched_db_trades:
+        # potential optimization: cache these earlier
+        t = db.query(Trade).filter(Trade.id == trade_id).first() 
+        if t:
+             # Signature: Ticker + Side + Price + Time (approx)
+             ts = _ensure_tz(t.timestamp)
+             matched_trade_sigs.append({
+                 "ticker": t.ticker,
+                 "side": t.action,
+                 "price": t.entry_price,
+                 "time": ts,
+                 "id": t.id
+             })
+
     for trade in orphan_db_trades:
         trade_entry = _ensure_tz(trade.timestamp)
+        trade_sig = {
+            "ticker": trade.ticker,
+            "side": trade.action,
+            "price": trade.entry_price,
+            "time": trade_entry
+        }
         
-        is_orphan = False
-        for fill in api_fills:
-            if fill.get('profitAndLoss') is None:
-                continue
-            exit_ts = _parse_ts(fill.get('creationTimestamp'))
-            if exit_ts and abs((trade_entry - exit_ts).total_seconds()) < 5:
-                is_orphan = True
-                break
+        is_duplicate = False
+        duplicate_of_id = None
         
-        if is_orphan:
+        # Check against matched trades
+        for sig in matched_trade_sigs:
+            if (sig["ticker"] == trade_sig["ticker"] and 
+                sig["side"] == trade_sig["side"] and 
+                abs(sig["price"] - trade_sig["price"]) < 0.0001):
+                
+                # Check time closeness (e.g. within 60s)
+                if abs((sig["time"] - trade_sig["time"]).total_seconds()) < 60:
+                    is_duplicate = True
+                    duplicate_of_id = sig["id"]
+                    break
+        
+        if is_duplicate:
             proposed_changes.append({
                 "trade_id": trade.id,
                 "ticker": trade.ticker,
                 "type": "delete",
-                "description": f"Delete orphan #{trade.id}",
+                "description": f"Delete duplicate of #{duplicate_of_id}",
+                "old_pnl": trade.pnl or 0,
+                "new_pnl": 0
+            })
+            continue
+
+        # Existing "Orphan but Entry Matches Exit Timestamp" Logic (Legacy?)
+        # Keeping it as a fallback but refining it
+        is_legacy_orphan = False
+        for fill in api_fills:
+            if fill.get('profitAndLoss') is None:
+                continue
+            exit_ts = _parse_ts(fill.get('creationTimestamp'))
+            if exit_ts and trade_entry and abs((trade_entry - exit_ts).total_seconds()) < 5:
+                is_legacy_orphan = True
+                break
+        
+        if is_legacy_orphan:
+            proposed_changes.append({
+                "trade_id": trade.id,
+                "ticker": trade.ticker,
+                "type": "delete",
+                "description": f"Delete invalid orphan #{trade.id}",
+                "old_pnl": trade.pnl or 0,
+                "new_pnl": 0
+            })
+            continue
+            
+        # If it's CLOSED but not matched to any API round turn, it might be a ghost trade
+        if trade.status == "CLOSED":
+             proposed_changes.append({
+                "trade_id": trade.id,
+                "ticker": trade.ticker,
+                "type": "delete",
+                "description": f"Delete unmatched CLOSED trade #{trade.id}",
                 "old_pnl": trade.pnl or 0,
                 "new_pnl": 0
             })
