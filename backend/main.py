@@ -1281,6 +1281,13 @@ async def lifespan(app: FastAPI):
     # Calendar Job (7:00 AM Brussels)
     scheduler.add_job(calendar_service.check_calendar_job, 'cron', hour=7, minute=0, timezone=BRUSSELS_TZ)
     
+    # Init News Blocks on Startup
+    try:
+        print("📅 Initializing News Blocks...")
+        await calendar_service.recalculate_news_blocks()
+    except Exception as e:
+        print(f"⚠️ Failed to init news blocks: {e}")
+
     scheduler.start()
     print("Scheduler started.")
 

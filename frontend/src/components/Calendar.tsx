@@ -1,5 +1,6 @@
 
 import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import axios from 'axios';
 import { Calendar as CalendarIcon, RefreshCw, Bell, Settings, CheckCircle, Filter, X, Globe, ChevronDown, Check } from 'lucide-react';
 import { format } from 'date-fns';
@@ -195,9 +196,9 @@ export function Calendar() {
             </div>
 
             {/* Settings Modal */}
-            {settingsOpen && (
-                <div className="fixed inset-0 z-50 h-screen w-screen flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in">
-                    <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 w-full max-w-lg shadow-2xl animate-scale-in">
+            {settingsOpen && createPortal(
+                <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
+                    <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 w-full max-w-lg shadow-2xl animate-scale-in relative z-[10000]">
                         <div className="flex justify-between items-center mb-6">
                             <h3 className="text-xl font-bold text-white flex items-center gap-2">
                                 <Bell className="w-5 h-5 text-indigo-400" />
@@ -306,7 +307,8 @@ export function Calendar() {
                             </div>
                         </div>
                     </div>
-                </div>
+                </div>,
+                document.body
             )}
 
             {/* Today's Highlights */}

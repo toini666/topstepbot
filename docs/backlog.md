@@ -33,6 +33,7 @@ This document outlines the roadmap to evolve the current functional prototype in
 - [x] **Reconciliation**: Fixed duplicate trade detection using signature matching.
 - [x] **Partial PnL**: Fixed missing PnL in notifications by aggregating multiple fills and filtering by PnL existence.
 - [x] **Breakeven**: Fixed "Order not found" error by filtering for active orders only.
+- [x] **Reconciliation**: Fixed TypeError when importing missing trades by parsing string timestamps to datetime objects.
 
 
 

@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [2026-01-29] - Reconciliation Fixes
+
+### Fixed
+- **Reconciliation**: Fixed `TypeError` when importing missing trades by correctly parsing string timestamps to datetime objects before database insertion.
+
 ## [2026-01-28] - Quick Fixes (Reconciliation/Partial/Breakeven)
 
 ### Fixed

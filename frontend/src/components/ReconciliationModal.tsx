@@ -2,21 +2,23 @@ import { useState } from 'react';
 import { X, RefreshCw, Check, AlertTriangle } from 'lucide-react';
 
 interface ReconciliationChange {
-    trade_id: number;
+    trade_id?: number;
     ticker: string;
-    type: 'close' | 'pnl_update';
+    type: 'close' | 'pnl_update' | 'create' | 'delete';
     description: string;
     old_status?: string;
     new_status?: string;
-    old_pnl: number;
-    new_pnl: number;
+    old_pnl?: number;
+    new_pnl?: number;
     new_exit_price?: number;
     new_fees?: number;
     old_fees?: number;
 }
 
 interface ReconciliationSummary {
+    trades_to_create?: number;
     trades_to_close: number;
+    trades_to_delete?: number;
     pnl_updates: number;
     total_pnl_change: number;
 }
@@ -52,7 +54,8 @@ export default function ReconciliationModal({
     };
 
     const hasChanges = changes.length > 0;
-    const pnlChangeClass = summary.total_pnl_change >= 0 ? 'text-green-400' : 'text-red-400';
+    const totalPnlChange = summary?.total_pnl_change ?? 0;
+    const pnlChangeClass = totalPnlChange >= 0 ? 'text-green-400' : 'text-red-400';
 
     return (
         <div className="fixed inset-0 z-50 h-screen w-screen flex items-center justify-center">
@@ -100,18 +103,22 @@ export default function ReconciliationModal({
                     ) : (
                         <>
                             {/* Summary */}
-                            <div className="grid grid-cols-3 gap-4 mb-6">
+                            <div className="grid grid-cols-4 gap-4 mb-6">
                                 <div className="bg-slate-800/50 rounded-xl p-4 text-center">
-                                    <p className="text-2xl font-bold text-orange-400">{summary.trades_to_close}</p>
-                                    <p className="text-xs text-slate-400 mt-1">Trades to Close</p>
+                                    <p className="text-2xl font-bold text-green-400">{summary?.trades_to_create || 0}</p>
+                                    <p className="text-xs text-slate-400 mt-1">Found Missing</p>
                                 </div>
                                 <div className="bg-slate-800/50 rounded-xl p-4 text-center">
-                                    <p className="text-2xl font-bold text-blue-400">{summary.pnl_updates}</p>
+                                    <p className="text-2xl font-bold text-orange-400">{summary?.trades_to_close || 0}</p>
+                                    <p className="text-xs text-slate-400 mt-1">To Close</p>
+                                </div>
+                                <div className="bg-slate-800/50 rounded-xl p-4 text-center">
+                                    <p className="text-2xl font-bold text-blue-400">{summary?.pnl_updates || 0}</p>
                                     <p className="text-xs text-slate-400 mt-1">PnL Updates</p>
                                 </div>
                                 <div className="bg-slate-800/50 rounded-xl p-4 text-center">
                                     <p className={`text-2xl font-bold ${pnlChangeClass}`}>
-                                        {summary.total_pnl_change >= 0 ? '+' : ''}${summary.total_pnl_change.toFixed(2)}
+                                        {totalPnlChange >= 0 ? '+' : ''}${totalPnlChange.toFixed(2)}
                                     </p>
                                     <p className="text-xs text-slate-400 mt-1">Net PnL Change</p>
                                 </div>
@@ -129,26 +136,27 @@ export default function ReconciliationModal({
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-slate-800">
-                                        {changes.map((change) => (
-                                            <tr key={change.trade_id} className="hover:bg-slate-800/30">
+                                        {changes.map((change, idx) => (
+                                            <tr key={change.trade_id || idx} className="hover:bg-slate-800/30">
                                                 <td className="py-3 px-4">
-                                                    <span className="font-mono text-white">#{change.trade_id}</span>
+                                                    <span className="font-mono text-white">#{change.trade_id || 'NEW'}</span>
                                                     <span className="text-slate-400 ml-2">{change.ticker}</span>
                                                 </td>
                                                 <td className="py-3 px-4">
-                                                    <span className={`px-2 py-1 rounded text-xs font-bold ${change.type === 'close'
-                                                        ? 'bg-orange-500/20 text-orange-400'
-                                                        : 'bg-blue-500/20 text-blue-400'
+                                                    <span className={`px-2 py-1 rounded text-xs font-bold ${change.type === 'create' ? 'bg-green-500/20 text-green-400' :
+                                                            change.type === 'delete' ? 'bg-red-500/20 text-red-500' :
+                                                                change.type === 'close' ? 'bg-orange-500/20 text-orange-400' :
+                                                                    'bg-blue-500/20 text-blue-400'
                                                         }`}>
-                                                        {change.type === 'close' ? 'CLOSE' : 'PNL UPDATE'}
+                                                        {change.type.toUpperCase().replace('_', ' ')}
                                                     </span>
                                                 </td>
                                                 <td className="py-3 px-4 text-right font-mono text-slate-400">
-                                                    ${change.old_pnl.toFixed(2)}
+                                                    {change.old_pnl != null ? `$${Number(change.old_pnl).toFixed(2)}` : '-'}
                                                 </td>
-                                                <td className={`py-3 px-4 text-right font-mono font-bold ${change.new_pnl >= 0 ? 'text-green-400' : 'text-red-400'
+                                                <td className={`py-3 px-4 text-right font-mono font-bold ${(change.new_pnl || 0) >= 0 ? 'text-green-400' : 'text-red-400'
                                                     }`}>
-                                                    ${change.new_pnl.toFixed(2)}
+                                                    {change.new_pnl != null ? `$${Number(change.new_pnl).toFixed(2)}` : '-'}
                                                 </td>
                                             </tr>
                                         ))}

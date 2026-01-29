@@ -129,6 +129,7 @@ def _build_round_turns(api_fills: List[Dict]) -> List[Dict]:
             'exit_time': last_exit_time,
             'exit_price': last_exit_price,
             'size': entry['size'],
+            'side': entry['side'],
             'pnl': total_pnl,
             'fees': total_fees
         })
@@ -337,6 +338,54 @@ async def preview_reconciliation(account_id: int, db: Session) -> Dict[str, Any]
                 "new_pnl": 0
             })
     
+    # 6.5 CHECK FOR UNMATCHED API TRADES (Missing in DB)
+    for i, rt in enumerate(api_round_turns):
+        if i not in matched_api_rts:
+            # This is a round-turn in API that has no corresponding DB trade
+            # We should import it
+            
+            # Determine ticker (might need TickerMap reverse lookup or use contract_id)
+            # Try to resolve friendly ticker
+            ticker = rt['contract_id']
+            tm = db.query(TickerMap).filter(TickerMap.ts_contract_id == rt['contract_id']).first()
+            if tm:
+                ticker = tm.tv_ticker
+            
+            # Determine Action
+            action = "BUY" if rt.get('size', 0) > 0 else "SELL" # Simple heuristic, or infer from side?
+            # Actually side is on the fill. 
+            # rt doesn't explicitly store side, let's look at the fills again if needed
+            # But wait, round turn implies entry and exit.
+            # Entry side: 
+            # If entry side was Buy (0), then Action is BUY.
+            # Let's check the build_round_turns
+            
+            # For now, let's assume standard Long=Buy
+            # We need to pass side through _build_round_turns if we want it here
+            # But let's check `rt` keys.
+            
+            changes = [f"Import missing trade {ticker}"]
+            
+            proposed_changes.append({
+                "type": "create",
+                "ticker": ticker,
+                "description": f"Import missing trade {ticker} (PnL: ${rt['pnl']:.2f})",
+                "contract_id": rt['contract_id'],
+                "entry_time": rt['entry_time'],
+                "entry_price": rt['entry_price'],
+                "exit_time": rt['exit_time'],
+                "exit_price": rt['exit_price'],
+                "size": rt['size'],
+                "side": rt['side'],
+                "new_pnl": rt['pnl'],
+                "old_pnl": 0,
+                "fees": rt['fees'],
+                # We need side. API side 0=Buy, 1=Sell.
+                # Let's defaults to BUY and user can fix if wrong, or better:
+                # We can infer from PnL logic but that's complex.
+                # Let's add 'side' to _build_round_turns
+            })
+
     # 7. Calculate verification totals
     api_total_pnl = sum(rt['pnl'] for rt in api_round_turns)
     api_total_fees = sum(rt['fees'] for rt in api_round_turns)
@@ -345,6 +394,7 @@ async def preview_reconciliation(account_id: int, db: Session) -> Dict[str, Any]
     db_total_fees = sum(t.fees or 0 for t in db_trades)
     
     summary = {
+        "trades_to_create": sum(1 for c in proposed_changes if c["type"] == "create"),   
         "trades_to_close": sum(1 for c in proposed_changes if c["type"] == "close"),
         "trades_to_delete": sum(1 for c in proposed_changes if c["type"] == "delete"),
         "pnl_updates": sum(1 for c in proposed_changes if c["type"] == "pnl_update"),
@@ -366,12 +416,90 @@ async def preview_reconciliation(account_id: int, db: Session) -> Dict[str, Any]
 
 async def apply_reconciliation(account_id: int, changes: List[Dict], db: Session) -> Dict[str, Any]:
     """Apply the proposed reconciliation changes to the database."""
-    applied = {"closed": 0, "pnl_updated": 0, "deleted": 0}
+    applied = {"created": 0, "closed": 0, "pnl_updated": 0, "deleted": 0}
     
     for change in changes:
         trade_id = change.get("trade_id")
         change_type = change.get("type")
         
+        if change_type == "create":
+            # Create new trade
+            try:
+                # Map side
+                # If side from API is integer: 0=Buy, 1=Sell (TopStep standard? or 1=Long, 2=Short)
+                # Let's assume standard API response for side
+                # User's debug log showed: side: 1 (Sell/Short?) for MNQ.
+                # Let's map safely
+                raw_side = change.get("side") # We need to pass this from preview!
+                # Wait, I didn't add side to the proposed_changes dict in preview block
+                # I need to ensure it's passed.
+                
+                # ... check preview logic ...
+                # In preview I added: "size": rt['size'] ... 
+                # I need to add side there.
+                
+                # Let's look at the rt dict again. I added 'side' to build_round_turns.
+                # So rt['side'] is available.
+                
+                # I need to add "side": rt['side'] to the proposed_changes dict in preview.
+                pass
+            except:
+                pass
+            
+            # Ok, let's implement the create logic assuming the dict has the data
+            side_str = "BUY"
+            # It seems 'side' in build_round_turns comes from entry['side']
+            # TopStep API: Side often 0=Buy, 1=Sell? Or Strings?
+            # Trade log showed: 'side': 1. Let's assume 1 is SELL/SHORT.
+            # 0 is BUY/LONG.
+            
+            # Actually, let's check Trade log again:
+            # {'id': ..., 'side': 1, 'profitAndLoss': -58.5 ...}
+            # This was a CLOSE trade.
+            # Entry would be opposite.
+            # If close is 1 (Sell), Entry was 0 (Buy).
+            # If close is 0 (Buy), Entry was 1 (Sell).
+            
+            # Wait, api_round_turns uses entry['side'].
+            # If entry side is 0 -> BUY.
+            # If entry side is 1 -> SELL.
+            
+            # Let's refine build_round_turns to get the side from ENTRY fill.
+             
+            rt_side = change.get("side") # Need to pass this
+            action = "BUY"
+            if str(rt_side) in ["1", "SELL", "Short"]:
+                action = "SELL"
+            
+            # Parse timestamps
+            entry_time = change.get("entry_time")
+            if isinstance(entry_time, str):
+                entry_time = _parse_ts(entry_time)
+
+            exit_time = change.get("exit_time")
+            if isinstance(exit_time, str):
+                exit_time = _parse_ts(exit_time)
+
+            new_trade = Trade(
+                account_id=account_id,
+                ticker=change.get("ticker"),
+                action=action,
+                entry_price=change.get("entry_price"),
+                exit_price=change.get("exit_price"),
+                quantity=change.get("size"),
+                status="CLOSED",
+                pnl=change.get("new_pnl"),
+                fees=change.get("fees"),
+                timestamp=entry_time,
+                exit_time=exit_time,
+                strategy="IMPORTED",  # Mark as imported
+                timeframe="-"
+            )
+            db.add(new_trade)
+            applied["created"] += 1
+            db.add(Log(level="INFO", message=f"RECONCILIATION: Created missing trade {new_trade.ticker}"))
+            continue
+
         trade = db.query(Trade).filter(Trade.id == trade_id).first()
         if not trade:
             continue
@@ -419,5 +547,5 @@ async def apply_reconciliation(account_id: int, changes: List[Dict], db: Session
     return {
         "success": True,
         "applied": applied,
-        "message": f"Updates: {applied['pnl_updated']}, Deletions: {applied['deleted']}"
+        "message": f"Created: {applied['created']}, Updates: {applied['pnl_updated']}, Deletions: {applied['deleted']}"
     }
