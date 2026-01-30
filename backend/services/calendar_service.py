@@ -24,7 +24,14 @@ class CalendarService:
         Fetches the economic calendar from the remote XML source,
         parses it, and returns a list of events.
         """
+        # Throttling: Prevent fetching more than once per minute
+        if self._last_fetch and (datetime.now() - self._last_fetch).total_seconds() < 60:
+            return self._cache or []
+
         try:
+            # Update fetch time immediately to prevent race conditions/parallel calls
+            self._last_fetch = datetime.now()
+            
             async with httpx.AsyncClient(timeout=10.0) as client:
                 response = await client.get(CALENDAR_URL)
                 response.raise_for_status()

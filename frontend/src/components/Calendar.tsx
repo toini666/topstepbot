@@ -180,10 +180,11 @@ export function Calendar() {
                     <button
                         onClick={refreshCalendar}
                         disabled={loading}
-                        className="p-2 rounded-lg text-slate-400 hover:text-indigo-400 hover:bg-indigo-500/10 transition-colors border border-slate-700 hover:border-indigo-500/30"
+                        className="flex items-center gap-2 px-3 py-2 rounded-lg text-slate-400 hover:text-indigo-400 hover:bg-indigo-500/10 transition-colors border border-slate-700 hover:border-indigo-500/30 text-sm font-medium"
                         title="Refresh Calendar"
                     >
                         <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+                        Refresh
                     </button>
                     <button
                         onClick={() => setSettingsOpen(!settingsOpen)}

@@ -92,6 +92,14 @@ class TopStepClient:
                         self._log_api_call(method, url, payload, None, 401)
                         return (None, 401, False)
                     
+                    # Handle 502 Bad Gateway (Maintenance)
+                    if response.status_code == 502:
+                        logger.warning(f"Topstep API 502 Bad Gateway on {url}. Maintenance likely. Waiting 60s...")
+                        # Log it but don't count strictly as a "connection error" for circuit breaker, just maintenance
+                        self._log_api_call(method, url, payload, None, 502)
+                        await asyncio.sleep(60)
+                        continue # Retry
+                    
                     # Handle other errors
                     if response.status_code >= 400:
                         self._consecutive_errors += 1

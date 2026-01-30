@@ -36,9 +36,14 @@ A professional-grade automated trading system for TopStepX. Executes TradingView
 
 ### 📅 Economic Calendar
 - **Dashboard View**: Daily major events cards + full weekly table with filters
-- **Automated Fetch**: Daily sync with ForexFactory data
+- **Automated Fetch**: Daily sync with ForexFactory data (with smart throttling)
+- **Manual Refresh**: On-demand calendar update via dashboard button
 - **Daily Briefing**: Morning Discord notification with today's high-impact events
 - **Timezone Smart**: Auto-converts to your local trading time (Brussels)
+
+### 🔍 Contract Validation
+- **Daily Check**: Validates that all configured TopStep contracts (e.g., `MNQH6`) are still tradable
+- **Alerts**: Telegram notification if a contract expires or becomes invalid
 
 ### 🤖 Telegram Bot Control
 

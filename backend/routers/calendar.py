@@ -31,7 +31,13 @@ async def get_calendar():
 @router.get("/refresh")
 async def refresh_calendar():
     """Force refresh of the calendar data."""
+    # Reset last fetch to allow immediate refresh override
+    calendar_service._last_fetch = None 
     events = await calendar_service.fetch_calendar()
+    
+    # CRITICAL: Recalculate news blocks immediately after refresh so settings/risk engine are aware
+    await calendar_service.recalculate_news_blocks()
+    
     return events
 
 @router.get("/settings")

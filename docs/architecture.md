@@ -262,6 +262,7 @@ Data export and analytics endpoints.
 | Discord Daily Summary | Configurable | Sends account summary to Discord |
 | Discord Daily Summary | Configurable | Sends account summary to Discord |
 | **Economic Calendar** | Daily 07:00 | Fetches events, calculates news blocks, sends briefing |
+| **Contract Validation** | Daily 23:00 | Checks validity of configured contracts vs TopStep API |
 | **Position Action** | Every 30s | Checks upcoming blocks, executes BREAKEVEN/FLATTEN |
 
 ---

@@ -168,6 +168,8 @@ Account Settings (per account)
 - **Source**: ForexFactory (XML Feed)
 - **Features**:
   - Daily 7 AM fetch + caching
+  - **Manual Refresh**: On-demand update via UI button with duplicate call prevention
+  - **Throttling**: Smart rate-limit protection (60s cooldown)
   - "Today's Major Events" dashboard card (High/Med impact)
   - Weekly schedule table with filters (Impact, Country, Day/Week)
   - Discord daily briefing (morning summary)
@@ -177,6 +179,11 @@ Account Settings (per account)
 - **News Blocks Integration**:
   - Automatically converts major events into trading blocks
   - Configurable buffer time before and after events
+
+### 11. Contract Validation
+- **Schedule**: Daily at 23:00 (Brussels)
+- **Function**: specific check of all configured `TickerMap` entries against TopStep active contracts
+- **Alerts**: Telegram notification if mapped contract is no longer tradeable (expired/invalid)
 
 ### 12. Automated Position Actions
 - **Trigger**: Approach of any blocked period (Manual or News)

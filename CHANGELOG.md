@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [2026-01-30] - Contract Validation & Calendar Optimization
+
+### Added
+- **Contract Validation**: Daily job (23:00) to validate configured contracts against TopStep API and alert on expiration.
+- **Calendar**: Manual "Refresh" button in UI to force calendar update on demand.
+- **Calendar**: Smart throttling (60s cooldown) to prevent API Rate Limit (429) loops.
+
+### Changed
+- **Calendar**: Removed automatic calendar fetch on backend startup to prevent 429 errors during development restarts.
+- **Calendar**: Optimized "Refresh" to immediately recalculate News Trading Blocks for the Risk Engine.
+
 ## [2026-01-29] - Reconciliation Fixes
 
 ### Fixed

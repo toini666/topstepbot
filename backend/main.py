@@ -31,6 +31,7 @@ from datetime import datetime, time, timedelta, timezone
 import pytz
 from backend.services.calendar_service import calendar_service
 from backend.services.price_cache import price_cache
+from backend.services.contract_validator import contract_validator
 
 # Scheduler Setup
 scheduler = AsyncIOScheduler()
@@ -1281,12 +1282,15 @@ async def lifespan(app: FastAPI):
     # Calendar Job (7:00 AM Brussels)
     scheduler.add_job(calendar_service.check_calendar_job, 'cron', hour=7, minute=0, timezone=BRUSSELS_TZ)
     
-    # Init News Blocks on Startup
-    try:
-        print("📅 Initializing News Blocks...")
-        await calendar_service.recalculate_news_blocks()
-    except Exception as e:
-        print(f"⚠️ Failed to init news blocks: {e}")
+    # Init News Blocks on Startup - REMOVED to avoid 429 Rate Limits
+    # try:
+    #     print("📅 Initializing News Blocks...")
+    #     await calendar_service.recalculate_news_blocks()
+    # except Exception as e:
+    #     print(f"⚠️ Failed to init news blocks: {e}")
+
+    # Daily Contract Validation (Daily at 23:00 Brussels)
+    scheduler.add_job(contract_validator.validate_active_mappings, 'cron', hour=23, minute=0, timezone=BRUSSELS_TZ, id='contract_validation')
 
     scheduler.start()
     print("Scheduler started.")
