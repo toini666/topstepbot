@@ -18,20 +18,30 @@ class RateLimitError(Exception):
 class TopStepClient:
     def __init__(self):
         # Official TopStepX API URL
-        self.base_url = os.getenv("TOPSTEP_URL", "https://api.topstepx.com") 
+        self.base_url = os.getenv("TOPSTEP_URL", "https://api.topstepx.com")
         self.username = os.getenv("TOPSTEP_USERNAME")
         self.password = os.getenv("TOPSTEP_PASSWORD") # Not used for 'loginKey' auth but kept for compat
         self.api_key = os.getenv("TOPSTEP_APIKEY") # NEW: Required for ProjectX
-        
+
         self.token = None
         self.account_id = None
         self._contract_cache = {} # Cache for Contract Details
-        
+
         # Rate limiting tracking
         self._consecutive_errors = 0
         self._rate_limit_alert_sent = False
         self._last_rate_limit_time = None
         self._rate_limit_until = None # Circuit Breaker timestamp
+
+        # Short-term API response cache to reduce redundant calls
+        # Key: (endpoint, account_id), Value: (data, timestamp)
+        self._api_cache = {}
+        self._cache_ttl = {
+            "accounts": 10,      # 10 seconds for accounts list
+            "positions": 5,      # 5 seconds for positions (need fresh data)
+            "orders": 5,         # 5 seconds for orders
+            "trades": 10,        # 10 seconds for historical trades
+        }
 
     async def _make_request(
         self, 
@@ -134,6 +144,37 @@ class TopStepClient:
         # All retries exhausted
         logger.error(f"All {max_retries} retries exhausted for {url}")
         return (None, 429, False)
+
+    def _get_cached(self, cache_key: str, account_id: int = None) -> tuple:
+        """
+        Get cached API response if still valid.
+        Returns (data, is_valid) tuple.
+        """
+        full_key = f"{cache_key}:{account_id}" if account_id else cache_key
+        cached = self._api_cache.get(full_key)
+
+        if cached:
+            data, timestamp = cached
+            ttl = self._cache_ttl.get(cache_key, 5)
+            age = (datetime.now(timezone.utc) - timestamp).total_seconds()
+
+            if age < ttl:
+                return (data, True)
+
+        return (None, False)
+
+    def _set_cache(self, cache_key: str, data, account_id: int = None):
+        """Store API response in cache."""
+        full_key = f"{cache_key}:{account_id}" if account_id else cache_key
+        self._api_cache[full_key] = (data, datetime.now(timezone.utc))
+
+    def clear_cache(self, cache_key: str = None, account_id: int = None):
+        """Clear specific cache entry or all cache."""
+        if cache_key is None:
+            self._api_cache.clear()
+        else:
+            full_key = f"{cache_key}:{account_id}" if account_id else cache_key
+            self._api_cache.pop(full_key, None)
 
     async def _send_rate_limit_alert(self, url: str, error_count: int):
         """Send Telegram notification about rate limiting."""
@@ -319,11 +360,17 @@ class TopStepClient:
         # Since user explicitly asked for Auth/Validate:
         return True
 
-    async def get_accounts(self):
+    async def get_accounts(self, use_cache: bool = True):
         """Retrieves all active trading accounts."""
+        # Check cache first
+        if use_cache:
+            cached_data, is_valid = self._get_cached("accounts")
+            if is_valid:
+                return cached_data
+
         if not self.token:
-            if not await self.login(): # Simple check for now, can be improved
-                 return []
+            if not await self.login():
+                return []
 
         url = f"{self.base_url}/api/Account/search"
         headers = {"Authorization": f"Bearer {self.token}"}
@@ -332,12 +379,12 @@ class TopStepClient:
         async with httpx.AsyncClient() as client:
             try:
                 response = await client.post(url, json=payload, headers=headers, timeout=10)
-                
+
                 if response.status_code != 200:
                     self._log_api_call("POST", url, payload, None, response.status_code)
-                    if response.status_code == 401: 
+                    if response.status_code == 401:
                         print("Token Expired or Invalid.")
-                        self.token = None 
+                        self.token = None
                     return []
 
                 try:
@@ -346,10 +393,12 @@ class TopStepClient:
                     self._log_api_call("POST", url, payload, {"raw": response.text}, response.status_code)
                     print(f"Get Accounts Error: Invalid JSON (Status {response.status_code})")
                     return []
-                
+
                 if data.get("success") and data.get("accounts"):
                     self._log_api_call("POST", url, payload, data, response.status_code)
-                    return data["accounts"]
+                    accounts = data["accounts"]
+                    self._set_cache("accounts", accounts)
+                    return accounts
                 else:
                     self._log_api_call("POST", url, payload, data, response.status_code)
                     print("No active accounts found.")
@@ -358,12 +407,18 @@ class TopStepClient:
                 print(f"Get Accounts Error: {e}")
                 return []
 
-    async def get_open_positions(self, account_id: int):
+    async def get_open_positions(self, account_id: int, use_cache: bool = True):
         """Retrieves open positions for a specific account."""
+        # Check cache first
+        if use_cache:
+            cached_data, is_valid = self._get_cached("positions", account_id)
+            if is_valid:
+                return cached_data
+
         if not self.token:
             if not await self.login():
-                 return []
-        
+                return []
+
         url = f"{self.base_url}/api/Position/searchOpen"
         headers = {"Authorization": f"Bearer {self.token}"}
         payload = {"accountId": account_id}
@@ -371,12 +426,13 @@ class TopStepClient:
         async with httpx.AsyncClient() as client:
             try:
                 response = await client.post(url, json=payload, headers=headers, timeout=10)
-                
+
                 if response.status_code != 200:
                     self._log_api_call("POST", url, payload, None, response.status_code)
-                    if response.status_code == 401: self.token = None 
+                    if response.status_code == 401:
+                        self.token = None
                     return []
-                
+
                 try:
                     data = response.json()
                 except json.JSONDecodeError:
@@ -385,76 +441,31 @@ class TopStepClient:
 
                 if data.get("success") and data.get("positions"):
                     self._log_api_call("POST", url, payload, data, response.status_code)
-                    return data["positions"]
+                    positions = data["positions"]
+                    self._set_cache("positions", positions, account_id)
+                    return positions
                 self._log_api_call("POST", url, payload, data, response.status_code)
+                self._set_cache("positions", [], account_id)
                 return []
             except Exception as e:
                 print(f"Get Positions Error: {e}")
                 return []
 
-    async def get_orders(self, account_id: int, days: int = 1):
+    async def get_orders(self, account_id: int, days: int = 1, use_cache: bool = True):
         """Retrieves orders for a specific account."""
+        # Check cache first (only for days=1, the most common case)
+        if use_cache and days == 1:
+            cached_data, is_valid = self._get_cached("orders", account_id)
+            if is_valid:
+                return cached_data
+
         if not self.token:
             if not await self.login():
-                 return []
-        
+                return []
+
         url = f"{self.base_url}/api/Order/search"
         headers = {"Authorization": f"Bearer {self.token}"}
-        
-        if days == 1:
-            # "Today" = Since Midnight Local Time
-            now_local = datetime.now().astimezone() # Aware local time
-            midnight_local = now_local.replace(hour=0, minute=0, second=0, microsecond=0)
-            start_dt = midnight_local.astimezone(timezone.utc)
-        else:
-            # "Last N Days" = Rolling 24h * N for now, or Midnight N days ago?
-            # User specifically complained about "Today". Let's keep 7 days as rolling window or N days ago.
-            # To be consistent, let's make it rolling for 7 days unless requested otherwise.
-            # But wait, "Last 7 days" usually implies a date range. 
-            # Let's keep existing behavior for days > 1 but clean up format.
-            start_dt = datetime.now(timezone.utc) - timedelta(days=days)
 
-        # Remove microseconds and add Z
-        start_timestamp = start_dt.strftime('%Y-%m-%dT%H:%M:%SZ')
-        
-        payload = {
-            "accountId": account_id,
-            "startTimestamp": start_timestamp
-        }
-
-        async with httpx.AsyncClient() as client:
-            try:
-                response = await client.post(url, json=payload, headers=headers, timeout=10)
-                
-                if response.status_code != 200:
-                    self._log_api_call("POST", url, payload, None, response.status_code)
-                    if response.status_code == 401: self.token = None 
-                    return []
-                
-                try:
-                    data = response.json()
-                except json.JSONDecodeError:
-                    self._log_api_call("POST", url, payload, {"raw": response.text}, response.status_code)
-                    return []
-
-                if data.get("success") and data.get("orders"):
-                    self._log_api_call("POST", url, payload, data, response.status_code)
-                    return data["orders"]
-                self._log_api_call("POST", url, payload, data, response.status_code)
-                return []
-            except Exception as e:
-                print(f"Get Orders Error: {e}")
-                return []
-
-    async def get_historical_trades(self, account_id: int, days: int = 1):
-        """Retrieves historical (half-turn) trades."""
-        if not self.token:
-            if not await self.login():
-                 return []
-        
-        url = f"{self.base_url}/api/Trade/search"
-        headers = {"Authorization": f"Bearer {self.token}"}
-        
         if days == 1:
             # "Today" = Since Midnight Local Time
             now_local = datetime.now().astimezone()
@@ -464,7 +475,7 @@ class TopStepClient:
             start_dt = datetime.now(timezone.utc) - timedelta(days=days)
 
         start_timestamp = start_dt.strftime('%Y-%m-%dT%H:%M:%SZ')
-        
+
         payload = {
             "accountId": account_id,
             "startTimestamp": start_timestamp
@@ -473,12 +484,73 @@ class TopStepClient:
         async with httpx.AsyncClient() as client:
             try:
                 response = await client.post(url, json=payload, headers=headers, timeout=10)
-                
+
                 if response.status_code != 200:
                     self._log_api_call("POST", url, payload, None, response.status_code)
-                    if response.status_code == 401: self.token = None 
+                    if response.status_code == 401:
+                        self.token = None
                     return []
-                
+
+                try:
+                    data = response.json()
+                except json.JSONDecodeError:
+                    self._log_api_call("POST", url, payload, {"raw": response.text}, response.status_code)
+                    return []
+
+                if data.get("success") and data.get("orders"):
+                    self._log_api_call("POST", url, payload, data, response.status_code)
+                    orders = data["orders"]
+                    if days == 1:
+                        self._set_cache("orders", orders, account_id)
+                    return orders
+                self._log_api_call("POST", url, payload, data, response.status_code)
+                if days == 1:
+                    self._set_cache("orders", [], account_id)
+                return []
+            except Exception as e:
+                print(f"Get Orders Error: {e}")
+                return []
+
+    async def get_historical_trades(self, account_id: int, days: int = 1, use_cache: bool = True):
+        """Retrieves historical (half-turn) trades."""
+        # Check cache first (only for days=1, the most common case)
+        if use_cache and days == 1:
+            cached_data, is_valid = self._get_cached("trades", account_id)
+            if is_valid:
+                return cached_data
+
+        if not self.token:
+            if not await self.login():
+                return []
+
+        url = f"{self.base_url}/api/Trade/search"
+        headers = {"Authorization": f"Bearer {self.token}"}
+
+        if days == 1:
+            # "Today" = Since Midnight Local Time
+            now_local = datetime.now().astimezone()
+            midnight_local = now_local.replace(hour=0, minute=0, second=0, microsecond=0)
+            start_dt = midnight_local.astimezone(timezone.utc)
+        else:
+            start_dt = datetime.now(timezone.utc) - timedelta(days=days)
+
+        start_timestamp = start_dt.strftime('%Y-%m-%dT%H:%M:%SZ')
+
+        payload = {
+            "accountId": account_id,
+            "startTimestamp": start_timestamp
+        }
+
+        async with httpx.AsyncClient() as client:
+            try:
+                response = await client.post(url, json=payload, headers=headers, timeout=10)
+
+                if response.status_code != 200:
+                    self._log_api_call("POST", url, payload, None, response.status_code)
+                    if response.status_code == 401:
+                        self.token = None
+                    return []
+
                 try:
                     data = response.json()
                 except json.JSONDecodeError:
@@ -487,8 +559,13 @@ class TopStepClient:
 
                 if data.get("success") and data.get("trades"):
                     self._log_api_call("POST", url, payload, data, response.status_code)
-                    return data["trades"]
+                    trades = data["trades"]
+                    if days == 1:
+                        self._set_cache("trades", trades, account_id)
+                    return trades
                 self._log_api_call("POST", url, payload, data, response.status_code)
+                if days == 1:
+                    self._set_cache("trades", [], account_id)
                 return []
             except Exception as e:
                 print(f"Get Historical Trades Error: {e}")

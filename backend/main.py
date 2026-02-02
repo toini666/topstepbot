@@ -121,15 +121,20 @@ async def monitor_closed_positions_job():
             try:
                 # Fetch Current Positions for this account
                 current_positions = await topstep_client.get_open_positions(account_id)
-                
+
                 # Convert to Dictionary: { 'contractId': position_data }
                 current_map = {}
                 for pos in current_positions:
                     cid = str(pos.get('contractId'))
                     current_map[cid] = pos
-                
+
                 # Get last known state for this account
                 last_map = _last_open_positions.get(account_id, {})
+
+                # Pre-fetch historical trades ONCE for this account (used multiple times below)
+                # This eliminates 3 redundant API calls per account per cycle
+                recent_trades_cache = None
+                recent_orders_cache = None
                 
                 # Detect Closures (Full or Partial)
                 if last_map:
@@ -169,8 +174,10 @@ async def monitor_closed_positions_job():
                                 Trade.status == "OPEN"
                             ).order_by(Trade.timestamp.desc()).first()
 
-                            # 2. Fetch History to calculate PnL
-                            recent_trades = await topstep_client.get_historical_trades(account_id, days=1)
+                            # 2. Fetch History to calculate PnL (use cached if available)
+                            if recent_trades_cache is None:
+                                recent_trades_cache = await topstep_client.get_historical_trades(account_id, days=1)
+                            recent_trades = recent_trades_cache
                             
                             # 3. Filter Trades (Symbol match AND Time >= Entry Time)
                             relevant_trades = []
@@ -332,8 +339,11 @@ async def monitor_closed_positions_job():
                     for curr_cid, curr_pos in current_map.items():
                         if curr_cid not in last_map:
                             print(f"🔵 DETECTED OPEN: {curr_cid} on Account {account_name}")
-                            
-                            recent_trades = await topstep_client.get_historical_trades(account_id, days=1)
+
+                            # Use cached trades (fetch once if not yet cached)
+                            if recent_trades_cache is None:
+                                recent_trades_cache = await topstep_client.get_historical_trades(account_id, days=1)
+                            recent_trades = recent_trades_cache
                             matching_fill = None
                             
                             if recent_trades:
@@ -465,9 +475,11 @@ async def monitor_closed_positions_job():
                     # CHECK: Is this trade physically present in TopStep?
                     if expected_cid not in current_map:
                         print(f"🕵️ RECONCILIATION: Trade #{trade.id} ({trade.ticker}) is OPEN in DB but missing in API. Verifying closure...")
-                        
-                        # Verify against history (look for exit execution after trade entry)
-                        recent_trades = await topstep_client.get_historical_trades(account_id, days=1)
+
+                        # Verify against history (use cached trades)
+                        if recent_trades_cache is None:
+                            recent_trades_cache = await topstep_client.get_historical_trades(account_id, days=1)
+                        recent_trades = recent_trades_cache
                         trade_entry_time = trade.timestamp
                         
                         # Find matching exit execution
@@ -532,9 +544,10 @@ async def monitor_closed_positions_job():
                             db.add(Log(level="DEBUG", message=f"RECONCILIATION: Could not confirm closure in history for #{trade.id}"))
                             db.commit()
 
-                # Check for orphaned orders on this account
-                recent_orders = await topstep_client.get_orders(account_id, days=1)
-                for o in recent_orders:
+                # Check for orphaned orders on this account (use cached if available)
+                if recent_orders_cache is None:
+                    recent_orders_cache = await topstep_client.get_orders(account_id, days=1)
+                for o in recent_orders_cache:
                     st = o.get('status')
                     if str(st).upper() in ["WORKING", "ACCEPTED", "1", "6"]:
                         cid = str(o.get('contractId'))
@@ -1254,8 +1267,11 @@ async def lifespan(app: FastAPI):
 
     # Add Scheduled Jobs
     scheduler.add_job(auto_flatten_job, 'interval', minutes=1)
-    scheduler.add_job(monitor_closed_positions_job, 'interval', seconds=5)
-    scheduler.add_job(price_refresh_job, 'interval', seconds=5)
+    # Position monitoring: 10s interval (was 5s) - reduced API load while maintaining responsiveness
+    scheduler.add_job(monitor_closed_positions_job, 'interval', seconds=10, id='monitor_positions')
+    # Price refresh: 10s interval, starts 5s after monitor job to stagger API calls
+    price_refresh_start = datetime.now() + timedelta(seconds=5)
+    scheduler.add_job(price_refresh_job, 'interval', seconds=10, id='price_refresh', next_run_time=price_refresh_start)
     
     # Maintenance Jobs
     scheduler.add_job(backup_database, 'cron', hour=3, minute=0)
