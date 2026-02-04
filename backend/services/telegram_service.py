@@ -57,6 +57,17 @@ class TelegramService:
         finally:
             db.close()
 
+    def _log_info(self, message: str):
+        """Log info to system logs (for notification tracking)."""
+        db = SessionLocal()
+        try:
+            db.add(Log(level="INFO", message=message))
+            db.commit()
+        except Exception:
+            pass
+        finally:
+            db.close()
+
     # =========================================================================
     # SYSTEM NOTIFICATIONS
     # =========================================================================
@@ -92,7 +103,7 @@ class TelegramService:
                 details = json.dumps(error_payload, indent=2)
                 if len(details) > 500: details = details[:500] + "..."
                 msg += f"<pre>{details}</pre>"
-            except:
+            except Exception:
                 pass
                 
         await self.send_message(msg)
@@ -128,6 +139,7 @@ class TelegramService:
             msg += f"\n<i>Processing on {accounts_count} account(s)...</i>"
         
         await self.send_message(msg)
+        self._log_info(f"Telegram: Signal notification sent for {ticker} [{strategy}]")
 
     async def notify_partial_signal(
         self,
@@ -157,6 +169,7 @@ class TelegramService:
             msg += f"\n<i>Processing on {len(accounts)} account(s)...</i>"
         
         await self.send_message(msg)
+        self._log_info(f"Telegram: Partial signal notification sent for {ticker}")
 
     async def notify_close_signal(
         self,
@@ -177,6 +190,7 @@ class TelegramService:
         
         msg += f"\n<i>Closing positions on matching accounts...</i>"
         await self.send_message(msg)
+        self._log_info(f"Telegram: Close signal notification sent for {ticker}")
 
     # =========================================================================
     # TRADE EXECUTION NOTIFICATIONS (NEW: account name)
@@ -196,6 +210,7 @@ class TelegramService:
         amount_str = f"{action} {quantity}x {ticker}"
         msg = f"🚀 <b>Order Submitted</b>{account_tag}\n{amount_str} @ {price}\nOrder ID: {order_id}"
         await self.send_message(msg)
+        self._log_info(f"Telegram: Order submitted for {ticker} ({account_name or 'unknown'})")
 
     async def notify_position_opened(
         self, 
@@ -217,6 +232,7 @@ class TelegramService:
             f"<i>Filled</i>"
         )
         await self.send_message(msg)
+        self._log_info(f"Telegram: Position opened for {symbol} ({account_name or 'unknown'})")
 
     async def notify_position_closed(
         self, 
@@ -262,6 +278,7 @@ class TelegramService:
             msg += f"\n\n{daily_emoji} <b>Daily PnL: ${daily_pnl:.2f}</b>"
         
         await self.send_message(msg)
+        self._log_info(f"Telegram: Position closed for {symbol} ({account_name or 'unknown'}) PnL: ${pnl_val:.2f}")
 
     async def notify_partial_executed(
         self,
@@ -311,6 +328,7 @@ class TelegramService:
             msg += "\n🎯 <i>SL moved to breakeven</i>"
         
         await self.send_message(msg)
+        self._log_info(f"Telegram: Partial executed for {ticker} ({account_name or 'unknown'})")
 
     async def notify_close_executed(
         self,
@@ -340,6 +358,7 @@ class TelegramService:
         
         msg += f"\n<i>Position fully closed</i>"
         await self.send_message(msg)
+        self._log_info(f"Telegram: Close executed for {ticker} ({account_name or 'unknown'})")
 
     # =========================================================================
     # REJECTION & WARNING NOTIFICATIONS
@@ -360,6 +379,7 @@ class TelegramService:
             f"Reason: {reason}"
         )
         await self.send_message(msg)
+        self._log_info(f"Telegram: Trade rejection for {ticker}: {reason}")
 
     async def notify_orphaned_orders(self, orders: list):
         """Notifies about working orders without matching positions."""

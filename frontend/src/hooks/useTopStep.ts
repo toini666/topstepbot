@@ -38,7 +38,12 @@ export const useTopStep = () => {
         weekend_markets_open: false,
         trading_days: ['MON', 'TUE', 'WED', 'THU', 'FRI'],
         enforce_single_position_per_asset: true,
-        block_cross_account_opposite: true
+        block_cross_account_opposite: true,
+        news_block_enabled: false,
+        news_block_before_minutes: 15,
+        news_block_after_minutes: 15,
+        blocked_hours_position_action: 'NOTHING',
+        position_action_buffer_minutes: 5
     });
     const [accountSettings, setAccountSettings] = useState<Record<number, AccountSettings>>({});
     const [tradingSessions, setTradingSessions] = useState<TradingSession[]>([]);

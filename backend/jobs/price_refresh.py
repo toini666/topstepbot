@@ -1,0 +1,94 @@
+"""
+Price Refresh Job
+
+Refresh current prices for all active contracts.
+Primary: WebSocket (real-time) via MarketHubClient
+Fallback: Polling every 10 seconds if WebSocket disconnects
+"""
+
+from typing import Set
+
+from backend.services.topstep_client import topstep_client
+from backend.services.price_cache import price_cache
+from backend.services.market_hub_client import market_hub_client
+
+
+async def price_refresh_job() -> None:
+    """
+    Refresh current prices for all active contracts.
+    
+    Primary: WebSocket (real-time) via MarketHubClient
+    Fallback: Polling every 10 seconds if WebSocket disconnects
+    
+    Lifecycle:
+    - Connect WebSocket when positions exist
+    - Subscribe to new contracts dynamically  
+    - Disconnect when all positions closed
+    """
+    try:
+        # Get all open positions across all accounts
+        accounts = await topstep_client.get_accounts()
+        active_contracts: Set[str] = set()
+        is_simulated = True  # Default to simulated
+        
+        for account in accounts:
+            # Check if any account is live (not simulated)
+            if not account.get("simulated", True):
+                is_simulated = False
+            
+            positions = await topstep_client.get_open_positions(account.get("id"))
+            for pos in positions:
+                contract_id = pos.get("contractId")
+                if contract_id:
+                    active_contracts.add(contract_id)
+        
+        # ===== WebSocket Lifecycle Management =====
+        
+        if active_contracts:
+            # Positions exist - try to use WebSocket
+            if not market_hub_client.is_connected:
+                # Get token and connect
+                token = getattr(topstep_client, '_access_token', None)
+                if token:
+                    success = await market_hub_client.connect(token)
+                    if success:
+                        # Set up quote callback to update PriceCache
+                        def on_quote(contract_id: str, data: dict) -> None:
+                            price = data.get("lastPrice") or data.get("last")
+                            if price:
+                                price_cache.set_price_from_websocket(contract_id, float(price))
+                        
+                        market_hub_client.on_quote(on_quote)
+                        price_cache.set_websocket_active(True)
+                    else:
+                        price_cache.set_websocket_active(False)
+                else:
+                    price_cache.set_websocket_active(False)
+            
+            # Subscribe to new contracts if connected
+            if market_hub_client.is_connected:
+                current_subs = market_hub_client.subscribed_contracts
+                for contract_id in active_contracts:
+                    if contract_id not in current_subs:
+                        await market_hub_client.subscribe_contract(contract_id)
+                
+                # Unsubscribe from contracts no longer needed
+                for contract_id in current_subs - active_contracts:
+                    await market_hub_client.unsubscribe_contract(contract_id)
+            
+            # Fallback: Use polling if WebSocket is not active
+            if price_cache.should_use_polling_fallback:
+                await price_cache.refresh_prices(
+                    list(active_contracts), 
+                    topstep_client, 
+                    is_simulated=is_simulated
+                )
+        else:
+            # No positions - disconnect WebSocket to save resources
+            if market_hub_client.is_connected:
+                await market_hub_client.disconnect()
+                price_cache.set_websocket_active(False)
+    
+    except Exception as e:
+        print(f"Price refresh error: {e}")
+        price_cache.set_websocket_active(False)

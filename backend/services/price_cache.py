@@ -16,13 +16,32 @@ logger = logging.getLogger("topstepbot")
 class PriceCache:
     """
     In-memory cache for current prices.
-    Batches API calls to reduce load.
+    Supports both polling (fallback) and WebSocket (primary) sources.
     """
     
     def __init__(self):
-        self._cache: Dict[str, dict] = {}  # {contract_id: {price, timestamp}}
-        self._cache_ttl = 10  # seconds (increased from 5 to reduce API calls)
+        self._cache: Dict[str, dict] = {}  # {contract_id: {price, timestamp, source}}
+        self._cache_ttl = 10  # seconds (for polling fallback)
         self._stale_ttl = 60  # Keep stale prices for 60 seconds as fallback
+        self._websocket_active = False  # Track if WebSocket is primary source
+    
+    @property
+    def websocket_active(self) -> bool:
+        """Check if WebSocket is currently the active price source."""
+        return self._websocket_active
+    
+    def set_websocket_active(self, active: bool):
+        """Set WebSocket as primary source (disables polling when active)."""
+        self._websocket_active = active
+        if active:
+            logger.info("Price source: WebSocket (real-time)")
+        else:
+            logger.info("Price source: Polling fallback (10s interval)")
+    
+    @property
+    def should_use_polling_fallback(self) -> bool:
+        """True if WebSocket is disconnected and fallback needed."""
+        return not self._websocket_active
     
     def get_price(self, contract_id: str, allow_stale: bool = False) -> Optional[float]:
         """
@@ -39,7 +58,11 @@ class PriceCache:
             entry = self._cache[contract_id]
             age = (datetime.now() - entry["timestamp"]).total_seconds()
             
-            # Fresh price
+            # WebSocket prices are always fresh (no TTL)
+            if entry.get("source") == "websocket":
+                return entry["price"]
+            
+            # Fresh polling price
             if age < self._cache_ttl:
                 return entry["price"]
             
@@ -51,10 +74,19 @@ class PriceCache:
         return None
     
     def set_price(self, contract_id: str, price: float):
-        """Store price in cache."""
+        """Store price in cache (from polling)."""
         self._cache[contract_id] = {
             "price": price,
-            "timestamp": datetime.now()
+            "timestamp": datetime.now(),
+            "source": "polling"
+        }
+    
+    def set_price_from_websocket(self, contract_id: str, price: float):
+        """Store price from WebSocket (always fresh, no TTL)."""
+        self._cache[contract_id] = {
+            "price": price,
+            "timestamp": datetime.now(),
+            "source": "websocket"
         }
     
     async def refresh_prices(self, contract_ids: list, topstep_client, is_simulated: bool = True):

@@ -133,27 +133,18 @@ async def handle_signal(
     
     strategy_name = alert.strat or "default"
     
-    # Non-blocking notification (fire-and-forget to reduce latency)
-    async def _notify_signal_safe():
-        try:
-            await telegram_service.notify_signal(
-                ticker=alert.ticker,
-                action=alert.side,
-                price=alert.entry,
-                sl=alert.stop,
-                tp=alert.tp,
-                strategy=strategy_name,
-                timeframe=alert.timeframe,
-                accounts_count=0
-            )
-        except Exception as e:
-            db.add(Log(level="ERROR", message=f"Telegram Notification Failed: {e}"))
-    
-    asyncio.create_task(_notify_signal_safe())
+    # Track if we should notify - moved after eligibility checks (BR-1)
+    should_notify_signal = False
+    global_rejection_reason = None
     
     # Global checks (apply to ALL accounts)
     allowed, reason = risk_engine.check_market_hours()
     if not allowed:
+        # BR-1: Notify signal + rejection for global rejection
+        await telegram_service.notify_signal(
+            ticker=alert.ticker, action=alert.side, price=alert.entry,
+            sl=alert.stop, tp=alert.tp, strategy=strategy_name, timeframe=alert.timeframe
+        )
         db.add(Log(level="WARNING", message=f"Signal Rejected (Market): {reason}"))
         db.commit()
         await telegram_service.notify_trade_rejection(alert.ticker, reason)
@@ -161,6 +152,11 @@ async def handle_signal(
     
     allowed, reason = risk_engine.check_blocked_periods()
     if not allowed:
+        # BR-1: Notify signal + rejection for global rejection
+        await telegram_service.notify_signal(
+            ticker=alert.ticker, action=alert.side, price=alert.entry,
+            sl=alert.stop, tp=alert.tp, strategy=strategy_name, timeframe=alert.timeframe
+        )
         db.add(Log(level="WARNING", message=f"Signal Rejected (Blocked): {reason}"))
         db.commit()
         await telegram_service.notify_trade_rejection(alert.ticker, reason)
@@ -224,9 +220,17 @@ async def handle_signal(
                 db.add(Log(level="INFO", message=f"Position exists for {alert.ticker} on {acc.get('name')}: {reason}"))
     
     if not eligible_accounts:
+        # BR-1: No notification if no eligible accounts (silent skip)
         db.add(Log(level="INFO", message=f"No eligible accounts for {alert.ticker} [{strategy_name}]"))
         db.commit()
         return {"status": "skipped", "reason": "No eligible accounts"}
+    
+    # BR-1: We have eligible accounts, send the signal notification
+    await telegram_service.notify_signal(
+        ticker=alert.ticker, action=alert.side, price=alert.entry,
+        sl=alert.stop, tp=alert.tp, strategy=strategy_name,
+        timeframe=alert.timeframe, accounts_count=len(eligible_accounts)
+    )
     
     # Cross-account direction check
     # Only need to check against the first eligible account's intended direction
@@ -237,6 +241,7 @@ async def handle_signal(
         topstep_client=topstep_client
     )
     if not allowed:
+        # Cross-account conflict - already notified signal above, just add rejection
         db.add(Log(level="WARNING", message=f"Signal Rejected (Cross-Account): {reason}"))
         db.commit()
         await telegram_service.notify_trade_rejection(alert.ticker, reason)
@@ -264,7 +269,12 @@ async def handle_signal(
         )
         
         if qty == 0:
-            db.add(Log(level="WARNING", message=f"Qty=0 for account {account_id}, skipping"))
+            # BR-4: Notify qty=0 rejection per account
+            account_settings = db.query(AccountSettings).filter(AccountSettings.account_id == account_id).first()
+            account_name = (account_settings.account_name if account_settings and account_settings.account_name else str(account_id))
+            reason = f"Position size < 1 contract (risk: ${risk_amount}, SL distance too wide)"
+            db.add(Log(level="WARNING", message=f"Qty=0 for {account_name}: {reason}"))
+            await telegram_service.notify_trade_rejection(alert.ticker, reason, account_name=account_name)
             continue
         
         # Check contract limit
@@ -359,21 +369,7 @@ async def handle_partial(alert: TradingViewAlert, db: Session) -> Dict[str, Any]
     from backend.services.telegram_service import telegram_service
     from backend.services.discord_service import discord_service
     
-    # Notify PARTIAL signal received (non-blocking)
-    async def _notify_partial_safe():
-        try:
-            await telegram_service.notify_partial_signal(
-                ticker=alert.ticker,
-                timeframe=alert.timeframe,
-                strategy=strategy_name,
-                price=alert.entry,
-                new_sl=alert.stop,
-                new_tp=alert.tp
-            )
-        except Exception as e:
-            db.add(Log(level="ERROR", message=f"Telegram Partial Notification Failed: {e}"))
-    
-    asyncio.create_task(_notify_partial_safe())
+    # BR-2: Notification moved after finding matching trades
     
     # Find matching trades in our DB
     matching_trades = db.query(Trade).filter(
@@ -384,9 +380,21 @@ async def handle_partial(alert: TradingViewAlert, db: Session) -> Dict[str, Any]
     ).all()
     
     if not matching_trades:
+        # BR-2: No notification if no matching position (silent skip)
         db.add(Log(level="INFO", message=f"PARTIAL: No matching position for {alert.ticker} TF={alert.timeframe} [{strategy_name}]"))
         db.commit()
         return {"status": "skipped", "reason": "No matching position"}
+    
+    # BR-2: Matching trades found, send notification
+    await telegram_service.notify_partial_signal(
+        ticker=alert.ticker,
+        timeframe=alert.timeframe,
+        strategy=strategy_name,
+        price=alert.entry,
+        new_sl=alert.stop,
+        new_tp=alert.tp,
+        accounts=[t.account_id for t in matching_trades]
+    )
     
     db.add(Log(level="INFO", message=f"PARTIAL: Found {len(matching_trades)} matching trade(s) for {alert.ticker}"))
     
@@ -630,19 +638,7 @@ async def handle_close(alert: TradingViewAlert, db: Session) -> Dict[str, Any]:
     strategy_name = alert.strat or "default"
     from backend.services.telegram_service import telegram_service
     
-    # Notify CLOSE signal received (non-blocking)
-    async def _notify_close_safe():
-        try:
-            await telegram_service.notify_close_signal(
-                ticker=alert.ticker,
-                timeframe=alert.timeframe,
-                strategy=strategy_name,
-                price=alert.entry
-            )
-        except Exception as e:
-            db.add(Log(level="ERROR", message=f"Telegram Close Notification Failed: {e}"))
-    
-    asyncio.create_task(_notify_close_safe())
+    # BR-3: Notification moved after finding matching trades
     
     # Find matching trades in our DB
     matching_trades = db.query(Trade).filter(
@@ -653,9 +649,18 @@ async def handle_close(alert: TradingViewAlert, db: Session) -> Dict[str, Any]:
     ).all()
     
     if not matching_trades:
+        # BR-3: No notification if no matching position (silent skip)
         db.add(Log(level="INFO", message=f"CLOSE: No matching position for {alert.ticker} TF={alert.timeframe} [{strategy_name}]"))
         db.commit()
         return {"status": "skipped", "reason": "No matching position"}
+    
+    # BR-3: Matching trades found, send notification
+    await telegram_service.notify_close_signal(
+        ticker=alert.ticker,
+        timeframe=alert.timeframe,
+        strategy=strategy_name,
+        price=alert.entry
+    )
     
     db.add(Log(level="INFO", message=f"CLOSE: Found {len(matching_trades)} matching trade(s) for {alert.ticker}"))
     

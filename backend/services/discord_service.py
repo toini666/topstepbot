@@ -304,7 +304,3 @@ class DiscordService:
 
 # Singleton instance
 discord_service = DiscordService()
-
-
-# Singleton instance
-discord_service = DiscordService()
