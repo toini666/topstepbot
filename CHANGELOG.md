@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [2026-02-04] - Trade Execution Optimization
+
+### Changed
+- **API Caching**: Implemented API response caching and optimized job intervals to reduce TopStep API load.
+- **Position Checks**: Parallel position verification across accounts using `asyncio.gather` for faster eligibility checks.
+- **Cross-Account Check**: Parallel position fetch in risk engine cross-account direction validation.
+- **Telegram Notifications**: Made PARTIAL/CLOSE signal notifications non-blocking with `asyncio.create_task`.
+
+### Fixed
+- **SL/TP Setup**: Added 3-attempt retry logic with exponential backoff for SL/TP order corrections post-execution.
+
+---
+
 ## [2026-01-30] - Contract Validation & Calendar Optimization
 
 ### Added

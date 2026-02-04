@@ -24,7 +24,7 @@ This document outlines the roadmap to evolve the current functional prototype in
 *Goal: Stability and ease of deployment.*
 - [ ] **Cloudflare Tunnel Integration**: Setup a permanent webhook URL (`https://bot.domaine.com`) to avoid daily ngrok reconfiguration.
 - [ ] **Automated tests**: setup workflow of automated test to verify everything is still working (core features) after a development
-- [ ] **Execution optimization**: optimize workflow to have the minimum execution time between trading alert and trade execution
+- [x] **Execution optimization**: optimize workflow to have the minimum execution time between trading alert and trade execution
 - [ ] **Refactor UI**: Harmonize UI, refactor look and feel, add footer and reorganize data visualization
 
 ## 5. Quick fixes / bugs

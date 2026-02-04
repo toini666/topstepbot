@@ -476,10 +476,14 @@ Webhook requests from other IPs are rejected with HTTP 403.
 ## Performance Optimizations
 
 1. **Contract Caching** - In-memory cache for contract details
-2. **Selective Logging** - Skip noisy polling endpoints
-3. **Background Execution** - Trade execution in FastAPI BackgroundTasks
-4. **Polling Intervals** - 3s for data, 5s for position monitor
-5. **Database Indexes** - On frequently queried columns
+2. **API Response Caching** - Cached account and position data with configurable TTL
+3. **Parallel Position Checks** - Concurrent account eligibility verification using `asyncio.gather`
+4. **Non-blocking Notifications** - Telegram alerts dispatched via `asyncio.create_task`
+5. **SL/TP Retry Logic** - 3-attempt retry with exponential backoff for order corrections
+6. **Selective Logging** - Skip noisy polling endpoints
+7. **Background Execution** - Trade execution in FastAPI BackgroundTasks
+8. **Polling Intervals** - 3s for data, 5s for position monitor
+9. **Database Indexes** - On frequently queried columns
 
 ---
 

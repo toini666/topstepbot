@@ -472,6 +472,8 @@ class RiskEngine:
         This prevents long/short conflicts across accounts.
         Returns (allowed, reason).
         """
+        import asyncio
+        
         # Check if this rule is enabled
         settings = self.get_global_settings()
         if not settings.get("block_cross_account_opposite", True):
@@ -485,11 +487,22 @@ class RiskEngine:
             # Determine our side (1=Long, 2=Short in TopStep API)
             our_side = 1 if direction.upper() in ["BUY", "LONG"] else 2
             
-            for account in all_accounts:
-                if account.account_id == exclude_account_id:
-                    continue
-                
-                positions = await topstep_client.get_open_positions(account.account_id)
+            # Filter accounts to check
+            accounts_to_check = [acc for acc in all_accounts if acc.account_id != exclude_account_id]
+            
+            if not accounts_to_check:
+                return True, "OK"
+            
+            # Parallel position fetch for all accounts
+            async def fetch_positions(acc_id):
+                return (acc_id, await topstep_client.get_open_positions(acc_id))
+            
+            results = await asyncio.gather(*[
+                fetch_positions(acc.account_id) for acc in accounts_to_check
+            ])
+            
+            # Check results for conflicts
+            for acc_id, positions in results:
                 for pos in positions:
                     contract_name = pos.get('contractId', '').upper()
                     if clean_ticker in contract_name:
@@ -498,7 +511,7 @@ class RiskEngine:
                         # Check for opposing direction
                         if pos_side != our_side and pos_side in [1, 2]:
                             side_name = "LONG" if pos_side == 1 else "SHORT"
-                            return False, f"Conflicting {side_name} position on {ticker} in account {account.account_id}"
+                            return False, f"Conflicting {side_name} position on {ticker} in account {acc_id}"
             
             return True, "OK"
         except Exception as e:

@@ -133,21 +133,23 @@ async def handle_signal(
     
     strategy_name = alert.strat or "default"
     
-    # Immediate notification with timeframe
-    try:
-        await telegram_service.notify_signal(
-            ticker=alert.ticker,
-            action=alert.side,
-            price=alert.entry,
-            sl=alert.stop,
-            tp=alert.tp,
-            strategy=strategy_name,
-            timeframe=alert.timeframe,
-            accounts_count=0  # Will update after eligibility check
-        )
-    except Exception as e:
-        db.add(Log(level="ERROR", message=f"Telegram Notification Failed: {e}"))
-        db.commit()
+    # Non-blocking notification (fire-and-forget to reduce latency)
+    async def _notify_signal_safe():
+        try:
+            await telegram_service.notify_signal(
+                ticker=alert.ticker,
+                action=alert.side,
+                price=alert.entry,
+                sl=alert.stop,
+                tp=alert.tp,
+                strategy=strategy_name,
+                timeframe=alert.timeframe,
+                accounts_count=0
+            )
+        except Exception as e:
+            db.add(Log(level="ERROR", message=f"Telegram Notification Failed: {e}"))
+    
+    asyncio.create_task(_notify_signal_safe())
     
     # Global checks (apply to ALL accounts)
     allowed, reason = risk_engine.check_market_hours()
@@ -177,8 +179,9 @@ async def handle_signal(
     
     # Cross-account direction check (global across all accounts)
     # First, determine which accounts would execute and check for conflicts
-    eligible_accounts = []
     
+    # Step 1: Fast sync checks (DB reads, no network I/O)
+    accounts_for_position_check = []
     for account in all_accounts:
         account_id = account.get('id')
         
@@ -188,28 +191,37 @@ async def handle_signal(
         # Check account enabled
         allowed, reason = risk_engine.check_account_enabled(account_id)
         if not allowed:
-            db.add(Log(level="DEBUG", message=f"Account {account.get('name')} disabled, skipping"))
             continue
         
         # Check strategy enabled
         allowed, reason = risk_engine.check_strategy_enabled(account_id, strategy_name)
         if not allowed:
-            db.add(Log(level="DEBUG", message=f"Strategy {strategy_name} not enabled on {account.get('name')}, skipping"))
             continue
         
         # Check session allowed
         allowed, reason = risk_engine.check_session_allowed(account_id, strategy_name)
         if not allowed:
-            db.add(Log(level="DEBUG", message=f"Session not allowed for {strategy_name} on {account.get('name')}: {reason}"))
             continue
         
-        # Check for existing position on this ticker
+        accounts_for_position_check.append(account)
+    
+    # Step 2: Parallel async position checks (network I/O - the bottleneck)
+    async def check_position_for_account(acc):
+        account_id = acc.get('id')
         allowed, reason = await risk_engine.check_open_position(account_id, alert.ticker, topstep_client)
-        if not allowed:
-            db.add(Log(level="INFO", message=f"Position exists for {alert.ticker} on {account.get('name')}: {reason}"))
-            continue
+        return (acc, allowed, reason)
+    
+    eligible_accounts = []
+    if accounts_for_position_check:
+        position_results = await asyncio.gather(*[
+            check_position_for_account(acc) for acc in accounts_for_position_check
+        ])
         
-        eligible_accounts.append(account)
+        for acc, allowed, reason in position_results:
+            if allowed:
+                eligible_accounts.append(acc)
+            else:
+                db.add(Log(level="INFO", message=f"Position exists for {alert.ticker} on {acc.get('name')}: {reason}"))
     
     if not eligible_accounts:
         db.add(Log(level="INFO", message=f"No eligible accounts for {alert.ticker} [{strategy_name}]"))
@@ -347,19 +359,21 @@ async def handle_partial(alert: TradingViewAlert, db: Session) -> Dict[str, Any]
     from backend.services.telegram_service import telegram_service
     from backend.services.discord_service import discord_service
     
-    # Notify PARTIAL signal received
-    try:
-        await telegram_service.notify_partial_signal(
-            ticker=alert.ticker,
-            timeframe=alert.timeframe,
-            strategy=strategy_name,
-            price=alert.entry,
-            new_sl=alert.stop,
-            new_tp=alert.tp
-        )
-    except Exception as e:
-        db.add(Log(level="ERROR", message=f"Telegram Partial Notification Failed: {e}"))
-        db.commit()
+    # Notify PARTIAL signal received (non-blocking)
+    async def _notify_partial_safe():
+        try:
+            await telegram_service.notify_partial_signal(
+                ticker=alert.ticker,
+                timeframe=alert.timeframe,
+                strategy=strategy_name,
+                price=alert.entry,
+                new_sl=alert.stop,
+                new_tp=alert.tp
+            )
+        except Exception as e:
+            db.add(Log(level="ERROR", message=f"Telegram Partial Notification Failed: {e}"))
+    
+    asyncio.create_task(_notify_partial_safe())
     
     # Find matching trades in our DB
     matching_trades = db.query(Trade).filter(
@@ -616,17 +630,19 @@ async def handle_close(alert: TradingViewAlert, db: Session) -> Dict[str, Any]:
     strategy_name = alert.strat or "default"
     from backend.services.telegram_service import telegram_service
     
-    # Notify CLOSE signal received
-    try:
-        await telegram_service.notify_close_signal(
-            ticker=alert.ticker,
-            timeframe=alert.timeframe,
-            strategy=strategy_name,
-            price=alert.entry
-        )
-    except Exception as e:
-        db.add(Log(level="ERROR", message=f"Telegram Close Notification Failed: {e}"))
-        db.commit()
+    # Notify CLOSE signal received (non-blocking)
+    async def _notify_close_safe():
+        try:
+            await telegram_service.notify_close_signal(
+                ticker=alert.ticker,
+                timeframe=alert.timeframe,
+                strategy=strategy_name,
+                price=alert.entry
+            )
+        except Exception as e:
+            db.add(Log(level="ERROR", message=f"Telegram Close Notification Failed: {e}"))
+    
+    asyncio.create_task(_notify_close_safe())
     
     # Find matching trades in our DB
     matching_trades = db.query(Trade).filter(
@@ -842,26 +858,38 @@ async def execute_trade(
             
             db.add(Log(level="INFO", message=f"Order Executed: {trade.ticker} x{trade.quantity} on {account_name}"))
             
-            await telegram_service.notify_order_submitted(
+            # Notify Telegram (non-blocking to prioritize SL/TP setup)
+            asyncio.create_task(telegram_service.notify_order_submitted(
                 ticker=trade.ticker,
                 action=trade.action,
                 quantity=trade.quantity,
                 price=trade.entry_price,
                 order_id=trade.topstep_order_id,
                 account_name=account_name
-            )
+            ))
             
-            # Fix SL/TP prices
-            try:
-                await asyncio.sleep(1.0)
-                await topstep_client.update_sl_tp_orders(
-                    account_id=account_id,
-                    ticker=trade.ticker,
-                    sl_price=trade.sl,
-                    tp_price=trade.tp
-                )
-            except Exception as ex:
-                db.add(Log(level="ERROR", message=f"Failed to fix prices: {ex}"))
+            # Fix SL/TP prices with retry logic
+            sl_tp_success = False
+            for attempt in range(3):
+                try:
+                    await asyncio.sleep(0.3 if attempt == 0 else 0.5 * (attempt + 1))
+                    count = await topstep_client.update_sl_tp_orders(
+                        account_id=account_id,
+                        ticker=trade.ticker,
+                        sl_price=trade.sl,
+                        tp_price=trade.tp
+                    )
+                    if count > 0:
+                        db.add(Log(level="INFO", message=f"SL/TP orders corrected ({count} orders) for {trade.ticker}"))
+                        sl_tp_success = True
+                        break
+                    elif attempt < 2:
+                        db.add(Log(level="DEBUG", message=f"SL/TP update attempt {attempt + 1}: No orders found, retrying..."))
+                except Exception as ex:
+                    if attempt < 2:
+                        db.add(Log(level="WARNING", message=f"SL/TP update attempt {attempt + 1} failed: {ex}"))
+                    else:
+                        db.add(Log(level="ERROR", message=f"Failed to fix SL/TP after 3 attempts: {ex}"))
         else:
             trade.status = TradeStatus.REJECTED
             trade.rejection_reason = response.get("reason", "Unknown")
