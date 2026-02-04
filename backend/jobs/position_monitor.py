@@ -6,6 +6,7 @@ Detects if a previously open position is missing (closed) or changed size (parti
 Triggers Telegram Notification for valid closed trades.
 """
 
+import asyncio
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict, Any, List, Set
 
@@ -15,6 +16,7 @@ from backend.database import SessionLocal, Log, Trade, TickerMap
 from backend.services.topstep_client import topstep_client
 from backend.services.telegram_service import telegram_service
 from backend.services.discord_service import discord_service
+from backend.services.logging_service import logger, log_trade_event, log_job_execution
 from backend.jobs.state import (
     get_last_open_positions,
     set_last_orphans_ids,
@@ -117,11 +119,11 @@ async def monitor_closed_positions_job() -> None:
                             current_size = current_pos.get('size', 0)
                             if current_size < prev_size:
                                 is_partial = True
-                                print(f"📉 DETECTED PARTIAL: {prev_cid} on Account {account_name} ({prev_size} -> {current_size})")
+                                log_trade_event("Partial close detected", prev_cid, account_name=account_name, extra={"from": prev_size, "to": current_size})
 
                         if is_full_close or is_partial:
                             if is_full_close:
-                                print(f"💰 DETECTED CLOSURE: {prev_cid} on Account {account_name}")
+                                log_trade_event("Position closed detected", prev_cid, account_name=account_name)
 
                             # 1. Find the Open Trade Record FIRST
                             ticker_variants = [prev_cid, target_symbol]
@@ -256,14 +258,14 @@ async def monitor_closed_positions_job() -> None:
                                         account_name=account_name,
                                         daily_pnl=final_daily_pnl
                                     )
-                                    print(f"✅ Trade #{open_trade.id} marked as CLOSED (PnL: ${pnl_val:.2f})")
+                                    log_trade_event("Trade marked CLOSED", open_trade.ticker, account_name=account_name, extra={"trade_id": open_trade.id, "pnl": f"${pnl_val:.2f}"})
 
                                 elif is_partial:
                                     # Partial Update
                                     open_trade.pnl = pnl_val
                                     open_trade.fees = total_fees
                                     db.commit()
-                                    print(f"🔄 Trade #{open_trade.id} updated for PARTIAL (PnL: ${pnl_val:.2f})")
+                                    log_trade_event("Trade updated PARTIAL", open_trade.ticker, account_name=account_name, extra={"trade_id": open_trade.id, "pnl": f"${pnl_val:.2f}"})
 
                             elif is_full_close:
                                 # Fallback if no trade found
@@ -280,9 +282,9 @@ async def monitor_closed_positions_job() -> None:
                                         is_recently_closed = True
 
                                 if is_recently_closed:
-                                    print(f"ℹ️ Full close detected for {prev_cid} (Handled by Webhook/Manual Close)")
+                                    logger.debug(f"Full close for {prev_cid} already handled by webhook")
                                 else:
-                                    print(f"⚠️ Full close but no OPEN trade record found for {prev_cid}")
+                                    logger.warning(f"Full close but no OPEN trade record found for {prev_cid}")
                                     await telegram_service.send_message(
                                         f"💰 <b>Position Closed: {target_symbol}</b> ({account_name})"
                                     )
@@ -291,7 +293,7 @@ async def monitor_closed_positions_job() -> None:
                 if last_map is not None:
                     for curr_cid, curr_pos in current_map.items():
                         if curr_cid not in last_map:
-                            print(f"🔵 DETECTED OPEN: {curr_cid} on Account {account_name}")
+                            log_trade_event("New position detected", curr_cid, account_name=account_name)
 
                             # Use cached trades
                             if recent_trades_cache is None:
@@ -339,7 +341,7 @@ async def monitor_closed_positions_job() -> None:
                                     if entry_ts:
                                         open_trade.timestamp = entry_ts
                                     db.commit()
-                                    print(f"✅ Trade #{open_trade.id} updated with real fill: {fill_price}")
+                                    log_trade_event("Trade fill updated", open_trade.ticker, account_name=account_name, extra={"trade_id": open_trade.id, "price": fill_price})
                                 elif not open_trade:
                                     # MANUAL TRADE - Create a Trade record
                                     fill_qty = matching_fill.get('size', 1)
@@ -356,7 +358,7 @@ async def monitor_closed_positions_job() -> None:
                                     )
                                     db.add(manual_trade)
                                     db.commit()
-                                    print(f"📝 Created Trade #{manual_trade.id} for MANUAL position: {tv_ticker} x{fill_qty} @ {fill_price}")
+                                    log_trade_event("Manual trade created", tv_ticker, account_name=account_name, extra={"trade_id": manual_trade.id, "qty": fill_qty, "price": fill_price})
                                     open_trade = manual_trade
 
                                 # Prepare notification data
@@ -417,7 +419,7 @@ async def monitor_closed_positions_job() -> None:
 
                     # CHECK: Is this trade physically present in TopStep?
                     if expected_cid not in current_map:
-                        print(f"🕵️ RECONCILIATION: Trade #{trade.id} ({trade.ticker}) is OPEN in DB but missing in API. Verifying closure...")
+                        logger.info(f"[RECONCILE] Trade #{trade.id} ({trade.ticker}) OPEN in DB but missing in API, verifying...")
 
                         # Verify against history
                         if recent_trades_cache is None:
@@ -444,7 +446,7 @@ async def monitor_closed_positions_job() -> None:
                                             exit_fill = t
                                             break
                                     except TypeError as e:
-                                        print(f"⚠️ Date Comp Error: {e} | T: {t_time} ({t_time.tzinfo if t_time else 'None'}) vs Entry: {trade_entry_time} ({trade_entry_time.tzinfo if trade_entry_time else 'None'})")
+                                        logger.warning(f"[RECONCILE] Date comparison error: {e}")
                                         continue
 
                                 if not trade_entry_time:
@@ -464,7 +466,7 @@ async def monitor_closed_positions_job() -> None:
                             trade.fees = fees_val
                             db.commit()
 
-                            print(f"✅ RECONCILIATION: Trade #{trade.id} marked as CLOSED (PnL: ${pnl_val:.2f})")
+                            log_trade_event("Reconciled trade CLOSED", trade.ticker, extra={"trade_id": trade.id, "pnl": f"${pnl_val:.2f}"})
                             db.add(Log(level="INFO", message=f"RECONCILIATION: Trade #{trade.id} marked as CLOSED (PnL: ${pnl_val:.2f})"))
                             db.commit()
 
@@ -478,7 +480,7 @@ async def monitor_closed_positions_job() -> None:
                                 quantity=trade.quantity
                             )
                         else:
-                            print(f"⚠️ RECONCILIATION: Could not confirm closure in history for #{trade.id}. Keeping OPEN.")
+                            logger.warning(f"[RECONCILE] Could not confirm closure for #{trade.id}, keeping OPEN")
                             db.add(Log(level="DEBUG", message=f"RECONCILIATION: Could not confirm closure in history for #{trade.id}"))
                             db.commit()
 
@@ -494,21 +496,35 @@ async def monitor_closed_positions_job() -> None:
                             all_orphans.append(o)
 
             except Exception as e:
-                print(f"Monitor error for account {account_id}: {e}")
+                logger.error(f"Monitor error for account {account_id}: {e}", exc_info=True)
+                # Notify user of monitoring error (fire-and-forget)
+                asyncio.create_task(
+                    telegram_service.notify_position_monitor_error(
+                        account_name=account_name,
+                        error_message=str(e)
+                    )
+                )
                 continue
 
         # Notify orphans (globally)
         current_orphan_ids = set(str(o.get('orderId') or o.get('id')) for o in all_orphans)
 
         if all_orphans and current_orphan_ids != _last_orphans_ids:
-            print(f"⚠️ Orphaned Orders Detected: {current_orphan_ids}")
+            logger.warning(f"Orphaned orders detected: {current_orphan_ids}")
             await telegram_service.notify_orphaned_orders(all_orphans)
 
         set_last_orphans_ids(current_orphan_ids)
 
     except Exception as e:
-        print(f"Monitor Job Failed: {e}")
-        import traceback
-        traceback.print_exc()
+        logger.error(f"Monitor Job Failed: {e}", exc_info=True)
+        # Notify user of critical monitoring failure
+        try:
+            await telegram_service.notify_critical_error(
+                component="Position Monitor",
+                error_message=str(e),
+                context={"status": "Job failed completely"}
+            )
+        except Exception:
+            pass  # Don't fail if notification fails
     finally:
         db.close()

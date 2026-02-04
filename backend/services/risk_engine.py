@@ -18,9 +18,15 @@ import pytz
 from sqlalchemy.orm import Session
 
 from backend.database import (
-    Setting, Trade, TradeStatus, 
-    AccountSettings, AccountStrategyConfig, 
+    Setting, Trade, TradeStatus,
+    AccountSettings, AccountStrategyConfig,
     TradingSession, Strategy
+)
+from backend.services.settings_cache import (
+    get_cached_global_settings,
+    get_cached_account_settings,
+    get_cached_strategy_configs,
+    invalidate_global_settings
 )
 
 # Brussels Timezone for all time calculations
@@ -37,52 +43,61 @@ class RiskEngine:
     # GLOBAL SETTINGS
     # =========================================================================
     
-    def get_global_settings(self) -> Dict[str, Any]:
-        """Load all global settings from database."""
+    def get_global_settings(self, use_cache: bool = True) -> Dict[str, Any]:
+        """
+        Load all global settings from database.
+
+        Args:
+            use_cache: If True, use cached settings (default). Set False to force DB fetch.
+        """
+        if use_cache:
+            return get_cached_global_settings(self.db)
+
+        # Force fresh fetch (bypasses cache)
         settings = {}
-        
+
         # Blocked periods enabled
         bp_enabled = self._get_setting("blocked_periods_enabled", "true")
         settings["blocked_periods_enabled"] = bp_enabled.lower() == "true"
-        
+
         # Blocked periods (JSON)
         bp_json = self._get_setting("blocked_periods", "[]")
         try:
             settings["blocked_periods"] = json.loads(bp_json)
         except Exception:
             settings["blocked_periods"] = []
-        
+
         # Auto flatten
         settings["auto_flatten_enabled"] = self._get_setting("auto_flatten_enabled", "false").lower() == "true"
         settings["auto_flatten_time"] = self._get_setting("auto_flatten_time", "21:55")
-        
+
         # Market hours
         settings["market_open_time"] = self._get_setting("market_open_time", "00:00")
         settings["market_close_time"] = self._get_setting("market_close_time", "22:00")
-        
+
         # Weekend markets open (NEW: separate from trading_days)
         settings["weekend_markets_open"] = self._get_setting("weekend_markets_open", "false").lower() == "true"
-        
+
         # Trading days (default: Mon-Fri) - user preference, not market status
         td_json = self._get_setting("trading_days", '["MON","TUE","WED","THU","FRI"]')
         try:
             settings["trading_days"] = json.loads(td_json)
         except Exception:
             settings["trading_days"] = ["MON", "TUE", "WED", "THU", "FRI"]
-        
+
         # Configurable risk rules
         settings["enforce_single_position_per_asset"] = self._get_setting("enforce_single_position_per_asset", "true").lower() == "true"
         settings["block_cross_account_opposite"] = self._get_setting("block_cross_account_opposite", "true").lower() == "true"
-        
+
         # News Block Settings
         settings["news_block_enabled"] = self._get_setting("news_block_enabled", "false").lower() == "true"
         settings["news_block_before_minutes"] = int(self._get_setting("news_block_before_minutes", "5"))
         settings["news_block_after_minutes"] = int(self._get_setting("news_block_after_minutes", "5"))
-        
+
         # Position Action on Blocked Hours
         settings["blocked_hours_position_action"] = self._get_setting("blocked_hours_position_action", "NOTHING")
         settings["position_action_buffer_minutes"] = int(self._get_setting("position_action_buffer_minutes", "1"))
-        
+
         return settings
     
     def _get_setting(self, key: str, default: str = "") -> str:
@@ -91,13 +106,15 @@ class RiskEngine:
         return setting.value if setting else default
     
     def _set_setting(self, key: str, value: str):
-        """Set a setting value."""
+        """Set a setting value and invalidate cache."""
         setting = self.db.query(Setting).filter(Setting.key == key).first()
         if setting:
             setting.value = value
         else:
             self.db.add(Setting(key=key, value=value))
         self.db.commit()
+        # Invalidate cache after update
+        invalidate_global_settings()
     
     # =========================================================================
     # TRADING SESSIONS

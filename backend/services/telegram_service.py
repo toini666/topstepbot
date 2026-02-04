@@ -48,20 +48,34 @@ class TelegramService:
                 self._log_error(f"Telegram Send Error: {e}")
 
     def _log_error(self, message: str):
-        db = SessionLocal()
+        """Log error to database (non-blocking in thread pool when in async context)."""
+        import asyncio
         try:
-            db.add(Log(level="ERROR", message=message))
-            db.commit()
-        except Exception:
-            pass
-        finally:
-            db.close()
+            loop = asyncio.get_running_loop()
+            # We're in async context - schedule in thread pool
+            from backend.services.async_db import async_add_log
+            asyncio.create_task(async_add_log("ERROR", message))
+        except RuntimeError:
+            # No running event loop - use sync
+            self._sync_log("ERROR", message)
 
     def _log_info(self, message: str):
-        """Log info to system logs (for notification tracking)."""
+        """Log info to system logs (non-blocking in thread pool when in async context)."""
+        import asyncio
+        try:
+            loop = asyncio.get_running_loop()
+            # We're in async context - schedule in thread pool
+            from backend.services.async_db import async_add_log
+            asyncio.create_task(async_add_log("INFO", message))
+        except RuntimeError:
+            # No running event loop - use sync
+            self._sync_log("INFO", message)
+
+    def _sync_log(self, level: str, message: str):
+        """Synchronous logging fallback for non-async contexts."""
         db = SessionLocal()
         try:
-            db.add(Log(level="INFO", message=message))
+            db.add(Log(level=level, message=message))
             db.commit()
         except Exception:
             pass
@@ -428,7 +442,7 @@ class TelegramService:
     async def notify_ngrok_url_changed(self, old_url: Optional[str], new_url: str):
         """Notify user that the Ngrok webhook URL has changed."""
         old_display = old_url if old_url else "(first run)"
-        
+
         msg = (
             f"⚠️ <b>Webhook URL Changed!</b>\n\n"
             f"📤 Old: <code>{old_display}</code>\n"
@@ -436,6 +450,60 @@ class TelegramService:
             f"<b>Action Required:</b>\n"
             f"Update your TradingView alerts to use:\n"
             f"<code>{new_url}/api/webhook</code>"
+        )
+        await self.send_message(msg)
+
+    # =========================================================================
+    # CRITICAL ERROR NOTIFICATIONS
+    # =========================================================================
+
+    async def notify_critical_error(
+        self,
+        component: str,
+        error_message: str,
+        context: dict = None
+    ):
+        """
+        Notify of a critical error that requires attention.
+        Used for errors that could affect trading operations.
+        """
+        msg = (
+            f"🚨 <b>CRITICAL ERROR</b>\n\n"
+            f"<b>Component:</b> {component}\n"
+            f"<b>Error:</b> {error_message}"
+        )
+
+        if context:
+            msg += "\n\n<b>Context:</b>"
+            for key, value in context.items():
+                msg += f"\n• {key}: {value}"
+
+        msg += "\n\n<i>Please check the logs for more details.</i>"
+        await self.send_message(msg)
+        self._log_error(f"CRITICAL: [{component}] {error_message}")
+
+    async def notify_position_monitor_error(
+        self,
+        account_name: str,
+        error_message: str
+    ):
+        """Notify of an error in position monitoring for a specific account."""
+        msg = (
+            f"⚠️ <b>Position Monitor Error</b>\n\n"
+            f"<b>Account:</b> {account_name}\n"
+            f"<b>Error:</b> {error_message}\n\n"
+            f"<i>Position monitoring may be affected for this account.</i>"
+        )
+        await self.send_message(msg)
+        self._log_error(f"Position monitor error for {account_name}: {error_message}")
+
+    async def notify_database_error(self, operation: str, error_message: str):
+        """Notify of a database error."""
+        msg = (
+            f"💾 <b>Database Error</b>\n\n"
+            f"<b>Operation:</b> {operation}\n"
+            f"<b>Error:</b> {error_message}\n\n"
+            f"<i>Some operations may not be persisted.</i>"
         )
         await self.send_message(msg)
 

@@ -528,9 +528,10 @@ async def handle_partial(alert: TradingViewAlert, db: Session) -> Dict[str, Any]
                                 
                                 if t_ts < cutoff_time:
                                     continue
-                            except:
-                                pass
-                        
+                            except ValueError:
+                                # Date parsing failed, skip this fill
+                                continue
+
                         # Check Contract
                         if clean_ticker not in str(t.get('contractId', '')).upper():
                             continue
@@ -733,8 +734,8 @@ async def handle_close(alert: TradingViewAlert, db: Session) -> Dict[str, Any]:
                                 
                                 if start_time_fallback and t_created >= start_time_fallback:
                                     relevant_trades.append(t)
-                            except:
-                                # If date parsing fails, include it (safest bet for now)
+                            except ValueError:
+                                # If date parsing fails, include trade to be safe
                                 relevant_trades.append(t)
                         else:
                             relevant_trades.append(t)

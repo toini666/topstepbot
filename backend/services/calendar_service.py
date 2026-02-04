@@ -300,8 +300,8 @@ class CalendarService:
             db.add(Log(level="ERROR", message=message))
             db.commit()
             db.close()
-        except:
-            pass
+        except Exception as e:
+            print(f"Failed to log error to database: {e}")
 
     def _log_info(self, message: str):
         try:
@@ -309,7 +309,7 @@ class CalendarService:
             db.add(Log(level="INFO", message=message))
             db.commit()
             db.close()
-        except:
-            pass
+        except Exception as e:
+            print(f"Failed to log info to database: {e}")
 
 calendar_service = CalendarService()

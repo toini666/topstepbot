@@ -37,8 +37,9 @@ def _parse_ts(date_str: str) -> Optional[datetime]:
                     micro = (micro + "000000")[:6]
                     clean = f"{left}.{micro}+{tz}"
                     return datetime.fromisoformat(clean).replace(tzinfo=timezone.utc)
-            except:
-                pass
+            except Exception as e:
+                import logging
+                logging.getLogger("topstepbot").warning(f"Failed to parse timestamp '{date_str}': {e}")
         return None
 
 
@@ -423,28 +424,7 @@ async def apply_reconciliation(account_id: int, changes: List[Dict], db: Session
         change_type = change.get("type")
         
         if change_type == "create":
-            # Create new trade
-            try:
-                # Map side
-                # If side from API is integer: 0=Buy, 1=Sell (TopStep standard? or 1=Long, 2=Short)
-                # Let's assume standard API response for side
-                # User's debug log showed: side: 1 (Sell/Short?) for MNQ.
-                # Let's map safely
-                raw_side = change.get("side") # We need to pass this from preview!
-                # Wait, I didn't add side to the proposed_changes dict in preview block
-                # I need to ensure it's passed.
-                
-                # ... check preview logic ...
-                # In preview I added: "size": rt['size'] ... 
-                # I need to add side there.
-                
-                # Let's look at the rt dict again. I added 'side' to build_round_turns.
-                # So rt['side'] is available.
-                
-                # I need to add "side": rt['side'] to the proposed_changes dict in preview.
-                pass
-            except:
-                pass
+            # Create new trade - side mapping handled below
             
             # Ok, let's implement the create logic assuming the dict has the data
             side_str = "BUY"
