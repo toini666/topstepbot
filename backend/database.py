@@ -192,7 +192,7 @@ class Trade(Base):
     session = Column(String, nullable=True)  # NEW: Session at trade time (ASIA, UK, US)
     
     # Timestamps
-    timestamp = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc))
+    timestamp = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc), index=True)
     exit_time = Column(DateTime, nullable=True)
     duration_seconds = Column(Integer, nullable=True)  # NEW: Trade duration for stats
     
@@ -214,7 +214,7 @@ class Log(Base):
     level = Column(String)  # INFO, ERROR, WARNING
     message = Column(Text)
     details = Column(Text, nullable=True)
-    timestamp = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc))
+    timestamp = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc), index=True)
 
 
 # =============================================================================

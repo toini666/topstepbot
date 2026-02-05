@@ -6,6 +6,7 @@ import json
 import logging
 from backend.database import SessionLocal, Log
 from backend.services.telegram_service import telegram_service
+from backend.services.async_db import async_add_log
 
 logger = logging.getLogger("topstepbot")
 
@@ -247,8 +248,33 @@ class TopStepClient:
 
 
     def _log_api_call(self, method: str, url: str, payload: dict = None, response: dict = None, status_code: int = 0):
-        """Logs an API call to the database."""
+        """Logs an API call to the database (redacting secrets)."""
         try:
+            # Skip or redact sensitive endpoints
+            AUTH_ENDPOINTS = ["/api/Auth/loginKey"]
+
+            def _redact(obj):
+                if obj is None:
+                    return None
+                if isinstance(obj, dict):
+                    redacted = {}
+                    for k, v in obj.items():
+                        key = str(k).lower()
+                        if (
+                            key in {"apikey", "api_key", "token", "authorization", "password", "secret"}
+                            or "token" in key
+                            or "apikey" in key
+                            or "authorization" in key
+                            or "secret" in key
+                        ):
+                            redacted[k] = "***REDACTED***"
+                        else:
+                            redacted[k] = _redact(v)
+                    return redacted
+                if isinstance(obj, list):
+                    return [_redact(x) for x in obj]
+                return obj
+
             # Filter out noisy polling endpoints (only log on error)
             # These run every few seconds and clutter the logs
             NOISY_ENDPOINTS = [
@@ -289,34 +315,38 @@ class TopStepClient:
 
             summary = f"{prefix} {method} {url} [{status_code}]"
             
+            if any(endpoint in url for endpoint in AUTH_ENDPOINTS):
+                safe_payload = {"redacted": True}
+                safe_response = {"redacted": True}
+            else:
+                safe_payload = _redact(payload)
+                safe_response = _redact(response)
+
             details = {
                 "method": method,
                 "url": url,
-                "payload": payload,
-                "response": response,
+                "payload": safe_payload,
+                "response": safe_response,
                 "status_code": status_code
             }
-            
-            db = SessionLocal()
+
+            details_json = json.dumps(details, default=str)
             try:
-                log = Log(level=level, message=summary, details=json.dumps(details, default=str))
-                db.add(log)
-                db.commit()
-            except Exception as e:
-                print(f"Failed to log API call: {e}")
-            finally:
-                db.close()
+                loop = asyncio.get_running_loop()
+                loop.create_task(async_add_log(level, summary, details_json))
+            except RuntimeError:
+                db = SessionLocal()
+                try:
+                    log = Log(level=level, message=summary, details=details_json)
+                    db.add(log)
+                    db.commit()
+                except Exception as e:
+                    print(f"Failed to log API call: {e}")
+                finally:
+                    db.close()
         except Exception as e:
             print(f"Logging Wrapper Error: {e}")
 
-    async def login(self):
-        """Authenticates using UserName + API Key to get a Bearer Token."""
-        url = f"{self.base_url}/api/Auth/loginKey"
-        payload = {
-            "userName": self.username,
-            "apiKey": self.api_key
-        }
-        
     async def login(self):
         """Authenticates using UserName + API Key to get a Bearer Token."""
         url = f"{self.base_url}/api/Auth/loginKey"
@@ -403,10 +433,6 @@ class TopStepClient:
         headers = {"Authorization": f"Bearer {self.token}"}
         payload = {"onlyActiveAccounts": True}
 
-        url = f"{self.base_url}/api/Account/search"
-        headers = {"Authorization": f"Bearer {self.token}"}
-        payload = {"onlyActiveAccounts": True}
-
         data, status_code, success = await self._make_request("POST", url, payload, headers)
 
         if success and data.get("success") and data.get("accounts"):
@@ -428,10 +454,6 @@ class TopStepClient:
         if not self.token:
             if not await self.login():
                 return []
-
-        url = f"{self.base_url}/api/Position/searchOpen"
-        headers = {"Authorization": f"Bearer {self.token}"}
-        payload = {"accountId": account_id}
 
         url = f"{self.base_url}/api/Position/searchOpen"
         headers = {"Authorization": f"Bearer {self.token}"}
@@ -482,35 +504,18 @@ class TopStepClient:
             "startTimestamp": start_timestamp
         }
 
-        async with httpx.AsyncClient() as client:
-            try:
-                response = await client.post(url, json=payload, headers=headers, timeout=10)
+        data, status_code, success = await self._make_request("POST", url, payload, headers)
 
-                if response.status_code != 200:
-                    self._log_api_call("POST", url, payload, None, response.status_code)
-                    if response.status_code == 401:
-                        self.token = None
-                    return []
+        if success and data.get("success") and data.get("orders"):
+            orders = data["orders"]
+            if days == 1:
+                self._set_cache("orders", orders, account_id)
+            return orders
 
-                try:
-                    data = response.json()
-                except json.JSONDecodeError:
-                    self._log_api_call("POST", url, payload, {"raw": response.text}, response.status_code)
-                    return []
+        if success and days == 1:
+            self._set_cache("orders", [], account_id)
 
-                if data.get("success") and data.get("orders"):
-                    self._log_api_call("POST", url, payload, data, response.status_code)
-                    orders = data["orders"]
-                    if days == 1:
-                        self._set_cache("orders", orders, account_id)
-                    return orders
-                self._log_api_call("POST", url, payload, data, response.status_code)
-                if days == 1:
-                    self._set_cache("orders", [], account_id)
-                return []
-            except Exception as e:
-                print(f"Get Orders Error: {e}")
-                return []
+        return []
 
     async def get_historical_trades(self, account_id: int, days: int = 1, use_cache: bool = True):
         """Retrieves historical (half-turn) trades."""
@@ -568,13 +573,6 @@ class TopStepClient:
             "contractId": contract_id
         }
 
-        url = f"{self.base_url}/api/Position/closeContract"
-        headers = {"Authorization": f"Bearer {self.token}"}
-        payload = {
-            "accountId": account_id,
-            "contractId": contract_id
-        }
-
         data, status_code, success = await self._make_request("POST", url, payload, headers)
         
         if success and data.get("success"):
@@ -599,14 +597,6 @@ class TopStepClient:
             "size": size
         }
 
-        url = f"{self.base_url}/api/Position/partialCloseContract"
-        headers = {"Authorization": f"Bearer {self.token}"}
-        payload = {
-            "accountId": account_id,
-            "contractId": contract_id,
-            "size": size
-        }
-
         data, status_code, success = await self._make_request("POST", url, payload, headers)
         
         if success:
@@ -623,13 +613,6 @@ class TopStepClient:
             if not await self.login():
                  return False
         
-        url = f"{self.base_url}/api/Order/cancel"
-        headers = {"Authorization": f"Bearer {self.token}"}
-        payload = {
-            "accountId": account_id,
-            "orderId": order_id
-        }
-
         url = f"{self.base_url}/api/Order/cancel"
         headers = {"Authorization": f"Bearer {self.token}"}
         payload = {

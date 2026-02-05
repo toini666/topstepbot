@@ -11,9 +11,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Added
 - **Validation**: Added input validation for SL/TP prices in `webhook.py` (checks relative to Entry price and Side).
 - **Smart Polling**: Implemented adaptive polling loop in `webhook.py` (checking every 0.5s instead of fixed sleep) to speed up trade settlement and confirmation.
+- **Frontend Cadence**: Optimized `useTopStep.ts` with adaptive polling intervals (5s active/15s idle for positions, 30s orders, 60s trades) to reduce API load.
+
+### Security
+- **Log Redaction**: Implemented automatic redaction of sensitive keys (apikey, token, password) in API logs to prevent credential leakage.
 
 ### Changed
 - **TopStepClient**: Refactored to use a **Persistent `httpx.AsyncClient`** for all requests, significantly reducing connection overhead and latency.
+- **Async Logging**: Converted API call logging to asynchronous tasks `async_add_log` to prevent I/O blocking during critical execution paths.
+- **Maintenance**: Switched database backup and log cleanup jobs to async implementations.
 - **Position Monitoring**: 
     - Split `monitor_closed_positions_job` into **Async (API Fetch)** and **Sync (DB Processing)** phases.
     - Wrapped synchronous DB operations in `run_in_executor` to prevent blocking the main asyncio event loop.

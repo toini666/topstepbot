@@ -280,7 +280,8 @@ users = await get_users()
 Centralized structured logger that handles both console output and database persistence.
 
 - **Console**: Color-coded output for standard IO.
-- **Database**: Asynchronous persistence to `Log` table for dashboard viewing.
+- **Database**: Asynchronous persistence to `Log` table for dashboard viewing via `async_add_log`.
+- **Security**: Automatic redaction of sensitive fields (api_key, token) in API logs.
 - **Context**: Supports extra metadata (e.g., trade_id, account_name) for detailed auditing.
 
 ### 4. Discord Service (`discord_service.py`)

@@ -295,6 +295,9 @@ async def handle_signal(
     if not contract_id:
         await telegram_service.notify_error(f"Contract Not Found for {alert.ticker}")
         return {"status": "error", "reason": "Contract Not Found"}
+
+    # Map direction once (applies to all accounts)
+    action = "BUY" if alert.side.upper() in ["BUY", "LONG"] else "SELL"
     
     # Execute on all eligible accounts
     executed_accounts = []
@@ -366,9 +369,6 @@ async def handle_signal(
                 f"• Reason: {limit_reason}"
             )
             continue
-        
-        # Map direction
-        action = "BUY" if alert.side.upper() in ["BUY", "LONG"] else "SELL"
         
         # Calculate bracket ticks
         sl_dist_ticks = int(round(abs(alert.entry - alert.stop) / tick_size))

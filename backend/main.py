@@ -16,7 +16,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from backend.services.topstep_client import topstep_client
 from backend.services.telegram_service import telegram_service
 from backend.services.telegram_bot import telegram_bot
-from backend.services.maintenance_service import backup_database, clean_logs, check_and_run_startup_backup
+from backend.services.maintenance_service import backup_database_async, clean_logs_async, check_and_run_startup_backup
 from backend.services.persistence_service import save_state, load_state, save_ngrok_url, get_last_ngrok_url
 from backend.services.calendar_service import calendar_service
 from backend.services.contract_validator import contract_validator
@@ -148,8 +148,8 @@ async def lifespan(app: FastAPI):
     scheduler.add_job(price_refresh_job, 'interval', seconds=10, id='price_refresh', next_run_time=price_refresh_start, max_instances=1, coalesce=True)
     
     # Maintenance Jobs
-    scheduler.add_job(backup_database, 'cron', hour=3, minute=0, max_instances=1, coalesce=True)
-    scheduler.add_job(clean_logs, 'cron', hour=3, minute=15, kwargs={'days': 7}, max_instances=1, coalesce=True)
+    scheduler.add_job(backup_database_async, 'cron', hour=3, minute=0, max_instances=1, coalesce=True)
+    scheduler.add_job(clean_logs_async, 'cron', hour=3, minute=15, kwargs={'days': 7}, max_instances=1, coalesce=True)
     
     # API Health Check (every 60 seconds)
     scheduler.add_job(api_health_check_job, 'interval', seconds=60, max_instances=1, coalesce=True)

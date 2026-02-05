@@ -11,6 +11,7 @@ from typing import Set
 from backend.services.topstep_client import topstep_client
 from backend.services.price_cache import price_cache
 from backend.services.market_hub_client import market_hub_client
+from backend.jobs.state import get_last_open_positions_safely
 
 
 async def price_refresh_job() -> None:
@@ -26,19 +27,19 @@ async def price_refresh_job() -> None:
     - Disconnect when all positions closed
     """
     try:
-        # Get all open positions across all accounts
+        # Get accounts (cached) to determine sim/live mode
         accounts = await topstep_client.get_accounts()
         active_contracts: Set[str] = set()
         is_simulated = True  # Default to simulated
-        
+
         for account in accounts:
-            # Check if any account is live (not simulated)
             if not account.get("simulated", True):
                 is_simulated = False
-            
-            positions = await topstep_client.get_open_positions(account.get("id"))
-            for pos in positions:
-                contract_id = pos.get("contractId")
+
+        # Use last known positions state to avoid extra API calls
+        last_positions = await get_last_open_positions_safely()
+        for account_positions in last_positions.values():
+            for contract_id in account_positions.keys():
                 if contract_id:
                     active_contracts.add(contract_id)
         

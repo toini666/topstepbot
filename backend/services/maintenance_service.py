@@ -1,12 +1,35 @@
-import shutil
 import os
 import datetime
+import sqlite3
 from backend.database import DATABASE_URL, SessionLocal, Log
-from sqlalchemy import text
 
 # Extract path from sqlite:///./topstepbot.db
 DB_FILE_PATH = DATABASE_URL.replace("sqlite:///", "")
 BACKUP_DIR = "backups"
+
+def _vacuum_into_backup(src_path: str, dest_path: str) -> None:
+    """
+    Create a consistent SQLite backup using VACUUM INTO.
+    Requires SQLite 3.27+.
+    """
+    abs_src = os.path.abspath(src_path)
+    abs_dest = os.path.abspath(dest_path)
+    with sqlite3.connect(abs_src, timeout=30, isolation_level=None) as conn:
+        conn.execute("PRAGMA busy_timeout=5000")
+        # VACUUM INTO does not support parameters; escape single quotes
+        escaped_dest = abs_dest.replace("'", "''")
+        conn.execute(f"VACUUM INTO '{escaped_dest}'")
+
+
+def _backup_via_api(src_path: str, dest_path: str) -> None:
+    """
+    Fallback backup using sqlite3 backup API.
+    """
+    abs_src = os.path.abspath(src_path)
+    abs_dest = os.path.abspath(dest_path)
+    with sqlite3.connect(abs_src, timeout=30, isolation_level=None) as src, sqlite3.connect(abs_dest, timeout=30, isolation_level=None) as dest:
+        src.backup(dest)
+
 
 def backup_database():
     """
@@ -24,11 +47,18 @@ def backup_database():
         backup_filename = f"topstepbot_backup_{timestamp}.db"
         backup_path = os.path.join(BACKUP_DIR, backup_filename)
 
-        # Copy file
         if os.path.exists(DB_FILE_PATH):
-            shutil.copy2(DB_FILE_PATH, backup_path)
-            print(f"✅ Database backed up to {backup_path}")
-            _log_maintenance(f"Database backed up: {backup_filename}")
+            # Prefer VACUUM INTO for a consistent snapshot
+            try:
+                _vacuum_into_backup(DB_FILE_PATH, backup_path)
+                print(f"✅ Database backed up to {backup_path} (VACUUM INTO)")
+                _log_maintenance(f"Database backed up (VACUUM INTO): {backup_filename}")
+            except sqlite3.OperationalError as e:
+                # Fallback for older SQLite versions
+                print(f"⚠️ VACUUM INTO failed ({e}). Falling back to backup API...")
+                _backup_via_api(DB_FILE_PATH, backup_path)
+                print(f"✅ Database backed up to {backup_path} (backup API)")
+                _log_maintenance(f"Database backed up (backup API): {backup_filename}")
         else:
             print(f"❌ Database file not found at {DB_FILE_PATH}")
             _log_maintenance("Backup failed: source DB not found", level="ERROR")
@@ -131,3 +161,15 @@ def check_and_run_startup_backup():
             
     except Exception as e:
         print(f"❌ Startup backup check failed: {e}")
+
+
+async def backup_database_async():
+    """Run backup in a thread to avoid blocking the event loop."""
+    import asyncio
+    await asyncio.to_thread(backup_database)
+
+
+async def clean_logs_async(days=7):
+    """Run log cleanup in a thread to avoid blocking the event loop."""
+    import asyncio
+    await asyncio.to_thread(clean_logs, days)

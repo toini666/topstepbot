@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import axios from 'axios';
 import { toast } from 'sonner';
 import type {
@@ -26,6 +26,14 @@ export const useTopStep = () => {
     const [positionsByAccount, setPositionsByAccount] = useState<Record<number, Position[]>>({});
     const [ordersByAccount, setOrdersByAccount] = useState<Record<number, Order[]>>({});
     const [tradesByAccount, setTradesByAccount] = useState<Record<number, HistoricalTrade[]>>({});
+
+    // Polling cadence refs (ms)
+    const lastPositionsFetchRef = useRef(0);
+    const lastOrdersFetchRef = useRef(0);
+    const lastTradesFetchRef = useRef(0);
+
+    // Keep latest positions in a ref to avoid extra deps
+    const positionsByAccountRef = useRef<Record<number, Position[]>>({});
 
     // Settings
     const [globalConfig, setGlobalConfig] = useState<GlobalConfig>({
@@ -62,6 +70,11 @@ export const useTopStep = () => {
         min_timestamp: new Date(new Date().setHours(0, 0, 0, 0)).toISOString(),
         limit: 1000
     });
+
+    // Keep ref in sync for interval decisions
+    useEffect(() => {
+        positionsByAccountRef.current = positionsByAccount;
+    }, [positionsByAccount]);
 
     // ==========================================================================
     // DATA FETCHING
@@ -110,6 +123,8 @@ export const useTopStep = () => {
 
     const fetchPollingData = useCallback(async () => {
         try {
+            const now = Date.now();
+
             // 1. Fetch Dynamic Data
             const [tradesRes, logsRes, statsRes, statusRes, marketRes] = await Promise.all([
                 axios.get(`${API_BASE}/dashboard/trades`),
@@ -166,63 +181,110 @@ export const useTopStep = () => {
                     // Wait, we need 'accounts' in scope.
 
                     if (accounts.length > 0) {
+                        const hasOpenPositions = Object.values(positionsByAccountRef.current).some(
+                            (positions) => positions && positions.length > 0
+                        );
+
+                        const positionsIntervalMs = hasOpenPositions ? 5000 : 15000;
+                        const ordersIntervalMs = 30000;
+                        const tradesIntervalMs = 60000;
+
+                        const shouldFetchPositions = now - lastPositionsFetchRef.current >= positionsIntervalMs;
+                        const shouldFetchOrders = now - lastOrdersFetchRef.current >= ordersIntervalMs;
+                        const shouldFetchTrades = now - lastTradesFetchRef.current >= tradesIntervalMs;
+
+                        if (shouldFetchPositions) lastPositionsFetchRef.current = now;
+                        if (shouldFetchOrders) lastOrdersFetchRef.current = now;
+                        if (shouldFetchTrades) lastTradesFetchRef.current = now;
+
                         const days = historyFilter === 'today' ? 1 : 7;
-                        const newPositions: Record<number, Position[]> = {};
-                        const newOrders: Record<number, Order[]> = {};
-                        const newTrades: Record<number, HistoricalTrade[]> = {};
+                        const newPositions: Record<number, Position[]> | null = shouldFetchPositions ? {} : null;
+                        const newOrders: Record<number, Order[]> | null = shouldFetchOrders ? {} : null;
+                        const newTrades: Record<number, HistoricalTrade[]> | null = shouldFetchTrades ? {} : null;
+
+                        const parseUtcTimestamp = (ts: string | null | undefined): string | null => {
+                            if (!ts) return null;
+                            const tsStr = String(ts);
+                            if (!tsStr.endsWith('Z') && !tsStr.includes('+')) {
+                                return tsStr.replace(' ', 'T') + 'Z';
+                            }
+                            return tsStr.replace(' ', 'T');
+                        };
 
                         // Parallel Fetch for ALL accounts
                         await Promise.all(accounts.map(async (account) => {
                             const aid = account.id;
                             try {
-                                const [posRes, ordRes, histRes] = await Promise.all([
-                                    axios.get(`${API_BASE}/dashboard/positions/${aid}`),
-                                    axios.get(`${API_BASE}/dashboard/orders/${aid}`, { params: { days } }),
-                                    axios.get(`${API_BASE}/dashboard/trades`, { params: { account_id: aid, days, status: 'CLOSED' } })
-                                ]);
+                                const tasks: Promise<void>[] = [];
 
-                                newPositions[aid] = posRes.data;
-                                newOrders[aid] = ordRes.data;
+                                if (shouldFetchPositions) {
+                                    tasks.push(
+                                        axios.get(`${API_BASE}/dashboard/positions/${aid}`).then(res => {
+                                            if (newPositions) newPositions[aid] = res.data;
+                                        }).catch(() => {
+                                            if (newPositions) newPositions[aid] = [];
+                                        })
+                                    );
+                                }
 
-                                // Helper for UTC parsing
-                                const parseUtcTimestamp = (ts: string | null | undefined): string | null => {
-                                    if (!ts) return null;
-                                    const tsStr = String(ts);
-                                    if (!tsStr.endsWith('Z') && !tsStr.includes('+')) {
-                                        return tsStr.replace(' ', 'T') + 'Z';
-                                    }
-                                    return tsStr.replace(' ', 'T');
-                                };
+                                if (shouldFetchOrders) {
+                                    tasks.push(
+                                        axios.get(`${API_BASE}/dashboard/orders/${aid}`, { params: { days } }).then(res => {
+                                            if (newOrders) newOrders[aid] = res.data;
+                                        }).catch(() => {
+                                            if (newOrders) newOrders[aid] = [];
+                                        })
+                                    );
+                                }
 
-                                newTrades[aid] = histRes.data.map((t: Trade) => ({
-                                    id: t.id,
-                                    accountId: t.account_id || aid,
-                                    contractId: t.ticker,
-                                    creationTimestamp: parseUtcTimestamp(t.timestamp),
-                                    price: t.entry_price,
-                                    exitPrice: t.exit_price,
-                                    exitTime: parseUtcTimestamp(t.exit_time),
-                                    profitAndLoss: t.pnl,
-                                    fees: t.fees,
-                                    side: t.action === 'BUY' ? 0 : 1,
-                                    size: t.quantity,
-                                    strategy: t.strategy,
-                                    timeframe: t.timeframe,
-                                    entryPrice: t.entry_price,
-                                    isAggregated: true
-                                }));
+                                if (shouldFetchTrades) {
+                                    tasks.push(
+                                        axios.get(`${API_BASE}/dashboard/trades`, { params: { account_id: aid, days, status: 'CLOSED' } }).then(res => {
+                                            if (!newTrades) return;
+                                            newTrades[aid] = res.data.map((t: Trade) => ({
+                                                id: t.id,
+                                                accountId: t.account_id || aid,
+                                                contractId: t.ticker,
+                                                creationTimestamp: parseUtcTimestamp(t.timestamp),
+                                                price: t.entry_price,
+                                                exitPrice: t.exit_price,
+                                                exitTime: parseUtcTimestamp(t.exit_time),
+                                                profitAndLoss: t.pnl,
+                                                fees: t.fees,
+                                                side: t.action === 'BUY' ? 0 : 1,
+                                                size: t.quantity,
+                                                strategy: t.strategy,
+                                                timeframe: t.timeframe,
+                                                entryPrice: t.entry_price,
+                                                isAggregated: true
+                                            }));
+                                        }).catch(() => {
+                                            if (newTrades) newTrades[aid] = [];
+                                        })
+                                    );
+                                }
+
+                                if (tasks.length > 0) {
+                                    await Promise.all(tasks);
+                                }
                             } catch (e) {
                                 // console.warn(`Error fetching data for account ${aid}:`, e);
-                                newPositions[aid] = [];
-                                newOrders[aid] = [];
-                                newTrades[aid] = [];
+                                if (newPositions) newPositions[aid] = [];
+                                if (newOrders) newOrders[aid] = [];
+                                if (newTrades) newTrades[aid] = [];
                             }
                         }));
 
                         // Smart update for big objects
-                        setPositionsByAccount(prev => JSON.stringify(prev) !== JSON.stringify(newPositions) ? newPositions : prev);
-                        setOrdersByAccount(prev => JSON.stringify(prev) !== JSON.stringify(newOrders) ? newOrders : prev);
-                        setTradesByAccount(prev => JSON.stringify(prev) !== JSON.stringify(newTrades) ? newTrades : prev);
+                        if (newPositions) {
+                            setPositionsByAccount(prev => JSON.stringify(prev) !== JSON.stringify(newPositions) ? newPositions : prev);
+                        }
+                        if (newOrders) {
+                            setOrdersByAccount(prev => JSON.stringify(prev) !== JSON.stringify(newOrders) ? newOrders : prev);
+                        }
+                        if (newTrades) {
+                            setTradesByAccount(prev => JSON.stringify(prev) !== JSON.stringify(newTrades) ? newTrades : prev);
+                        }
                     } else {
                         // Maybe accounts not loaded yet?
                         // If we just started, static fetch might be running.
