@@ -596,6 +596,11 @@ class TopStepClient:
                 try:
                     data = response.json()
                     self._log_api_call("POST", url, payload, data, response.status_code)
+                    
+                    # Invalidate Cache
+                    self.clear_cache("orders", account_id)
+                    self.clear_cache("positions", account_id)
+                    
                     return data.get("success", False)
                 except json.JSONDecodeError:
                     self._log_api_call("POST", url, payload, {"raw": response.text}, response.status_code)
@@ -630,6 +635,11 @@ class TopStepClient:
                 try:
                     data = response.json()
                     self._log_api_call("POST", url, payload, data, response.status_code)
+                    
+                    # Invalidate Cache
+                    self.clear_cache("orders", account_id)
+                    self.clear_cache("positions", account_id)
+                    
                     return data
                 except json.JSONDecodeError:
                     self._log_api_call("POST", url, payload, {"raw": response.text}, response.status_code)
@@ -663,6 +673,10 @@ class TopStepClient:
                 try:
                     data = response.json()
                     self._log_api_call("POST", url, payload, data, response.status_code)
+                    
+                    # Invalidate Cache
+                    self.clear_cache("orders", account_id)
+                    
                     return data.get("success", False)
                 except json.JSONDecodeError:
                     self._log_api_call("POST", url, payload, {"raw": response.text}, response.status_code)
@@ -871,6 +885,10 @@ class TopStepClient:
                     self._log_api_call("POST", url, payload, data, response.status_code)
                     
                     if data.get("success"):
+                        # Invalidate Cache
+                        self.clear_cache("orders", target_account_id)
+                        self.clear_cache("positions", target_account_id)
+                        
                         return {
                             "status": "filled", 
                             "order_id": str(data["orderId"]), 
@@ -923,6 +941,9 @@ class TopStepClient:
                     self._log_api_call("POST", url, payload, data, response.status_code)
                     
                     if data.get("success"):
+                        # Invalidate Cache
+                        self.clear_cache("orders", target_account_id)
+                        
                         return True
                     else:
                         await telegram_service.notify_api_error("POST", url, data, response.status_code)
@@ -939,8 +960,8 @@ class TopStepClient:
         Finds open SL/TP orders for a ticker and updates them to the target prices.
         Assumes only one position active per ticker (enforced by risk engine).
         """
-        # 1. Get Open Orders
-        orders = await self.get_orders(account_id, days=1) 
+        # 1. Get Open Orders (Bypass Cache to catch recent executions)
+        orders = await self.get_orders(account_id, days=1, use_cache=False) 
         
         print(f"DEBUG: Found {len(orders)} orders for account {account_id}")
         
@@ -1013,7 +1034,7 @@ class TopStepClient:
         Returns:
             Number of orders that were modified
         """
-        orders = await self.get_orders(account_id, days=1)
+        orders = await self.get_orders(account_id, days=1, use_cache=False)
         clean_ticker = ticker.replace("1!", "").replace("2!", "").upper()
         
         count = 0

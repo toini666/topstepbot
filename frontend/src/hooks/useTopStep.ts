@@ -83,13 +83,28 @@ export const useTopStep = () => {
                 axios.get(`${API_BASE}/strategies`)
             ]);
 
-            setTrades(tradesRes.data);
-            setLogs(logsRes.data);
-            setStats(statsRes.data);
-            if (configRes.data) setGlobalConfig(configRes.data);
-            if (marketRes.data) setMarketStatus(marketRes.data);
-            if (sessionsRes.data) setTradingSessions(sessionsRes.data);
-            if (strategiesRes.data) setStrategies(strategiesRes.data);
+            // Helper for smart updates
+            const smartSet = <T>(current: T, next: T, setter: (val: T) => void, comparator?: (a: T, b: T) => boolean) => {
+                if (comparator) {
+                    if (!comparator(current, next)) setter(next);
+                } else {
+                    if (JSON.stringify(current) !== JSON.stringify(next)) setter(next);
+                }
+            };
+
+            smartSet(trades, tradesRes.data, setTrades);
+
+            // For logs, check length + ID of newest log to avoid full stringify if possible
+            if (logs.length !== logsRes.data.length || (logsRes.data.length > 0 && logs[0]?.id !== logsRes.data[0].id)) {
+                setLogs(logsRes.data);
+            }
+
+            smartSet(stats, statsRes.data, setStats);
+
+            if (configRes.data) smartSet(globalConfig, configRes.data, setGlobalConfig);
+            if (marketRes.data) smartSet(marketStatus, marketRes.data, setMarketStatus);
+            if (sessionsRes.data) smartSet(tradingSessions, sessionsRes.data, setTradingSessions);
+            if (strategiesRes.data) smartSet(strategies, strategiesRes.data, setStrategies);
 
             // 2. Check Connection Status
             const currentlyConnected = statusRes.data.connected;
@@ -101,7 +116,7 @@ export const useTopStep = () => {
             if (currentlyConnected) {
                 try {
                     const accountsRes = await axios.get(`${API_BASE}/dashboard/accounts`);
-                    setAccounts(accountsRes.data);
+                    smartSet(accounts, accountsRes.data, setAccounts);
 
                     // Fetch account settings
                     const settingsRes = await axios.get(`${API_BASE}/settings/accounts`);
@@ -109,7 +124,7 @@ export const useTopStep = () => {
                     for (const s of settingsRes.data) {
                         settingsMap[s.account_id] = s;
                     }
-                    setAccountSettings(settingsMap);
+                    smartSet(accountSettings, settingsMap, setAccountSettings);
 
                     // Auto-select first account if none selected
                     if (!selectedAccountId && accountsRes.data.length > 0) {
@@ -171,9 +186,9 @@ export const useTopStep = () => {
                         }
                     }
 
-                    setPositionsByAccount(newPositions);
-                    setOrdersByAccount(newOrders);
-                    setTradesByAccount(newTrades);
+                    smartSet(positionsByAccount, newPositions, setPositionsByAccount);
+                    smartSet(ordersByAccount, newOrders, setOrdersByAccount);
+                    smartSet(tradesByAccount, newTrades, setTradesByAccount);
 
                 } catch (e) {
                     console.warn("Error fetching accounts:", e);
@@ -190,7 +205,11 @@ export const useTopStep = () => {
         } finally {
             setLoading(false);
         }
-    }, [isConnected, selectedAccountId, logParams, historyFilter]);
+    }, [isConnected, selectedAccountId, logParams, historyFilter,
+        // Add dependencies for smart update checks mechanism (references)
+        trades, logs, stats, globalConfig, marketStatus, tradingSessions, strategies,
+        accounts, accountSettings, positionsByAccount, ordersByAccount, tradesByAccount
+    ]);
 
     // ==========================================================================
     // ACTIONS
@@ -345,10 +364,29 @@ export const useTopStep = () => {
     // EFFECTS
     // ==========================================================================
 
+    // ==========================================================================
+    // EFFECTS
+    // ==========================================================================
+
     useEffect(() => {
-        fetchData();
-        const interval = setInterval(fetchData, 5000);
-        return () => clearInterval(interval);
+        let isMounted = true;
+        let timeoutId: ReturnType<typeof setTimeout>;
+
+        const poll = async () => {
+            if (!isMounted) return;
+            await fetchData();
+            if (isMounted) {
+                timeoutId = setTimeout(poll, 5000);
+            }
+        };
+
+        // Initial call
+        poll();
+
+        return () => {
+            isMounted = false;
+            clearTimeout(timeoutId);
+        };
     }, [fetchData]);
 
     // ==========================================================================

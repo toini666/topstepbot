@@ -4,7 +4,7 @@
  * Displays system logs with expandable details.
  */
 
-import { useState } from 'react';
+import { useState, memo } from 'react';
 import { Terminal, ChevronDown, ChevronRight, Copy } from 'lucide-react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
@@ -15,7 +15,7 @@ interface LogsPanelProps {
     loadMoreLogs: () => void;
 }
 
-export function LogsPanel({ logs, loadMoreLogs }: LogsPanelProps) {
+export const LogsPanel = memo(function LogsPanel({ logs, loadMoreLogs }: LogsPanelProps) {
     const [expandedLogs, setExpandedLogs] = useState<Set<number>>(new Set());
 
     const toggleLog = (id: number) => {
@@ -131,4 +131,4 @@ export function LogsPanel({ logs, loadMoreLogs }: LogsPanelProps) {
             </section>
         </div>
     );
-}
+});
