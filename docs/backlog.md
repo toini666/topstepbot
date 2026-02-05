@@ -40,6 +40,10 @@ This document outlines the roadmap to evolve the current functional prototype in
 - [x] **Slippage Analytics**: Added signal price tracking and slippage display in Telegram notifications.
 - [x] **Frontend Polling**: Fixed race condition in data fetching loop causing API rate limit spam.
 - [x] **Circuit Breaker**: Enforced strict cooldown logic to prevent concurrent successes from resetting the timer.
+- [x] **Shared DB Session**: Fixed `OperationalError` by checking out a fresh DB session for background trade execution.
+- [x] **Race Condition**: Added `asyncio.Lock` to global state management to prevent corrupted position data.
+- [x] **Circuit Breaker Refactor**: Refactored `TopStepClient` to force all API calls through the circuit breaker/rate limiter.
+- [x] **Signal Deduplication**: Implemented hash-based check to prevent processing the same alert twice.
 
 
 

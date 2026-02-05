@@ -37,21 +37,33 @@ _handled_position_action_blocks: Set[str] = set()
 # Position State Accessors
 # ============================================================================
 
+import asyncio
+_state_lock = asyncio.Lock()
+
+# Global State for Position Monitoring (per-account)
+# Key: account_id, Value: { contractId: position_data }
+_last_open_positions: Dict[int, Dict[str, Any]] = {}
+
+async def update_account_positions(account_id: int, positions_map: Dict[str, Any]) -> None:
+    """Update positions for a specific account (Thread-Safe)."""
+    async with _state_lock:
+        _last_open_positions[account_id] = positions_map.copy()
+
+async def get_last_open_positions_safely() -> Dict[int, Dict[str, Any]]:
+    """Get a safe copy of the open positions state."""
+    async with _state_lock:
+        # Deep copy might be too slow, shallow copy of dict is usually enough if values aren't mutated in place
+        # But here we return the whole dict of dicts.
+        import copy
+        return copy.deepcopy(_last_open_positions)
+        
 def get_last_open_positions() -> Dict[int, Dict[str, Any]]:
-    """Get the current state of open positions."""
+    """
+    Get the current state of open positions (Direct access).
+    WARNING: Use get_last_open_positions_safely() for async contexts where possible.
+    This is kept for synchronous compatibility but is not thread-safe.
+    """
     return _last_open_positions
-
-
-def set_last_open_positions(positions: Dict[int, Dict[str, Any]]) -> None:
-    """Set the entire positions state (used for loading from persistence)."""
-    global _last_open_positions
-    _last_open_positions = positions
-
-
-def update_account_positions(account_id: int, positions_map: Dict[str, Any]) -> None:
-    """Update positions for a specific account."""
-    _last_open_positions[account_id] = positions_map
-
 
 def get_last_orphans_ids() -> Set[str]:
     """Get the set of known orphan order IDs."""

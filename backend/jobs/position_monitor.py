@@ -392,7 +392,7 @@ async def monitor_closed_positions_job() -> None:
                                 )
 
                 # Update state for this account
-                update_account_positions(account_id, current_map)
+                await update_account_positions(account_id, current_map)
 
                 # =================================================================
                 # DB RECONCILIATION (Detect Closures missed during downtime)

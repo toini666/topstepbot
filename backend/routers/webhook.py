@@ -18,11 +18,14 @@ import asyncio
 
 from backend.database import (
     get_db, Trade, TradeStatus, Log, TickerMap, 
-    AccountSettings, Strategy
+    AccountSettings, Strategy, SessionLocal
 )
 from backend.schemas import TradingViewAlert
 from backend.services.risk_engine import RiskEngine
 from backend.services.topstep_client import topstep_client
+import hashlib
+from collections import OrderedDict
+import time
 
 router = APIRouter()
 
@@ -37,6 +40,35 @@ TRADINGVIEW_IPS = [
 
 # Allow localhost for testing (ngrok proxies show as localhost sometimes)
 LOCALHOST_IPS = ["127.0.0.1", "localhost", "::1"]
+
+# Signal Deduplication Cache
+# Key: signal_hash, Value: expiration_timestamp
+_signal_cache = OrderedDict()
+SIGNAL_CACHE_TTL = 30  # seconds
+
+def get_signal_hash(alert: TradingViewAlert) -> str:
+    """Generate a unique hash for the signal."""
+    # Combine key fields to identify duplicates
+    content = f"{alert.ticker}-{alert.side}-{alert.entry}-{alert.stop}-{alert.strategy}-{alert.timeframe}"
+    return hashlib.md5(content.encode()).hexdigest()
+
+def is_duplicate_signal(alert: TradingViewAlert) -> bool:
+    """Check if signal is a duplicate within TTL."""
+    global _signal_cache
+    now = time.time()
+    
+    # Clean expired
+    expired = [k for k, v in _signal_cache.items() if v < now]
+    for k in expired:
+        del _signal_cache[k]
+        
+    sig_hash = get_signal_hash(alert)
+    if sig_hash in _signal_cache:
+        return True
+        
+    # Add to cache
+    _signal_cache[sig_hash] = now + SIGNAL_CACHE_TTL
+    return False
 
 def verify_tradingview_ip(request: Request):
     """
@@ -82,6 +114,14 @@ async def receive_webhook(
     verify_tradingview_ip(request)
     
     strategy_name = alert.strat or "default"
+    
+    # Deduplication check
+    if is_duplicate_signal(alert):
+        log_msg = f"Duplicate Signal Ignored: {alert.ticker} {alert.side} @ {alert.entry} [{strategy_name}]"
+        # We can log this to console or just return silently to avoid DB spam
+        print(log_msg)
+        return {"status": "ignored", "reason": "Duplicate signal"}
+
     risk_engine = RiskEngine(db)
     
     # Log reception
@@ -337,8 +377,7 @@ async def handle_signal(
             sl_ticks, 
             tp_ticks, 
             contract_id, 
-            account_id,
-            db
+            account_id
         )
         
         db.add(Log(level="INFO", message=f"Trade executing: {trade.ticker} x{qty} on {account.get('name')}"))
@@ -849,88 +888,92 @@ async def execute_trade(
     sl_ticks: int, 
     tp_ticks: int, 
     contract_id: str, 
-    account_id: int,
-    db: Session
+    account_id: int
 ):
     """Execute trade in background."""
-    trade = db.query(Trade).filter(Trade.id == trade_id).first()
-    if not trade:
-        return
-    
-    from backend.services.telegram_service import telegram_service
-    
-    # Get account name for notifications
-    account_settings = db.query(AccountSettings).filter(AccountSettings.account_id == account_id).first()
-    account_name = (account_settings.account_name if account_settings and account_settings.account_name else str(account_id))
-    
+    # Create NEW session for background task to avoid shared session issues
+    db = SessionLocal()
     try:
-        response = await topstep_client.place_order(
-            ticker=trade.ticker,
-            action=trade.action,
-            quantity=trade.quantity,
-            price=trade.entry_price,
-            account_id=account_id,
-            sl_ticks=sl_ticks,
-            tp_ticks=tp_ticks,
-            contract_id=contract_id
-        )
+        trade = db.query(Trade).filter(Trade.id == trade_id).first()
+        if not trade:
+            return
         
-        if response.get("status") == "filled":
-            trade.status = TradeStatus.OPEN
-            trade.topstep_order_id = str(response.get('order_id', 'unknown'))
-            
-            db.add(Log(level="INFO", message=f"Order Executed: {trade.ticker} x{trade.quantity} on {account_name}"))
-            
-            # Notify Telegram (non-blocking to prioritize SL/TP setup)
-            asyncio.create_task(telegram_service.notify_order_submitted(
+        from backend.services.telegram_service import telegram_service
+        
+        # Get account name for notifications
+        account_settings = db.query(AccountSettings).filter(AccountSettings.account_id == account_id).first()
+        account_name = (account_settings.account_name if account_settings and account_settings.account_name else str(account_id))
+        
+        try:
+            response = await topstep_client.place_order(
                 ticker=trade.ticker,
                 action=trade.action,
                 quantity=trade.quantity,
                 price=trade.entry_price,
-                order_id=trade.topstep_order_id,
-                account_name=account_name
-            ))
+                account_id=account_id,
+                sl_ticks=sl_ticks,
+                tp_ticks=tp_ticks,
+                contract_id=contract_id
+            )
             
-            # Fix SL/TP prices with retry logic
-            sl_tp_success = False
-            for attempt in range(3):
-                try:
-                    await asyncio.sleep(0.3 if attempt == 0 else 0.5 * (attempt + 1))
-                    count = await topstep_client.update_sl_tp_orders(
-                        account_id=account_id,
-                        ticker=trade.ticker,
-                        sl_price=trade.sl,
-                        tp_price=trade.tp
-                    )
-                    if count > 0:
-                        db.add(Log(level="INFO", message=f"SL/TP orders corrected ({count} orders) for {trade.ticker}"))
-                        sl_tp_success = True
-                        break
-                    elif attempt < 2:
-                        db.add(Log(level="DEBUG", message=f"SL/TP update attempt {attempt + 1}: No orders found, retrying..."))
-                except Exception as ex:
-                    if attempt < 2:
-                        db.add(Log(level="WARNING", message=f"SL/TP update attempt {attempt + 1} failed: {ex}"))
-                    else:
-                        db.add(Log(level="ERROR", message=f"Failed to fix SL/TP after 3 attempts: {ex}"))
-        else:
+            if response.get("status") == "filled":
+                trade.status = TradeStatus.OPEN
+                trade.topstep_order_id = str(response.get('order_id', 'unknown'))
+                
+                db.add(Log(level="INFO", message=f"Order Executed: {trade.ticker} x{trade.quantity} on {account_name}"))
+                
+                # Notify Telegram (non-blocking to prioritize SL/TP setup)
+                asyncio.create_task(telegram_service.notify_order_submitted(
+                    ticker=trade.ticker,
+                    action=trade.action,
+                    quantity=trade.quantity,
+                    price=trade.entry_price,
+                    order_id=trade.topstep_order_id,
+                    account_name=account_name
+                ))
+                
+                # Fix SL/TP prices with retry logic
+                sl_tp_success = False
+                for attempt in range(3):
+                    try:
+                        await asyncio.sleep(0.3 if attempt == 0 else 0.5 * (attempt + 1))
+                        count = await topstep_client.update_sl_tp_orders(
+                            account_id=account_id,
+                            ticker=trade.ticker,
+                            sl_price=trade.sl,
+                            tp_price=trade.tp
+                        )
+                        if count > 0:
+                            db.add(Log(level="INFO", message=f"SL/TP orders corrected ({count} orders) for {trade.ticker}"))
+                            sl_tp_success = True
+                            break
+                        elif attempt < 2:
+                            db.add(Log(level="DEBUG", message=f"SL/TP update attempt {attempt + 1}: No orders found, retrying..."))
+                    except Exception as ex:
+                        if attempt < 2:
+                            db.add(Log(level="WARNING", message=f"SL/TP update attempt {attempt + 1} failed: {ex}"))
+                        else:
+                            db.add(Log(level="ERROR", message=f"Failed to fix SL/TP after 3 attempts: {ex}"))
+            else:
+                trade.status = TradeStatus.REJECTED
+                trade.rejection_reason = response.get("reason", "Unknown")
+                db.add(Log(level="WARNING", message=f"Order Rejected: {trade.rejection_reason}"))
+                await telegram_service.notify_trade_rejection(trade.ticker, trade.rejection_reason)
+            
+            db.commit()
+            
+        except Exception as e:
             trade.status = TradeStatus.REJECTED
-            trade.rejection_reason = response.get("reason", "Unknown")
-            db.add(Log(level="WARNING", message=f"Order Rejected: {trade.rejection_reason}"))
-            await telegram_service.notify_trade_rejection(trade.ticker, trade.rejection_reason)
-        
-        db.commit()
-        
-    except Exception as e:
-        trade.status = TradeStatus.REJECTED
-        trade.rejection_reason = str(e)
-        db.add(Log(level="ERROR", message=f"Execution Failed: {e}", details=traceback.format_exc()))
-        db.commit()
-        
-        try:
-            await telegram_service.notify_error(f"Execution Failed for {trade.ticker}: {e}")
-        except Exception:
-            pass
+            trade.rejection_reason = str(e)
+            db.add(Log(level="ERROR", message=f"Execution Failed: {e}", details=traceback.format_exc()))
+            db.commit()
+            
+            try:
+                await telegram_service.notify_error(f"Execution Failed for {trade.ticker}: {e}")
+            except Exception:
+                pass
+    finally:
+        db.close()
 
 
 # Import for datetime in close handler

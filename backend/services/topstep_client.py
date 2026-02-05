@@ -288,37 +288,33 @@ class TopStepClient:
             "apiKey": self.api_key
         }
         
-        async with httpx.AsyncClient() as client:
+    async def login(self):
+        """Authenticates using UserName + API Key to get a Bearer Token."""
+        url = f"{self.base_url}/api/Auth/loginKey"
+        payload = {
+            "userName": self.username,
+            "apiKey": self.api_key
+        }
+        
+        # Login is critical, careful not to loop if it fails inside _make_request (e.g. 401)
+        # But _make_request handles 401 by clearing token, which is fine.
+        data, status_code, success = await self._make_request("POST", url, payload, max_retries=3)
+        
+        if success and data.get("success"):
+            self.token = data["token"]
+            
+            # Log high-level connection event
+            db = SessionLocal()
             try:
-                # print(f"Logging in to {url} with user {self.username}")
-                response = await client.post(url, json=payload, timeout=10)
+                db.add(Log(level="INFO", message="User Connected Successfully"))
+                db.commit()
+            finally:
+                db.close()
                 
-                if response.status_code != 200:
-                    print(f"Login HTTP Error: {response.status_code} {response.text}")
-                    return False
-
-                data = response.json()
-                
-                if data.get("success"):
-                    self.token = data["token"]
-                    self._log_api_call("POST", url, payload, data, response.status_code)
-                    
-                    # Log high-level connection event
-                    db = SessionLocal()
-                    try:
-                        db.add(Log(level="INFO", message="User Connected Successfully"))
-                        db.commit()
-                    finally:
-                        db.close()
-                        
-                    return True
-                else:
-                    self._log_api_call("POST", url, payload, data, response.status_code)
-                    print(f"Login failed: {data.get('errorMessage')}")
-                    return False
-            except Exception as e:
-                print(f"Login Exception: {e}")
-                return False
+            return True
+        else:
+            print(f"Login failed: {data.get('errorMessage') if data else 'Unknown error'}")
+            return False
 
     async def logout(self):
         """Logs out by clearing the local token."""
@@ -334,21 +330,16 @@ class TopStepClient:
         url = f"{self.base_url}/api/Status/ping"
         
         start_time = time.time()
-        async with httpx.AsyncClient() as client:
-            try:
-                response = await client.get(url, timeout=10)
-                response_time = (time.time() - start_time) * 1000  # ms
-                
-                if response.status_code == 200:
-                    return (True, response_time, None)
-                else:
-                    return (False, response_time, f"HTTP {response.status_code}")
-            except httpx.TimeoutException:
-                response_time = (time.time() - start_time) * 1000
-                return (False, response_time, "Timeout")
-            except Exception as e:
-                response_time = (time.time() - start_time) * 1000
-                return (False, response_time, str(e))
+        # Ping usually shouldn't trigger circuit breaker blocking, but 429s should still count?
+        # Let's use _make_request but maybe allow it to pass even if CB is open? 
+        # Actually standardizing is safer.
+        data, status_code, success = await self._make_request("GET", url, max_retries=1, log_on_success=False)
+        response_time = (time.time() - start_time) * 1000  # ms
+        
+        if success and status_code == 200:
+            return (True, response_time, None)
+        else:
+            return (False, response_time, f"HTTP {status_code}")
 
     async def _ensure_token(self):
         """Checks if token is valid, if not, logs in."""
@@ -383,36 +374,19 @@ class TopStepClient:
         headers = {"Authorization": f"Bearer {self.token}"}
         payload = {"onlyActiveAccounts": True}
 
-        async with httpx.AsyncClient() as client:
-            try:
-                response = await client.post(url, json=payload, headers=headers, timeout=10)
+        url = f"{self.base_url}/api/Account/search"
+        headers = {"Authorization": f"Bearer {self.token}"}
+        payload = {"onlyActiveAccounts": True}
 
-                if response.status_code != 200:
-                    self._log_api_call("POST", url, payload, None, response.status_code)
-                    if response.status_code == 401:
-                        print("Token Expired or Invalid.")
-                        self.token = None
-                    return []
+        data, status_code, success = await self._make_request("POST", url, payload, headers)
 
-                try:
-                    data = response.json()
-                except json.JSONDecodeError:
-                    self._log_api_call("POST", url, payload, {"raw": response.text}, response.status_code)
-                    print(f"Get Accounts Error: Invalid JSON (Status {response.status_code})")
-                    return []
-
-                if data.get("success") and data.get("accounts"):
-                    self._log_api_call("POST", url, payload, data, response.status_code)
-                    accounts = data["accounts"]
-                    self._set_cache("accounts", accounts)
-                    return accounts
-                else:
-                    self._log_api_call("POST", url, payload, data, response.status_code)
-                    print("No active accounts found.")
-                    return []
-            except Exception as e:
-                print(f"Get Accounts Error: {e}")
-                return []
+        if success and data.get("success") and data.get("accounts"):
+            accounts = data["accounts"]
+            self._set_cache("accounts", accounts)
+            return accounts
+        else:
+            print("No active accounts found or API error.")
+            return []
 
     async def get_open_positions(self, account_id: int, use_cache: bool = True):
         """Retrieves open positions for a specific account."""
@@ -430,33 +404,24 @@ class TopStepClient:
         headers = {"Authorization": f"Bearer {self.token}"}
         payload = {"accountId": account_id}
 
-        async with httpx.AsyncClient() as client:
-            try:
-                response = await client.post(url, json=payload, headers=headers, timeout=10)
+        url = f"{self.base_url}/api/Position/searchOpen"
+        headers = {"Authorization": f"Bearer {self.token}"}
+        payload = {"accountId": account_id}
 
-                if response.status_code != 200:
-                    self._log_api_call("POST", url, payload, None, response.status_code)
-                    if response.status_code == 401:
-                        self.token = None
-                    return []
+        data, status_code, success = await self._make_request("POST", url, payload, headers)
 
-                try:
-                    data = response.json()
-                except json.JSONDecodeError:
-                    self._log_api_call("POST", url, payload, {"raw": response.text}, response.status_code)
-                    return []
-
-                if data.get("success") and data.get("positions"):
-                    self._log_api_call("POST", url, payload, data, response.status_code)
-                    positions = data["positions"]
-                    self._set_cache("positions", positions, account_id)
-                    return positions
-                self._log_api_call("POST", url, payload, data, response.status_code)
-                self._set_cache("positions", [], account_id)
-                return []
-            except Exception as e:
-                print(f"Get Positions Error: {e}")
-                return []
+        if success and data.get("success") and data.get("positions"):
+            positions = data["positions"]
+            self._set_cache("positions", positions, account_id)
+            return positions
+        
+        # Even if failed or empty, cache empty result to avoid spamming if API is returning success=false
+        # But be careful, if API error, maybe don't cache empty? 
+        # _make_request returns success=False on HTTP error.
+        if success:
+             self._set_cache("positions", [], account_id)
+             
+        return []
 
     async def get_orders(self, account_id: int, days: int = 1, use_cache: bool = True):
         """Retrieves orders for a specific account."""
@@ -548,35 +513,18 @@ class TopStepClient:
             "startTimestamp": start_timestamp
         }
 
-        async with httpx.AsyncClient() as client:
-            try:
-                response = await client.post(url, json=payload, headers=headers, timeout=10)
+        data, status_code, success = await self._make_request("POST", url, payload, headers)
 
-                if response.status_code != 200:
-                    self._log_api_call("POST", url, payload, None, response.status_code)
-                    if response.status_code == 401:
-                        self.token = None
-                    return []
-
-                try:
-                    data = response.json()
-                except json.JSONDecodeError:
-                    self._log_api_call("POST", url, payload, {"raw": response.text}, response.status_code)
-                    return []
-
-                if data.get("success") and data.get("trades"):
-                    self._log_api_call("POST", url, payload, data, response.status_code)
-                    trades = data["trades"]
-                    if days == 1:
-                        self._set_cache("trades", trades, account_id)
-                    return trades
-                self._log_api_call("POST", url, payload, data, response.status_code)
-                if days == 1:
-                    self._set_cache("trades", [], account_id)
-                return []
-            except Exception as e:
-                print(f"Get Historical Trades Error: {e}")
-                return []
+        if success and data.get("success") and data.get("trades"):
+            trades = data["trades"]
+            if days == 1:
+                self._set_cache("trades", trades, account_id)
+            return trades
+            
+        if success and days == 1:
+            self._set_cache("trades", [], account_id)
+            
+        return []
 
     async def close_position(self, account_id: int, contract_id: str):
         """Closes a specific position."""
@@ -591,30 +539,22 @@ class TopStepClient:
             "contractId": contract_id
         }
 
-        async with httpx.AsyncClient() as client:
-            try:
-                response = await client.post(url, json=payload, headers=headers, timeout=10)
-                
-                if response.status_code != 200:
-                    self._log_api_call("POST", url, payload, None, response.status_code)
-                    if response.status_code == 401: self.token = None 
-                    return False
-                
-                try:
-                    data = response.json()
-                    self._log_api_call("POST", url, payload, data, response.status_code)
-                    
-                    # Invalidate Cache
-                    self.clear_cache("orders", account_id)
-                    self.clear_cache("positions", account_id)
-                    
-                    return data.get("success", False)
-                except json.JSONDecodeError:
-                    self._log_api_call("POST", url, payload, {"raw": response.text}, response.status_code)
-                    return False
-            except Exception as e:
-                print(f"Close Position Error: {e}")
-                return False
+        url = f"{self.base_url}/api/Position/closeContract"
+        headers = {"Authorization": f"Bearer {self.token}"}
+        payload = {
+            "accountId": account_id,
+            "contractId": contract_id
+        }
+
+        data, status_code, success = await self._make_request("POST", url, payload, headers)
+        
+        if success and data.get("success"):
+            # Invalidate Cache
+            self.clear_cache("orders", account_id)
+            self.clear_cache("positions", account_id)
+            return True
+            
+        return False
 
     async def partial_close_position(self, account_id: int, contract_id: str, size: int) -> dict:
         """Partially closes a position using TopStep's dedicated API."""
@@ -630,30 +570,23 @@ class TopStepClient:
             "size": size
         }
 
-        async with httpx.AsyncClient() as client:
-            try:
-                response = await client.post(url, json=payload, headers=headers, timeout=10)
-                
-                if response.status_code != 200:
-                    self._log_api_call("POST", url, payload, None, response.status_code)
-                    if response.status_code == 401: self.token = None 
-                    return {"success": False, "error": f"HTTP {response.status_code}"}
-                
-                try:
-                    data = response.json()
-                    self._log_api_call("POST", url, payload, data, response.status_code)
-                    
-                    # Invalidate Cache
-                    self.clear_cache("orders", account_id)
-                    self.clear_cache("positions", account_id)
-                    
-                    return data
-                except json.JSONDecodeError:
-                    self._log_api_call("POST", url, payload, {"raw": response.text}, response.status_code)
-                    return {"success": False, "error": "Invalid JSON response"}
-            except Exception as e:
-                print(f"Partial Close Position Error: {e}")
-                return {"success": False, "error": str(e)}
+        url = f"{self.base_url}/api/Position/partialCloseContract"
+        headers = {"Authorization": f"Bearer {self.token}"}
+        payload = {
+            "accountId": account_id,
+            "contractId": contract_id,
+            "size": size
+        }
+
+        data, status_code, success = await self._make_request("POST", url, payload, headers)
+        
+        if success:
+             # Invalidate Cache
+            self.clear_cache("orders", account_id)
+            self.clear_cache("positions", account_id)
+            return data
+            
+        return {"success": False, "error": f"API Error {status_code}"}
 
     async def cancel_order(self, account_id: int, order_id: int):
         """Cancels a specific order."""
@@ -668,29 +601,21 @@ class TopStepClient:
             "orderId": order_id
         }
 
-        async with httpx.AsyncClient() as client:
-            try:
-                response = await client.post(url, json=payload, headers=headers, timeout=10)
-                
-                if response.status_code != 200:
-                    self._log_api_call("POST", url, payload, None, response.status_code)
-                    if response.status_code == 401: self.token = None 
-                    return False
-                
-                try:
-                    data = response.json()
-                    self._log_api_call("POST", url, payload, data, response.status_code)
-                    
-                    # Invalidate Cache
-                    self.clear_cache("orders", account_id)
-                    
-                    return data.get("success", False)
-                except json.JSONDecodeError:
-                    self._log_api_call("POST", url, payload, {"raw": response.text}, response.status_code)
-                    return False
-            except Exception as e:
-                print(f"Cancel Order Error: {e}")
-                return False
+        url = f"{self.base_url}/api/Order/cancel"
+        headers = {"Authorization": f"Bearer {self.token}"}
+        payload = {
+            "accountId": account_id,
+            "orderId": order_id
+        }
+
+        data, status_code, success = await self._make_request("POST", url, payload, headers)
+        
+        if success and data.get("success"):
+            # Invalidate Cache
+            self.clear_cache("orders", account_id)
+            return True
+            
+        return False
 
     async def get_contract_details(self, ticker: str):
         """
@@ -714,75 +639,59 @@ class TopStepClient:
         url = f"{self.base_url}/api/Contract/available"
         headers = {"Authorization": f"Bearer {self.token}"}
         
-        async with httpx.AsyncClient() as client:
-            contracts = []
-            try:
-                # 2. Try Live
-                payload_live = {"live": True}
-                response = await client.post(url, json=payload_live, headers=headers, timeout=10)
+        # 2. Try Live
+        payload_live = {"live": True}
+        data, status_code, success = await self._make_request("POST", url, payload_live, headers, max_retries=2)
+        
+        contracts = []
+        if success and data.get("success") and data.get("contracts"):
+            contracts = data["contracts"]
+
+        if not contracts:
+            # 2b. Fallback to Simulation
+            payload_sim = {"live": False}
+            data, status_code, success = await self._make_request("POST", url, payload_sim, headers, max_retries=2)
+            if success and data.get("success") and data.get("contracts"):
+                contracts = data["contracts"]
+
+        # 3. Populate Cache
+        if contracts:
+            self._contract_cache = {} # Clear old cache? Or merge? Clear is safer to remove expired.
+            for contract in contracts:
+                # Map Contract Name prefix to Contract Object
+                # keys: MNQ, MNQZ5, NQ, NQZ5...
+                # API returns "name": "MNQH6", "symbolId": "MNQ"
+                # We want to map "MNQ" -> MNQH6 object
                 
-                if response.status_code == 200:
-                    try:
-                        data = response.json()
-                        self._log_api_call("POST", url, payload_live, data, response.status_code)
-                        if data.get("success") and data.get("contracts"):
-                            contracts = data["contracts"]
-                    except json.JSONDecodeError:
-                        pass
+                # Store by Exact Name
+                c_name = contract.get("name", "")
+                self._contract_cache[c_name] = contract
                 
-                if not contracts:
-                    # 2b. Fallback to Simulation
-                    response = await client.post(url, json={"live": False}, headers=headers, timeout=10)
-                    if response.status_code == 200:
-                        try:
-                            data = response.json()
-                            self._log_api_call("POST", url, {"live": False}, data, response.status_code)
-                            if data.get("success") and data.get("contracts"):
-                                contracts = data["contracts"]
-                        except json.JSONDecodeError:
-                            pass
+                # Store by Root Symbol (if it matches the *current* contract pattern)
+                # This is tricky. Usually we want the front month. 
+                # But for now, let's just cache by full name and implement a smarter lookup below.
+            
+            # 4. Find the specific requested ticker in the fresh cache
+            # Iterate cache to find prefix match
+            found = None
+            for c_name, contract in self._contract_cache.items():
+                 if c_name.startswith(clean_ticker):
+                     # TODO: If multiple match (MNQH6, MNQM6), pick nearest?
+                     # API usually returns sorted or we just pick first.
+                     # For now, pick first match.
+                     found = contract
+                     # Also cache the CLEAN TICKER -> FOUND CONTRACT for direct lookup next time
+                     self._contract_cache[clean_ticker] = found
+                     break
+            
+            if found:
+                return found
                 
-                # 3. Populate Cache
-                if contracts:
-                    self._contract_cache = {} # Clear old cache? Or merge? Clear is safer to remove expired.
-                    for contract in contracts:
-                        # Map Contract Name prefix to Contract Object
-                        # keys: MNQ, MNQZ5, NQ, NQZ5...
-                        # API returns "name": "MNQH6", "symbolId": "MNQ"
-                        # We want to map "MNQ" -> MNQH6 object
-                        
-                        # Store by Exact Name
-                        c_name = contract.get("name", "")
-                        self._contract_cache[c_name] = contract
-                        
-                        # Store by Root Symbol (if it matches the *current* contract pattern)
-                        # This is tricky. Usually we want the front month. 
-                        # But for now, let's just cache by full name and implement a smarter lookup below.
-                    
-                    # 4. Find the specific requested ticker in the fresh cache
-                    # Iterate cache to find prefix match
-                    found = None
-                    for c_name, contract in self._contract_cache.items():
-                         if c_name.startswith(clean_ticker):
-                             # TODO: If multiple match (MNQH6, MNQM6), pick nearest?
-                             # API usually returns sorted or we just pick first.
-                             # For now, pick first match.
-                             found = contract
-                             # Also cache the CLEAN TICKER -> FOUND CONTRACT for direct lookup next time
-                             self._contract_cache[clean_ticker] = found
-                             break
-                    
-                    if found:
-                        return found
-                        
-                    print(f"Contract {ticker} details not found in {len(contracts)} available contracts.")
-                    return None
-                else:
-                    print("Failed to fetch contract list (Live & Sim).")
-                    return None
-            except Exception as e:
-                print(f"Get Contract Details Error: {e}")
-                return None
+            print(f"Contract {ticker} details not found in {len(contracts)} available contracts.")
+            return None
+        else:
+            print("Failed to fetch contract list (Live & Sim).")
+            return None
 
     async def get_all_computable_contracts(self):
         """Fetches all available contracts (raw list)."""
@@ -792,34 +701,27 @@ class TopStepClient:
         url = f"{self.base_url}/api/Contract/available"
         headers = {"Authorization": f"Bearer {self.token}"}
         
-        async with httpx.AsyncClient() as client:
-            try:
-                # Try Live
-                response = await client.post(url, json={"live": True}, headers=headers, timeout=10)
-                if response.status_code == 200:
-                    try:
-                        data = response.json()
-                        if data.get("success") and data.get("contracts"):
-                            return data["contracts"]
-                    except json.JSONDecodeError:
-                        pass
-                
-                # Fallback to Simulation
-                # print("Live contracts empty, trying simulation...")
-                response = await client.post(url, json={"live": False}, headers=headers, timeout=10)
-                if response.status_code == 200:
-                    try:
-                        data = response.json()
-                        if data.get("success") and data.get("contracts"):
-                            return data["contracts"]
-                    except json.JSONDecodeError:
-                        pass
-                
-                print(f"Get All Contracts Failed.")
-                return []
-            except Exception as e:
-                print(f"Get All Contracts Error: {e}")
-                return []
+        # 2. Try Live
+        payload_live = {"live": True}
+        data, status_code, success = await self._make_request("POST", url, payload_live, headers, max_retries=2)
+        
+        contracts = []
+        if success and data.get("success") and data.get("contracts"):
+            contracts = data["contracts"]
+            
+        if not contracts:
+            # 2b. Fallback to Simulation
+            payload_sim = {"live": False}
+            data, status_code, success = await self._make_request("POST", url, payload_sim, headers, max_retries=2)
+            if success and data.get("success") and data.get("contracts"):
+               contracts = data["contracts"]
+
+        # 3. Return contracts
+        if contracts:
+             return contracts
+            
+        print("Failed to fetch contract list (Live & Sim).")
+        return []
 
     async def find_contract(self, ticker: str):
         """Legacy wrapper for backward compatibility if needed, returns just ID."""
@@ -877,37 +779,21 @@ class TopStepClient:
                 "type": 1 # Limit
             }
 
-        async with httpx.AsyncClient() as client:
-            try:
-                # print(f"Placing order: {payload}")
-                response = await client.post(url, json=payload, headers=headers, timeout=10)
-                
-                if response.status_code != 200:
-                    self._log_api_call("POST", url, payload, None, response.status_code)
-                    if response.status_code == 401: self.token = None 
-                    return {"status": "error", "message": f"HTTP Error {response.status_code}"}
-
-                try:
-                    data = response.json()
-                    self._log_api_call("POST", url, payload, data, response.status_code)
-                    
-                    if data.get("success"):
-                        # Invalidate Cache
-                        self.clear_cache("orders", target_account_id)
-                        self.clear_cache("positions", target_account_id)
-                        
-                        return {
-                            "status": "filled", 
-                            "order_id": str(data["orderId"]), 
-                            "price": price, 
-                            "avg_fill_price": price 
-                        }
-                    else:
-                        return {"status": "rejected", "reason": data.get("errorMessage", "Unknown Rejection")}
-                except json.JSONDecodeError:
-                    return {"status": "error", "message": "Invalid JSON response"}
-            except Exception as e:
-                return {"status": "error", "message": f"Order Exception: {e}"}
+        data, status_code, success = await self._make_request("POST", url, payload, headers)
+        
+        if success and data.get("success"):
+            # Invalidate Cache
+            self.clear_cache("orders", target_account_id)
+            self.clear_cache("positions", target_account_id)
+            
+            return {
+                "status": "filled", 
+                "order_id": str(data["orderId"]), 
+                "price": price, 
+                "avg_fill_price": price 
+            }
+            
+        return {"status": "rejected", "reason": data.get("errorMessage", "Unknown Rejection") if data else f"API Error {status_code}"}
 
     async def modify_order(self, order_id: int, account_id: int = None, **kwargs):
         """Modifies an existing order. Pass fields like limitPrice, stopPrice, size as kwargs."""
@@ -933,34 +819,17 @@ class TopStepClient:
         # Merge optional updates
         payload.update(kwargs)
 
-        async with httpx.AsyncClient() as client:
-            try:
-                response = await client.post(url, json=payload, headers=headers, timeout=10)
-                
-                if response.status_code != 200:
-                    self._log_api_call("POST", url, payload, None, response.status_code)
-                    await telegram_service.notify_api_error("POST", url, {"error": f"HTTP {response.status_code}", "payload": payload}, response.status_code)
-                    if response.status_code == 401: self.token = None 
-                    return False
-                
-                try:
-                    data = response.json()
-                    self._log_api_call("POST", url, payload, data, response.status_code)
-                    
-                    if data.get("success"):
-                        # Invalidate Cache
-                        self.clear_cache("orders", target_account_id)
-                        
-                        return True
-                    else:
-                        await telegram_service.notify_api_error("POST", url, data, response.status_code)
-                        return False
-
-                except json.JSONDecodeError:
-                    return False
-            except Exception as e:
-                print(f"Modify Order Error: {e}")
-                return False
+        data, status_code, success = await self._make_request("POST", url, payload, headers)
+        
+        if success and data.get("success"):
+             # Invalidate Cache
+            self.clear_cache("orders", target_account_id)
+            return True
+            
+        if data and not data.get("success"):
+             await telegram_service.notify_api_error("POST", url, data, status_code)
+             
+        return False
 
     async def update_sl_tp_orders(self, account_id: int, ticker: str, sl_price: float, tp_price: float):
         """

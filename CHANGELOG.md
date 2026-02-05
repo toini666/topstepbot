@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [2026-02-05] - Critical Audit Fixes
+
+### Fixed
+- **Shared DB Session**: Fixed critical `OperationalError` by ensuring background tasks (ticket execution) use a dedicated clean database session instead of sharing one with the request handler.
+- **Race Condition**: Fixed potential data corruption in global position state by implementing `asyncio.Lock` for thread-safe updates.
+- **Circuit Breaker**: Complete refactoring of `TopStepClient`. All API methods (`login`, `get_orders`, `place_order`, etc.) now strictly use the centralized `_make_request` handler to respect rate limits and circuit breaker status.
+- **Duplicate Signals**: Implemented robust signal deduplication using MD5 hashing of alert parameters (ticker, side, price, strategy) with a 5-second TTL cache.
+
 ## [2026-02-05] - Discord Reliability & Notification Enhancement
 
 ### Added

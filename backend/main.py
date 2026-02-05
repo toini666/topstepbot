@@ -117,7 +117,7 @@ async def lifespan(app: FastAPI):
                     })
                 
                 # Store in state to prevent monitor from treating as new
-                update_account_positions(account_id, current_map)
+                await update_account_positions(account_id, current_map)
                 
             except Exception as e:
                 print(f"Error pre-loading positions for {account_name}: {e}")
