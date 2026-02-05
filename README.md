@@ -15,6 +15,7 @@ A professional-grade automated trading system for TopStepX. Executes TradingView
 - **Position Sizing**: Auto-calculates quantity based on risk per trade
 - **Session Filters**: Block trading during specific sessions (ASIA, UK, US)
 - **Blocked Periods**: Define custom time windows to prevent trading
+- **Robust Reconciliation**: Automatic detection and correction of discrepancies between local state and broker API
 - **Trading Days**: Per-day toggles for when you want to trade
 
 ### 📈 Trade Lifecycle

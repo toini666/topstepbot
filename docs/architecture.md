@@ -247,6 +247,41 @@ Data export and analytics endpoints.
 
 ---
 
+## Core Services & Utilities
+
+### 1. Settings Cache (`settings_cache.py`)
+
+In-memory cache for frequently accessed configuration to minimize database I/O.
+
+#### Features
+- **TTL Caching**: Global settings and account configs cached for 60s (configurable).
+- **Thread-Safe**: Uses `threading.RLock` to ensure safety across threads.
+- **Smart Invalidation**: Updates to settings via API automatically invalidate relevant cache keys.
+
+### 2. Async Database (`async_db.py`)
+
+Wrapper to execute synchronous SQLAlchemy blocking calls in a dedicated thread pool, preventing `asyncio` event loop blocking.
+
+#### Pattern
+```python
+@async_db_session
+def get_users(db):
+    return db.query(User).all()
+
+# Usage
+users = await get_users()
+```
+
+### 3. Logging Service (`logging_service.py`)
+
+Centralized structured logger that handles both console output and database persistence.
+
+- **Console**: Color-coded output for standard IO.
+- **Database**: Asynchronous persistence to `Log` table for dashboard viewing.
+- **Context**: Supports extra metadata (e.g., trade_id, account_name) for detailed auditing.
+
+---
+
 ## Scheduled Jobs
 
 | Job | Schedule | Function |
@@ -473,17 +508,21 @@ Webhook requests from other IPs are rejected with HTTP 403.
 
 ---
 
+---
+
 ## Performance Optimizations
 
-1. **Contract Caching** - In-memory cache for contract details
-2. **API Response Caching** - Cached account and position data with configurable TTL
-3. **Parallel Position Checks** - Concurrent account eligibility verification using `asyncio.gather`
-4. **Non-blocking Notifications** - Telegram alerts dispatched via `asyncio.create_task`
-5. **SL/TP Retry Logic** - 3-attempt retry with exponential backoff for order corrections
-6. **Selective Logging** - Skip noisy polling endpoints
-7. **Background Execution** - Trade execution in FastAPI BackgroundTasks
-8. **Polling Intervals** - 3s for data, 5s for position monitor
-9. **Database Indexes** - On frequently queried columns
+1.  **Contract Caching** - In-memory cache for contract details.
+2.  **Settings Caching** - TTL-based caching for global and account settings to reduce DB load.
+3.  **Async Database Access** - Dedicated thread pool for DB operations to keep the event loop non-blocking.
+4.  **API Response Caching** - Cached account and position data with configurable TTL.
+5.  **Parallel Position Checks** - Concurrent account eligibility verification using `asyncio.gather`.
+6.  **Non-blocking Notifications** - Telegram alerts dispatched via `asyncio.create_task`.
+7.  **SL/TP Retry Logic** - 3-attempt retry with exponential backoff for order corrections.
+8.  **Selective Logging** - Skip noisy polling endpoints.
+9.  **Background Execution** - Trade execution in FastAPI BackgroundTasks.
+10. **Polling Intervals** - 3s for data, 5s for position monitor.
+11. **Database Indexes** - On frequently queried columns.
 
 ---
 

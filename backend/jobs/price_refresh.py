@@ -48,7 +48,7 @@ async def price_refresh_job() -> None:
             # Positions exist - try to use WebSocket
             if not market_hub_client.is_connected:
                 # Get token and connect
-                token = getattr(topstep_client, '_access_token', None)
+                token = getattr(topstep_client, 'token', None)
                 if token:
                     success = await market_hub_client.connect(token)
                     if success:

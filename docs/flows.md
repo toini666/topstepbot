@@ -269,37 +269,57 @@ On bot startup, existing positions are pre-loaded to avoid false "Position Opene
 1. Load previous positions from memory (per account)
 2. FOR EACH connected account:
    a. Fetch current positions from TopStep
-   b. Compare with previous snapshot
-   c. FOR EACH position in previous but NOT in current:
-      - Position was closed
-      - Fetch trade history to get exit details
-      - Calculate PnL and fees
-      - **UPDATE Trade record in database:**
-        * Find matching Trade by account_id + ticker + status=OPEN
-        * Match Entry Timestamp (tolerance < 2s) to prevent mixing trades
-        * Set status=CLOSED, exit_price, pnl, fees, exit_time
-      - Calculate PnL and fees
-      - **UPDATE Trade record in database:**
-        * Find matching Trade by account_id + ticker + status=OPEN
-        * Match Entry Timestamp (tolerance < 2s) to prevent mixing trades
-        * Set status=CLOSED, exit_price, pnl, fees, exit_time
-      - Calculate Daily PnL total (Sum of all API trades for current session)
-      - Notify position closed (Telegram) with daily PnL
-   d. Update memory with current positions
+   b. Pre-fetch trade history (last 24h) ONCE for efficiency
+   c. Compare with previous snapshot
    
-3. **Detection of New Positions (Including Manual):**
-   - Identify new open positions not present in previous snapshot
-   - IF no matching OPEN **or PENDING** trade in DB:
-     * Create new Trade record with strategy="MANUAL"
-     * Capture Entry Price and Time from API
-     * Notify "Position Opened" (Telegram)
-     
-4. **Reconciliation (Missed Closures):**
-   - Iterate all OPEN trades in DB
-   - IF trade not found in current API positions:
-     * Check API history for execution AFTER trade entry
-     * Robust comparison: Ensure Timezone Awareness (UTC vs UTC)
-     * IF matching exit found: Mark DB trade as CLOSED and Notify
+   d. **Detect Closures & Partials:**
+      - Iterate positions in Previous Map
+      - IF position missing in Current Map -> FULL CLOSE
+      - IF position exists but size decreased -> PARTIAL CLOSE
+      
+      - IF Full Close detected:
+        * Find matching OPEN trade in DB (by Ticker/Contract)
+        * Filter Trade History (using pre-fetched data):
+          - Match Contract ID or Symbol
+          - Match Entry Time (within 2s tolerance) or creation time
+        * IF matching history found:
+          - Extract Exit Price, PnL, Fees from API trade
+          - Update DB Trade: status=CLOSED, exit_time, pnl, fees
+          - Calculate Daily PnL
+          - Notify via Telegram & Discord
+        * IF no matching history found:
+          - Check if closure happened recently (within 2m)
+          - If not, log Warning and generic "Position Closed" alert
+
+      - IF Partial Close detected:
+         * Update DB Trade: Update PnL and Fees
+         * Notify Partial Close via Telegram & Discord
+
+   e. **Detect New Positions (Including Manual):**
+      - Iterate positions in Current Map
+      - IF position not in Previous Map -> NEW POSITION
+      - Match against cached Trade History to get Entry Price/Time
+      - Check DB for existing OPEN/PENDING trade
+      - IF match found:
+        * Update Entry Price and Timestamp from API
+      - IF NO match found (Manual Trade):
+        * Create new Trade record (strategy="MANUAL")
+        * Notify "Position Opened"
+      
+   f. **Reconciliation (Robust Consistency Check):**
+      - Iterate ALL 'OPEN' trades in DB for this account
+      - IF trade.ticker not in Current API Positions:
+        * DANGER: DB says OPEN, API says GONE
+        * Search Trade History for an Exit execution AFTER the trade entry time
+        * IF Exit Found in History:
+          - Confirmed Closed
+          - Auto-correct DB: Set status=CLOSED, update PnL/Fees
+          - Notify "Reconciled Trade Closed"
+        * IF Not Found:
+           - Leave as OPEN (could be API lag or other issue)
+           - Log Warning
+
+   g. Update memory with current positions
 ```
 
 ### Data Structures
@@ -307,7 +327,7 @@ On bot startup, existing positions are pre-loaded to avoid false "Position Opene
 # Memory State
 _last_open_positions = {
     account_id: {
-        "CON.F.US.MNQ.H6": {position_data},
+        "CON.F.US.MNQ.H6": {size: 2, price: 12345.50, ...},
         ...
     }
 }

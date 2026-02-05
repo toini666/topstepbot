@@ -141,7 +141,7 @@ Account Settings (per account)
 | **Manual Trades** | Automatically detects and records execution of non-bot trades (Checks for OPEN or PENDING status to avoid duplicates) |
 | **Daily PnL** | Real-time Net PnL calculation (Gross - Fees) synced with TopStep session |
 | **Unrealized PnL** | Near real-time floating PnL for open positions (5s refresh) with current market prices |
-| **Strict Reconciliation** | DB corrections based on raw API truth data for 100% accuracy |
+| **Robust Reconciliation** | Enhanced auto-correction of DB state by cross-referencing API history for missed closures |
 | **Manual Reconciliation** | Dashboard button to preview and apply trade corrections with TopStep API |
 | **Export Endpoint** | JSON/CSV export with filters |
 | **Statistics API** | Win rate, profit factor, avg PnL, duration |
@@ -212,7 +212,7 @@ Account Settings (per account)
 
 | Requirement | Target |
 |-------------|--------|
-| **Latency** | < 500ms from webhook to order submission |
+| **Latency** | < 500ms from webhook to order submission (Optimized via Settings Cache) |
 | **Uptime** | Designed for 24/5 operation (market hours) |
 | **Data Retention** | Trades: indefinite, Logs: 7 days |
 | **Concurrent Accounts** | Tested up to 5 accounts |
