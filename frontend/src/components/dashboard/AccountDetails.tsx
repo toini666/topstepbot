@@ -34,11 +34,11 @@ export function AccountDetails({
                     <button
                         onClick={onToggleTrading}
                         disabled={!isConnected}
-                        className={`text-xs font-bold px-3 py-1.5 rounded-lg transition-all ${!isConnected
+                        className={`text-xs font-bold px-3 py-1.5 rounded-xl transition-all ${!isConnected
                             ? 'bg-slate-800 text-slate-500 cursor-not-allowed'
                             : accountSettings?.trading_enabled
-                                ? 'bg-green-500/20 text-green-400 hover:bg-green-500/30'
-                                : 'bg-red-500/20 text-red-400 hover:bg-red-500/30'
+                                ? 'bg-green-500/15 text-green-300 hover:bg-green-500/25'
+                                : 'bg-red-500/15 text-red-300 hover:bg-red-500/25'
                             }`}
                     >
                         {accountSettings?.trading_enabled ? 'TRADING ON' : 'TRADING PAUSED'}
@@ -58,15 +58,13 @@ export function AccountDetails({
                     </div>
                     <div className="flex justify-between items-center">
                         <span className="text-slate-400 text-sm">Status</span>
-                        <span className={`text-xs font-bold px-2 py-0.5 rounded ${currentAccount.simulated ? 'bg-orange-500/20 text-orange-400' : 'bg-blue-500/20 text-blue-400'
-                            }`}>
+                        <span className={currentAccount.simulated ? 'badge-warning' : 'badge-info'}>
                             {currentAccount.simulated ? 'SIMULATED' : 'LIVE'}
                         </span>
                     </div>
                     <div className="flex justify-between items-center">
                         <span className="text-slate-400 text-sm">Trading</span>
-                        <span className={`text-xs font-bold px-2 py-0.5 rounded ${currentAccount.canTrade ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'
-                            }`}>
+                        <span className={currentAccount.canTrade ? 'badge-success' : 'badge-danger'}>
                             {currentAccount.canTrade ? 'ENABLED' : 'DISABLED'}
                         </span>
                     </div>
@@ -85,7 +83,7 @@ export function AccountDetails({
                             prefix=""
                         />
                     </div>
-                    <div className="flex justify-between items-center border-t border-slate-800 pt-4 mt-auto">
+                    <div className="flex justify-between items-center border-t border-slate-800/60 pt-4 mt-auto">
                         <span className="text-slate-400 text-sm">Balance</span>
                         <span className="font-mono text-white text-2xl font-bold">
                             ${currentAccount.balance?.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) ?? "0.00"}

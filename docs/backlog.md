@@ -9,9 +9,8 @@ This document outlines the roadmap to evolve the current functional prototype in
 
 ## 2. Observability & Logging (Traceability)
 *Goal: Know exactly what happened, when, and why.*
-- [ ] **More logs in Telegram**: Add monitoring logs in Telegram in case of issue
-- [ ] **Add in-app notifications**: Add in-app notifications for trades follow-up
-- [ ] **External notifications management**: Configuration of external notifications (Discord / Telegram per signal)
+- [x] **More logs in Telegram**: Add monitoring logs in Telegram in case of issue
+- [x] **External notifications management**: Configuration of external notifications (Discord / Telegram per signal)
 
 
 ## 3. Data & Analytics (The "Journal")
@@ -23,11 +22,11 @@ This document outlines the roadmap to evolve the current functional prototype in
 ## 4. Infrastructure & DevOps
 *Goal: Stability and ease of deployment.*
 - [ ] **Cloudflare Tunnel Integration**: Setup a permanent webhook URL (`https://bot.domaine.com`) to avoid daily ngrok reconfiguration.
-- [ ] **Automated tests**: setup workflow of automated test to verify everything is still working (core features) after a development
+- [x] **Automated tests**: setup workflow of automated test to verify everything is still working (core features) after a development
 - [x] **Execution optimization**: optimize workflow to have the minimum execution time between trading alert and trade execution (Persistent HTTP, Smart Polling, Parallel Fetching)
 - [x] **Frontend Memory**: Implemented recursive polling, state update guards, and memoization to fix memory leaks.
 - [x] **SL/TP Cache**: Fixed stale cache issues causing SL/TP update failures.
-- [ ] **Refactor UI**: Harmonize UI, refactor look and feel, add footer and reorganize data visualization
+- [x] **Refactor UI**: Harmonize UI, refactor look and feel, add footer and reorganize data visualization
 
 ## 5. Quick fixes / bugs
 *Goal: Fix bugs and improve user experience.*

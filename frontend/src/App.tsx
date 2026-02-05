@@ -234,11 +234,24 @@ function App() {
 
   // Loading state
   if (loading && trades.length === 0 && accounts.length === 0) {
-    return <div className="h-screen flex items-center justify-center bg-slate-950 text-white">Loading...</div>;
+    return (
+      <div className="h-screen flex items-center justify-center bg-slate-950 text-white" role="status" aria-busy="true">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-8 h-8 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+          <span className="text-slate-400 text-sm">Loading...</span>
+        </div>
+      </div>
+    );
   }
 
+  const tabs = [
+    { key: 'trading' as const, label: 'Trading', icon: Activity },
+    { key: 'logs' as const, label: 'Logs', icon: FileText },
+    { key: 'strategies' as const, label: 'Strategies', icon: Layers },
+  ];
+
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 p-8 font-sans">
+    <div className="min-h-screen bg-slate-950 text-slate-100 p-4 md:p-8 font-sans">
 
       {/* HEADER */}
       <Header
@@ -265,69 +278,51 @@ function App() {
       />
 
       {/* MENU BAR */}
-      <nav className="max-w-7xl mx-auto mb-6 flex gap-4">
-        <button
-          onClick={() => setActiveTab('trading')}
-          className={`px-6 py-3 rounded-xl font-bold text-sm flex items-center gap-2 transition-all ${activeTab === 'trading'
-            ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/20'
-            : 'bg-slate-900/50 text-slate-400 hover:text-white hover:bg-slate-800'
-            }`}
-        >
-          <Activity className="w-4 h-4" />
-          Trading
-        </button>
-        <button
-          onClick={() => setActiveTab('logs')}
-          className={`px-6 py-3 rounded-xl font-bold text-sm flex items-center gap-2 transition-all ${activeTab === 'logs'
-            ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/20'
-            : 'bg-slate-900/50 text-slate-400 hover:text-white hover:bg-slate-800'
-            }`}
-        >
-          <FileText className="w-4 h-4" />
-          Logs
-        </button>
-        <button
-          onClick={() => setActiveTab('strategies')}
-          className={`px-6 py-3 rounded-xl font-bold text-sm flex items-center gap-2 transition-all ${activeTab === 'strategies'
-            ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/20'
-            : 'bg-slate-900/50 text-slate-400 hover:text-white hover:bg-slate-800'
-            }`}
-        >
-          <Layers className="w-4 h-4" />
-          Strategies
-        </button>
+      <nav className="max-w-7xl mx-auto mb-6 flex gap-2 md:gap-4 flex-wrap" role="tablist" aria-label="Main navigation">
+        {tabs.map(tab => (
+          <button
+            key={tab.key}
+            role="tab"
+            aria-selected={activeTab === tab.key}
+            onClick={() => setActiveTab(tab.key)}
+            className={activeTab === tab.key ? 'tab-btn-active' : 'tab-btn-inactive'}
+          >
+            <tab.icon className="w-4 h-4" />
+            {tab.label}
+          </button>
+        ))}
 
-        <div className="ml-auto flex gap-4">
+        <div className="ml-auto flex gap-2 md:gap-4">
           <button
             onClick={() => setMockModalOpen(true)}
-            className="px-6 py-3 rounded-xl font-bold text-sm flex items-center gap-2 transition-all bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500/20 hover:text-indigo-300 border border-indigo-500/20"
+            className="tab-btn-inactive"
           >
             <Terminal className="w-4 h-4" />
-            Mock API
+            <span className="hidden sm:inline">Mock API</span>
           </button>
 
           <button
+            role="tab"
+            aria-selected={activeTab === 'calendar'}
             onClick={() => setActiveTab('calendar')}
-            className={`px-6 py-3 rounded-xl font-bold text-sm flex items-center gap-2 transition-all ${activeTab === 'calendar'
-              ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/20'
-              : 'bg-slate-900/50 text-slate-400 hover:text-white hover:bg-slate-800'
-              }`}
+            className={activeTab === 'calendar' ? 'tab-btn-active' : 'tab-btn-inactive'}
           >
             <CalendarIcon className="w-4 h-4" />
-            Calendar
+            <span className="hidden sm:inline">Calendar</span>
           </button>
 
           <button
             onClick={() => setConfigModalOpen(true)}
-            className="px-6 py-3 rounded-xl font-bold text-sm flex items-center gap-2 transition-all bg-slate-900/50 text-slate-400 hover:text-white hover:bg-slate-800"
+            className="tab-btn-inactive"
+            aria-label="Open settings"
           >
             <Settings className="w-4 h-4" />
-            Settings
+            <span className="hidden sm:inline">Settings</span>
           </button>
         </div>
       </nav>
 
-      <main className="max-w-7xl mx-auto space-y-8">
+      <main className="max-w-7xl mx-auto space-y-8" role="tabpanel">
 
         {/* TRADING TAB */}
         {activeTab === 'trading' && (

@@ -28,10 +28,8 @@ export function SessionsTab({ sessions, onUpdateSession }: SessionsTabProps) {
                         </div>
                         <button
                             onClick={() => onUpdateSession(session.id, 'is_active', !session.is_active)}
-                            className={`text-xs px-2 py-0.5 rounded transition-colors ${session.is_active
-                                ? 'bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30'
-                                : 'bg-slate-700 text-slate-400 hover:bg-slate-600'
-                                }`}
+                            aria-pressed={session.is_active}
+                            className={session.is_active ? 'badge-success hover:bg-emerald-500/30 transition-colors cursor-pointer' : 'badge-neutral hover:bg-slate-600 transition-colors cursor-pointer'}
                         >
                             {session.is_active ? 'Active' : 'Inactive'}
                         </button>

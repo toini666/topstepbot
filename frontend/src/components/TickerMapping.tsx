@@ -82,7 +82,7 @@ export function TickerMapping({ mappings, onAdd, onDelete, onUpdate }: TickerMap
                         placeholder="TradingView Ticker (e.g. MNQ1!)"
                         value={tvTicker}
                         onChange={(e) => setTvTicker(e.target.value)}
-                        className="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500 font-mono"
+                        className="flex-1 input-mono"
                     />
                 </div>
 
@@ -91,7 +91,7 @@ export function TickerMapping({ mappings, onAdd, onDelete, onUpdate }: TickerMap
                         value={selectedContract}
                         onChange={(e) => setSelectedContract(e.target.value)}
                         disabled={availableContracts.length === 0}
-                        className="flex-1 min-w-0 bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500 font-mono disabled:opacity-50 truncate"
+                        className="flex-1 min-w-0 input-mono disabled:opacity-50 truncate"
                     >
                         <option value="">
                             {availableContracts.length === 0 ? "Load contracts first..." : "Select TopStep Contract..."}
@@ -115,7 +115,7 @@ export function TickerMapping({ mappings, onAdd, onDelete, onUpdate }: TickerMap
                     <button
                         onClick={handleAdd}
                         disabled={!tvTicker || !selectedContract || adding}
-                        className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 rounded-lg flex items-center gap-1 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors shrink-0"
+                        className="btn-primary px-4 shrink-0"
                     >
                         <Plus size={16} /> Add
                     </button>
@@ -156,6 +156,7 @@ export function TickerMapping({ mappings, onAdd, onDelete, onUpdate }: TickerMap
                             <button
                                 onClick={() => onDelete(m.id)}
                                 className="p-1.5 hover:bg-red-500/10 text-slate-500 hover:text-red-400 rounded-lg transition-colors"
+                                aria-label={`Delete mapping ${m.tv_ticker}`}
                             >
                                 <Trash2 size={14} />
                             </button>

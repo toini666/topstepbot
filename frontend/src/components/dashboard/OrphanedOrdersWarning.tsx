@@ -38,7 +38,7 @@ export function OrphanedOrdersWarning({
     }
 
     return (
-        <div className="max-w-7xl mx-auto mb-6 bg-yellow-500/10 border border-yellow-500/20 rounded-xl p-4 flex items-center gap-4 animate-fade-in">
+        <div className="max-w-7xl mx-auto mb-6 bg-yellow-500/10 border border-yellow-500/20 rounded-2xl p-4 flex items-center gap-4 animate-fade-in" role="alert">
             <div className="bg-yellow-500/20 p-2 rounded-lg shrink-0">
                 <AlertTriangle className="w-6 h-6 text-yellow-500" />
             </div>

@@ -1,70 +1,73 @@
-# TopStepX Trading Bot 🤖
+# TopStepX Trading Bot
 
-A professional-grade automated trading system for TopStepX. Executes TradingView alerts with enterprise-level risk management, multi-account support, and real-time monitoring.
+Automated trading system for TopStepX. Executes TradingView alerts with risk management, multi-account support, and real-time monitoring.
 
 ---
 
-## ✨ Key Features
+## Key Features
 
-### ⚡ Multi-Account Execution
-- **Simultaneous Trading**: Execute signals across ALL connected accounts automatically
-- **Per-Account Risk Settings**: Configure different risk amounts and strategy settings per account
-- **Cross-Account Protection**: Prevents opening opposing positions across accounts
+### Multi-Account Execution
+- **Simultaneous Trading**: Execute signals across ALL connected accounts
+- **Per-Account Settings**: Independent risk amounts, max contracts, strategy configs
+- **Cross-Account Protection**: Prevents opposing positions across accounts
 
-### 🛡️ Risk Management
-- **Position Sizing**: Auto-calculates quantity based on risk per trade
+### Risk Management
+- **Position Sizing**: Auto-calculates quantity based on risk per trade and stop distance
 - **Session Filters**: Block trading during specific sessions (ASIA, UK, US)
-- **Blocked Periods**: Define custom time windows to prevent trading
-- **Robust Reconciliation**: Automatic detection and correction of discrepancies between local state and broker API
-- **Trading Days**: Per-day toggles for when you want to trade
+- **Blocked Periods**: Custom time windows to prevent trading
+- **News Blocks**: Auto-generated trading blocks from economic calendar events
+- **Position Actions**: Automatic BREAKEVEN/FLATTEN before entering blocked periods
+- **Trading Days**: Per-day toggles for when trading is allowed
+- **Contract Limits**: Max micro-equivalent contracts per account
+- **Signal Deduplication**: 30s cache prevents duplicate execution
 
-### 📈 Trade Lifecycle
-- **SIGNAL**: Open new positions with SL/TP orders
-- **PARTIAL**: Take partial profits with automatic SL/TP synchronization
+### Trade Lifecycle
+- **SIGNAL**: Open new positions with SL/TP bracket orders
+- **PARTIAL**: Take partial profits with automatic SL/TP sync and optional SL-to-breakeven
 - **CLOSE**: Full position closure on command
+- **SETUP**: Informational alerts, logged but no execution
 
-### 📊 Dashboard
-- **Real-Time Positions**: View open positions across all accounts
-- **Trade History**: Aggregated closed trades with strategy/timeframe
+### Dashboard
+- **Real-Time Positions**: Open positions with current price and unrealized PnL
+- **Trade History**: Aggregated closed trades with strategy/timeframe filters
 - **Daily P&L**: Live profit tracking per account
-- **Order History**: All orders with status updates
-- **System Logs**: Full audit trail with expandable details and stack traces
+- **Order History**: Working and filled orders
+- **System Logs**: Full audit trail with expandable JSON details
+- **Economic Calendar**: Major events, weekly schedule, impact/country filters
+- **Strategies Manager**: Global templates + per-account configuration
+- **Ticker Mapping**: TradingView to TopStep contract mapping
+- **Mock Webhook**: Test signals directly from the dashboard
+- **Trade Reconciliation**: Preview and apply corrections between local DB and broker API
 
-### 🔔 Notifications
-- **Telegram Bot**: Full control and real-time monitoring
-- **Discord Webhooks**: Customizable rich embeds for positions, partial closes, and daily summaries
-- **Visuals**: PnL-based colors (including Realized vs Latent PnL for partials), strategy details, and per-account filtering
+### Notifications
+- **Telegram Bot**: Full remote control + real-time alerts (positions, PnL, errors, health)
+- **Discord Webhooks**: Rich embeds for positions, partial closes, daily summaries
+- **Per-Account Config**: Enable/disable notification types per account
 
-### 📅 Economic Calendar
-- **Dashboard View**: Daily major events cards + full weekly table with filters
-- **Automated Fetch**: Daily sync with ForexFactory data (with smart throttling)
-- **Manual Refresh**: On-demand calendar update via dashboard button
-- **Daily Briefing**: Morning Discord notification with today's high-impact events
-- **Pre-Event Alerts**: Configurable Discord notification (e.g., 5 mins before) high-impact news starts
-- **Timezone Smart**: Auto-converts to your local trading time (Brussels)
+### Economic Calendar
+- **ForexFactory Integration**: Daily fetch with local caching
+- **Dashboard View**: Today's major events + weekly schedule with filters
+- **Discord Briefing**: Morning summary of high-impact events
+- **Pre-Event Alerts**: Configurable Discord notification before major news
+- **News Blocks**: Auto-converts events into trading blocks for the risk engine
 
-### 🔍 Contract Validation
-- **Daily Check**: Validates that all configured TopStep contracts (e.g., `MNQH6`) are still tradable
-- **Alerts**: Telegram notification if a contract expires or becomes invalid
-
-### 🤖 Telegram Bot Control
+### Telegram Bot Commands
 
 | Command | Description |
 |---------|-------------|
-| `/status` | Current account status |
-| `/status_all` | All accounts: trading status, PnL, positions |
+| `/status` | Current account status with unrealized PnL |
+| `/status_all` | All accounts summary |
 | `/accounts` | List accounts with IDs |
 | `/switch [ID]` | Change active account |
 | `/on` / `/off` | Enable/disable trading (current account) |
 | `/on_all` / `/off_all` | Enable/disable trading (ALL accounts) |
-| `/flatten` | Flatten current account (shows position + order count) |
-| `/flatten_all` | 🚨 Flatten ALL accounts (per-account breakdown) |
-| `/cancel_orders` | Cancel orders (shows count) |
-| `/cancel_all` | Cancel ALL account orders (per-account breakdown) |
+| `/flatten` / `/flatten_all` | Flatten current / ALL accounts |
+| `/cancel_orders` / `/cancel_all` | Cancel orders on current / ALL accounts |
+| `/login` / `/logout` | Connect / disconnect TopStep API |
 
 ---
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Prerequisites
 - Python 3.12+
@@ -85,7 +88,7 @@ cp .env.example .env
 
 ### Environment Variables (`.env`)
 ```env
-# TopStep API
+# TopStep API (required)
 TOPSTEP_USERNAME=your_username
 TOPSTEP_APIKEY=your_api_key
 
@@ -96,11 +99,11 @@ TELEGRAM_ID=your_chat_id
 # Database
 DATABASE_URL=sqlite:///./topstepbot.db
 
-# Optional
+# Ngrok (optional)
 NGROK_AUTHTOKEN=your_ngrok_token
 
-# Heartbeat Monitoring (Optional - for external systems like N8N)
-HEARTBEAT_WEBHOOK_URL=https://your-n8n.cloud/webhook/heartbeat
+# Heartbeat Monitoring (optional)
+HEARTBEAT_WEBHOOK_URL=https://your-monitoring.com/webhook
 HEARTBEAT_INTERVAL_SECONDS=60
 HEARTBEAT_AUTH_TOKEN=your_secret_token
 ```
@@ -109,7 +112,7 @@ HEARTBEAT_AUTH_TOKEN=your_secret_token
 ```bash
 ./start_bot.sh
 ```
-This handles: Backend API → Frontend → Ngrok → Sleep prevention → **Ngrok URL change detection**
+This handles: Backend API, Frontend, Ngrok, Sleep prevention, Ngrok URL change detection.
 
 **Access Points:**
 - Dashboard: http://localhost:5173
@@ -117,7 +120,7 @@ This handles: Backend API → Frontend → Ngrok → Sleep prevention → **Ngro
 
 ---
 
-## 📡 TradingView Webhook
+## TradingView Webhook
 
 ### Webhook URL
 ```
@@ -160,7 +163,7 @@ https://your-ngrok-url.ngrok-free.app/api/webhook
 
 ---
 
-## 🏗️ Architecture
+## Architecture
 
 ```
 ┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
@@ -172,68 +175,68 @@ https://your-ngrok-url.ngrok-free.app/api/webhook
                     ▼          ▼          ▼
               ┌──────────┐ ┌──────────┐ ┌──────────┐
               │  SQLite  │ │ Telegram │ │ React UI │
-              │    DB    │ │   Bot    │ │Dashboard │
+              │    DB    │ │ & Discord│ │Dashboard │
               └──────────┘ └──────────┘ └──────────┘
 ```
 
 ### Stack
-- **Backend**: FastAPI + SQLAlchemy + APScheduler
-- **Frontend**: React 18 + TypeScript + Vite + TailwindCSS v4
+- **Backend**: Python 3.12+, FastAPI, SQLAlchemy, APScheduler, httpx
+- **Frontend**: React 19, TypeScript 5, Vite 7, Tailwind CSS 4
 - **Database**: SQLite with auto-backup
+- **Notifications**: Telegram Bot API, Discord Webhooks
+- **External**: TopStepX REST API, ForexFactory (economic calendar)
 
 ---
 
-## 🔧 Configuration
+## Configuration
 
 ### Dashboard Settings
-- **Market Hours**: Define trading window
+- **Market Hours**: Define trading window (Brussels TZ)
+- **Trading Days**: Day-of-week toggles
 - **Blocked Periods**: Custom no-trade time blocks
+- **News Blocks**: Auto-generated from economic calendar
+- **Position Actions**: NOTHING/BREAKEVEN/FLATTEN before blocks
 - **Auto-Flatten**: Daily position closure time
-- **Account Risk**: Base risk amount per account
-- **Strategy Configs**: Risk factor, allowed sessions, partial TP settings
+- **Account Risk**: Base risk amount and max contracts per account
+- **Strategy Configs**: Risk factor, allowed sessions, partial TP, SL-to-breakeven
 
 ### Ticker Mapping
 Map TradingView tickers (e.g., `MNQ1!`) to TopStep contracts (e.g., `MNQH6`):
-- Configured via Dashboard → Strategies tab
-- Auto-resolved if no manual mapping
+- Configured via Dashboard Settings > Mappings tab
+- Includes tick size, tick value, micro equivalent
 
 ---
 
-## 🛡️ Security
+## Security
 
 | Feature | Implementation |
 |---------|----------------|
-| Webhook Security | TradingView IP whitelist |
+| Webhook Security | TradingView IP whitelist (4 IPs) + localhost |
+| Signal Deduplication | 30s TTL cache prevents duplicates |
 | CORS | Restricted to localhost only |
 | Credentials | Environment variables only |
 | Input Validation | Pydantic schemas |
+| Log Redaction | Sensitive data masked automatically |
 
 ---
 
-## 🗂️ Maintenance
+## Maintenance
 
 | Task | Schedule | Automatic |
 |------|----------|-----------|
-| Database Backup | 03:00 UTC | ✅ |
-| Log Cleanup | 03:15 UTC | ✅ (7 days) |
-| Startup Backup | On start | ✅ |
+| Database Backup | 03:00 UTC | 7-day retention |
+| Log Cleanup | 03:15 UTC | 7-day retention |
+| Startup Backup | On start | If none today |
+| API Health Check | Every 60s | Telegram alert on failure |
+| Contract Validation | Daily 23:00 | Telegram alert on expiry |
 
 Backups stored in `./backups/`
 
 ---
 
-## 🔔 External Monitoring (Heartbeat)
+## External Monitoring (Heartbeat)
 
-The bot can send periodic heartbeat pings to an external monitoring system (e.g., N8N, Healthchecks.io) to detect downtime.
-
-### Configuration
-```env
-HEARTBEAT_WEBHOOK_URL=https://your-monitoring-service.com/webhook
-HEARTBEAT_INTERVAL_SECONDS=60
-HEARTBEAT_AUTH_TOKEN=your_secret_token  # Sent as Authorization header value
-```
-
-### Payloads
+Periodic status pings to external systems (N8N, Healthchecks.io) for crash detection.
 
 **Heartbeat (every 60s):**
 ```json
@@ -254,8 +257,6 @@ HEARTBEAT_AUTH_TOKEN=your_secret_token  # Sent as Authorization header value
 ```json
 {
   "bot_name": "TopStepBot",
-  "timestamp": "2026-01-15T14:31:00+01:00",
-  "timestamp_unix": 1736946660,
   "event": "shutdown",
   "reason": "graceful",
   "uptime_seconds": 7200,
@@ -264,23 +265,23 @@ HEARTBEAT_AUTH_TOKEN=your_secret_token  # Sent as Authorization header value
 }
 ```
 
-> **Tip**: In N8N, check for `event: "shutdown"` to avoid false alerts on planned restarts. Use `timestamp_unix` for easier date manipulation.
+> **Tip**: In N8N, check for `event: "shutdown"` to avoid false alerts on planned restarts.
 
 ---
 
-## 📚 Documentation
+## Documentation
 
 - [Architecture Details](docs/architecture.md)
+- [Product Requirements](docs/prd.md)
 - [Execution Flows](docs/flows.md)
 - [TopStep API Reference](docs/docapitopstep.md)
-- [Project Backlog](docs/backlog.md)
 
 ---
 
-## ⚠️ Disclaimer
+## Disclaimer
 
 This software is provided as-is for educational purposes. Trading involves risk. Use at your own discretion.
 
 ---
 
-**Made with ❤️ for TopStepX traders**
+**Made for TopStepX traders**

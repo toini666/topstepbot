@@ -31,16 +31,16 @@ export const LogsPanel = memo(function LogsPanel({ logs, loadMoreLogs }: LogsPan
     return (
         <div className="animate-fade-in h-[calc(100vh-250px)] min-h-[500px]">
             <section className="bg-black/40 border border-slate-800 rounded-2xl overflow-hidden flex flex-col h-full">
-                <div className="bg-slate-900 p-4 border-b border-slate-800 flex justify-between items-center">
+                <div className="bg-slate-900/80 p-4 border-b border-slate-800 flex justify-between items-center">
                     <h3 className="text-sm font-semibold text-slate-300 flex items-center gap-2">
                         <Terminal className="w-4 h-4" />
                         System Logs
                     </h3>
                     <div className="flex gap-2 items-center">
                         <div className="flex gap-2">
-                            <span className="w-2.5 h-2.5 rounded-full bg-red-500"></span>
-                            <span className="w-2.5 h-2.5 rounded-full bg-yellow-500"></span>
-                            <span className="w-2.5 h-2.5 rounded-full bg-green-500"></span>
+                            <span className="w-2.5 h-2.5 rounded-full bg-red-500 opacity-80"></span>
+                            <span className="w-2.5 h-2.5 rounded-full bg-yellow-500 opacity-80"></span>
+                            <span className="w-2.5 h-2.5 rounded-full bg-green-500 opacity-80"></span>
                         </div>
                     </div>
                 </div>
@@ -121,7 +121,7 @@ export const LogsPanel = memo(function LogsPanel({ logs, loadMoreLogs }: LogsPan
 
                     <div className="pt-2 flex justify-center">
                         <button
-                            className="text-slate-500 hover:text-white text-xs underline"
+                            className="btn-ghost text-xs"
                             onClick={loadMoreLogs}
                         >
                             Load More Logs

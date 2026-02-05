@@ -57,7 +57,7 @@ export function TradesHistory({
                     <button
                         onClick={onReconcile}
                         disabled={isReconcileDisabled}
-                        className="p-2 rounded-lg text-slate-400 hover:text-indigo-400 hover:bg-indigo-500/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed border border-slate-700 hover:border-indigo-500/30 disabled:hover:text-slate-400 disabled:hover:bg-transparent disabled:hover:border-slate-700"
+                        className="btn-outline p-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:text-slate-400 disabled:hover:bg-transparent disabled:hover:border-slate-700/60"
                         title={reconcileTitle}
                     >
                         <RefreshCw className="w-4 h-4" />
@@ -169,8 +169,7 @@ export function TradesHistory({
                                 </td>
                                 <td className="py-3 px-4 font-bold text-white">{trade.symbol}</td>
                                 <td className="py-3 px-4 text-center">
-                                    <span className={`px-2 py-1 rounded-md text-xs font-bold ${trade.side === 'LONG' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'
-                                        }`}>
+                                    <span className={trade.side === 'LONG' ? 'badge-success' : 'badge-danger'}>
                                         {trade.side}
                                     </span>
                                 </td>

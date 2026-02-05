@@ -31,7 +31,7 @@ export function PositionsTable({
                 </h2>
                 <button
                     onClick={onFlattenAll}
-                    className="flex items-center gap-2 bg-red-500/10 hover:bg-red-500/20 text-red-500 font-bold py-2 px-4 rounded-lg transition-all border border-red-500/20 text-xs"
+                    className="btn-danger text-xs"
                     title="Flatten & Cancel All"
                 >
                     <AlertTriangle className="w-4 h-4" />
@@ -72,7 +72,7 @@ export function PositionsTable({
                                         {tf ? `${stratDisplay} (${tf})` : stratDisplay}
                                     </td>
                                     <td className="py-3 px-4 text-center">
-                                        <span className={`px-2 py-1 rounded-md text-xs font-bold ${pos.type === 1 ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
+                                        <span className={pos.type === 1 ? 'badge-success' : 'badge-danger'}>
                                             {pos.type === 1 ? 'LONG' : 'SHORT'}
                                         </span>
                                     </td>
@@ -94,7 +94,7 @@ export function PositionsTable({
                                     <td className="py-3 px-4 text-center">
                                         <button
                                             onClick={() => onClosePosition(pos.contractId)}
-                                            className="p-1 hover:bg-red-500/20 text-red-400 rounded transition-colors"
+                                            className="p-1.5 hover:bg-red-500/20 text-red-400 rounded-lg transition-colors"
                                             title="Close Position"
                                         >
                                             <X className="w-4 h-4" />

@@ -202,41 +202,54 @@ export function ConfigModal({ isOpen, onClose, config, onSave }: ConfigModalProp
 
     if (!isOpen) return null;
 
+    const configTabs = [
+        { key: 'general' as const, label: 'General' },
+        { key: 'sessions' as const, label: 'Sessions' },
+        { key: 'mappings' as const, label: 'Mappings' },
+        { key: 'notifications' as const, label: 'Notifications', icon: Bell },
+    ];
+
     return (
-        <div className="fixed inset-0 z-50 h-screen w-screen flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+        <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="config-title">
             <div
-                className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-lg shadow-2xl relative overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col max-h-[90vh]"
+                className="modal-container w-full max-w-lg flex flex-col max-h-[90vh]"
                 onClick={(e) => e.stopPropagation()}
             >
                 {/* Header */}
                 <div className="flex justify-between items-center p-6 border-b border-slate-800 bg-slate-900/50 shrink-0">
-                    <h3 className="text-xl font-bold text-white flex items-center gap-2">
+                    <h3 id="config-title" className="text-xl font-bold text-white flex items-center gap-2">
                         <Settings className="w-5 h-5 text-indigo-400" />
                         Global Settings
                     </h3>
-                    <button onClick={onClose} className="text-slate-400 hover:text-white transition-colors">
+                    <button onClick={onClose} className="text-slate-400 hover:text-white transition-colors" aria-label="Close settings">
                         <X size={20} />
                     </button>
                 </div>
 
                 {/* Tabs */}
-                <div className="flex border-b border-slate-800 bg-slate-950/30 px-6 shrink-0">
-                    {(['general', 'sessions', 'mappings', 'notifications'] as const).map(tab => (
+                <div className="flex border-b border-slate-800 bg-slate-950/30 px-6 shrink-0" role="tablist" aria-label="Settings sections">
+                    {configTabs.map(tab => (
                         <button
-                            key={tab}
-                            onClick={() => setActiveTab(tab)}
-                            className={`py-3 px-4 text-sm font-medium border-b-2 transition-colors capitalize ${activeTab === tab
+                            key={tab.key}
+                            role="tab"
+                            aria-selected={activeTab === tab.key}
+                            onClick={() => setActiveTab(tab.key)}
+                            className={`py-3 px-4 text-sm font-medium border-b-2 transition-colors capitalize ${activeTab === tab.key
                                 ? 'border-indigo-500 text-white'
                                 : 'border-transparent text-slate-400 hover:text-white'
                                 }`}
                         >
-                            {tab === 'notifications' ? <span className="flex items-center gap-1"><Bell size={14} /> Notifications</span> : tab}
+                            {tab.icon ? (
+                                <span className="flex items-center gap-1">
+                                    <tab.icon size={14} /> {tab.label}
+                                </span>
+                            ) : tab.label}
                         </button>
                     ))}
                 </div>
 
                 {/* Content */}
-                <div className="p-6 overflow-y-auto custom-scrollbar">
+                <div className="p-6 overflow-y-auto custom-scrollbar" role="tabpanel">
                     {activeTab === 'general' && (
                         <GeneralSettingsTab state={generalState} onChange={handleGeneralChange} />
                     )}
@@ -261,24 +274,23 @@ export function ConfigModal({ isOpen, onClose, config, onSave }: ConfigModalProp
 
                 {/* Footer */}
                 <div className="p-6 border-t border-slate-800 bg-slate-900/50 flex justify-end gap-3 shrink-0">
-                    <button onClick={onClose} className="px-4 py-2 rounded-xl text-slate-300 hover:text-white hover:bg-slate-800 font-medium text-sm">
+                    <button onClick={onClose} className="btn-ghost">
                         Cancel
                     </button>
                     {(activeTab === 'general' || activeTab === 'sessions') && (
                         <button
                             onClick={handleSave}
                             disabled={saving}
-                            className="px-6 py-2 rounded-xl font-bold text-sm bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg flex items-center gap-2"
+                            className="btn-primary"
                         >
                             <Save size={16} /> {saving ? 'Saving...' : 'Save Changes'}
                         </button>
                     )}
                     {activeTab === 'mappings' && (
-                        <button onClick={onClose} className="px-6 py-2 rounded-xl font-bold text-sm bg-indigo-600 hover:bg-indigo-700 text-white">
+                        <button onClick={onClose} className="btn-primary">
                             Done
                         </button>
                     )}
-                    {/* Notifications tab has its own save button inside */}
                 </div>
             </div>
         </div>

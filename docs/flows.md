@@ -20,6 +20,7 @@ This document details the exact sequences, validations, and API calls for all tr
 12. [Economic Calendar Flow](#12-economic-calendar-flow)
 13. [Unrealized PnL Flow](#13-unrealized-pnl-flow)
 14. [Position Action Flow](#14-position-action-flow)
+15. [Startup & Shutdown Flow](#15-startup--shutdown-flow)
 
 ---
 
@@ -39,6 +40,9 @@ TradingView         Webhook Router         RiskEngine          TopStep API
     │                     │   (TradingView IPs) │                    │
     │                     │   ❌ 403 if invalid │                    │
     │                     │                     │                    │
+    │                     │── Deduplicate ──────│                    │
+    │                     │   (30s TTL cache)   │                    │
+    │                     │                     │                    │
     │                     │── Log Reception ───▶│                    │
     │                     │                     │                    │
     │                     │◀─ Notify Signal ────│                    │
@@ -47,6 +51,7 @@ TradingView         Webhook Router         RiskEngine          TopStep API
     ├─────────────────────┼─ GLOBAL CHECKS ─────┼────────────────────┤
     │                     │                     │                    │
     │                     │── check_market_hours()                   │
+    │                     │   (trading_days + open/close times)      │
     │                     │◀─ (bool, reason) ───│                    │
     │                     │                     │                    │
     │                     │── check_blocked_periods()                │
@@ -59,6 +64,7 @@ TradingView         Webhook Router         RiskEngine          TopStep API
     │                     │                     │◀─ accounts[] ──────│
     │                     │                     │                    │
     ├─────────────────────┼─ PER-ACCOUNT LOOP ──┼────────────────────┤
+    │                     │   (Sync checks)     │                    │
     │                     │                     │                    │
     │                     │── ensure_account_settings(id) ──────────▶│
     │                     │                     │                    │
@@ -71,13 +77,14 @@ TradingView         Webhook Router         RiskEngine          TopStep API
     │                     │── check_session_allowed(id, strat)       │
     │                     │◀─ (bool, reason) ───│                    │
     │                     │                     │                    │
-
-    │                     │                     │                    │
-    │                     │── check_contract_limit(id, qty)          │
-    │                     │◀─ (bool, reason) ───│                    │
+    ├─────────────────────┼─ ASYNC CHECKS ──────┼────────────────────┤
+    │                     │   (Parallel)        │                    │
     │                     │                     │                    │
     │                     │── check_open_position(id, ticker) ──────▶│
     │                     │                     │◀─ positions[] ─────│
+    │                     │◀─ (bool, reason) ───│                    │
+    │                     │                     │                    │
+    │                     │── check_contract_limit(id, qty)          │
     │                     │◀─ (bool, reason) ───│                    │
     │                     │                     │                    │
     │                     │── → Add to eligible_accounts[] ─────────▶│
@@ -130,16 +137,18 @@ TradingView         Webhook Router         RiskEngine          TopStep API
 
 | Step | Check | Fail Action |
 |------|-------|-------------|
-| 0 | IP in TradingView whitelist | HTTP 403 Forbidden |
-| 1 | Market hours open | Reject all, log WARNING |
-| 2 | Not in blocked period | Reject all, log WARNING |
-| 3 | Account trading_enabled | Skip account, log DEBUG |
-| 4 | Strategy enabled on account | Skip account, log DEBUG |
-| 5 | Session allowed for strategy | Skip account, log DEBUG |
-| 6 | No existing position on ticker | Skip account, log INFO |
-| 7 | No opposing cross-account position | Reject all, log WARNING |
-| 8 | Contract resolved | Reject all, log ERROR |
-| 9 | Position size > 0 | Skip account, log WARNING |
+| 0 | IP in TradingView whitelist (or localhost) | HTTP 403 Forbidden |
+| 1 | Signal not duplicate (30s cache) | Skip, log INFO |
+| 2 | Market hours open (trading_days + hours) | Reject all, log WARNING |
+| 3 | Not in blocked period (manual + news) | Reject all, log WARNING |
+| 4 | Account trading_enabled | Skip account, log DEBUG |
+| 5 | Strategy enabled on account | Skip account, log DEBUG |
+| 6 | Session allowed for strategy | Skip account, log DEBUG |
+| 7 | No existing position on ticker | Skip account, log INFO |
+| 8 | Contract limit not exceeded | Skip account, log WARNING |
+| 9 | No opposing cross-account position | Reject all eligible, log WARNING |
+| 10 | Contract resolved | Reject all, log ERROR |
+| 11 | Position size > 0 | Skip account, log WARNING |
 
 ---
 
@@ -174,21 +183,21 @@ matching_trades = db.query(Trade).filter(
       - reduce_qty = max(1, int(current_size × partial_percent / 100))
       - If reduce_qty >= current_size: reduce_qty = current_size - 1
       - If reduce_qty <= 0: skip
-   g. Call TopStep: `partialCloseContract(account_id, contractId, reduce_qty)`
-   h. **CRITICAL: Sync remaining SL/TP order quantities**
+   g. Call TopStep: partialCloseContract(account_id, contractId, reduce_qty)
+   h. Sync remaining SL/TP order quantities:
       - Call sync_order_quantities(account_id, ticker, remaining_qty)
       - Updates all working SL/TP orders to match new position size
-      - Prevents over-closing when SL/TP is triggered
+      - Prevents over-closing when SL/TP triggers
    i. If move_sl_to_entry: call update_sl_tp_orders() with entry_price
    j. If alert has new SL/TP: update_sl_tp_orders()
-   l. **Fetch PnL**:
-       - Wait 4s for settlement
-       - Query TopStep Trade History (last 60s)
-       - Filter for closing trades (PnL != None) matching contract
-       - **Aggregate** Quantity, Realized PnL, and Fees from multiple fills
-       - Calculate Unrealized PnL for remaining quantity
-   m. Notify partial executed (Telegram) - includes Side, Reduced, Remaining, Realized PnL, Latent PnL
-   n. Notify partial executed (Discord) - if enabled (and notify_partial_close=True)
+   k. Fetch PnL:
+      - Wait 4s for settlement (PARTIAL_CLOSE_SETTLEMENT_DELAY)
+      - Query TopStep Trade History (last 60s)
+      - Filter for closing trades (PnL != None) matching contract
+      - Aggregate Quantity, Realized PnL, and Fees from multiple fills
+      - Calculate Unrealized PnL for remaining quantity
+   l. Notify partial executed (Telegram) - Side, Reduced, Remaining, Realized PnL, Latent PnL
+   m. Notify partial executed (Discord) - if enabled and notify_partial_close=True
 5. Return processed accounts
 ```
 
@@ -203,15 +212,15 @@ reduce_qty = max(1, int(current_size * (partial_percent / 100)))
 # 2 contracts × 50% = 1.0 → 1 contract
 ```
 
-### Order Quantity Sync (Critical Fix)
+### Order Quantity Sync
 ```python
 async def sync_order_quantities(account_id, ticker, new_quantity):
     """
     After partial close, SL/TP orders still have original quantity.
-    This syncs them to remaining position size to prevent over-closing.
+    Syncs them to remaining position size to prevent over-closing.
     """
     orders = await get_orders(account_id, days=1)
-    
+
     for order in orders:
         if order is SL/TP type and matches ticker:
             if order.size != new_quantity:
@@ -230,13 +239,14 @@ TradingView sends `type: "CLOSE"` webhook.
 ```
 1. Receive CLOSE webhook
 2. Notify close signal (Telegram)
-3. Query DB for matching open trades (same as PARTIAL)
+3. Query DB for matching open trades (same matching as PARTIAL)
 4. FOR EACH matching trade:
    a. Get account_id from trade
    b. Call TopStep: close_position(account_id, ticker)
    c. Call TopStep: cancel_all_orders(account_id)
    d. Update Trade record: status=CLOSED, exit_time=now
    e. Notify close executed (Telegram)
+   f. Notify close executed (Discord) - if enabled
 5. Return processed accounts
 ```
 
@@ -245,10 +255,10 @@ TradingView sends `type: "CLOSE"` webhook.
 ## 4. Position Monitoring Flow
 
 ### Trigger
-Scheduled job every 5 seconds.
+Scheduled job every 10 seconds (`monitor_closed_positions_job`).
 
 ### Purpose
-Detect positions closed externally (TP hit, SL hit, manual close).
+Detect positions closed externally (TP hit, SL hit, manual close), new positions, and partial closes.
 
 ### Startup Behavior
 On bot startup, existing positions are pre-loaded to avoid false "Position Opened" notifications:
@@ -272,18 +282,17 @@ On bot startup, existing positions are pre-loaded to avoid false "Position Opene
 2. FOR EACH connected account:
    a. Fetch current positions from TopStep
    b. Pre-fetch trade history (last 24h) ONCE for efficiency
-   c. Compare with previous snapshot
-   
-   d. **Detect Closures & Partials:**
+
+   c. Detect Closures & Partials:
       - Iterate positions in Previous Map
-      - IF position missing in Current Map -> FULL CLOSE
-      - IF position exists but size decreased -> PARTIAL CLOSE
-      
+      - IF position missing in Current Map → FULL CLOSE
+      - IF position exists but size decreased → PARTIAL CLOSE
+
       - IF Full Close detected:
         * Find matching OPEN trade in DB (by Ticker/Contract)
         * Filter Trade History (using pre-fetched data):
           - Match Contract ID or Symbol
-          - Match Entry Time (within 2s tolerance) or creation time
+          - Match Entry Time (within 5s tolerance) or creation time
         * IF matching history found:
           - Extract Exit Price, PnL, Fees from API trade
           - Update DB Trade: status=CLOSED, exit_time, pnl, fees
@@ -294,35 +303,35 @@ On bot startup, existing positions are pre-loaded to avoid false "Position Opene
           - If not, log Warning and generic "Position Closed" alert
 
       - IF Partial Close detected:
-         * Update DB Trade: Update PnL and Fees
-         * Notify Partial Close via Telegram & Discord
+        * Update DB Trade: Update PnL and Fees
+        * Notify Partial Close via Telegram & Discord
 
-   e. **Detect New Positions (Including Manual):**
+   d. Detect New Positions (Including Manual):
       - Iterate positions in Current Map
-      - IF position not in Previous Map -> NEW POSITION
+      - IF position not in Previous Map → NEW POSITION
       - Match against cached Trade History to get Entry Price/Time
       - Check DB for existing OPEN/PENDING trade
       - IF match found:
         * Update Entry Price (Fill) and Timestamp from API
-        * Preserve `signal_entry_price` for slippage calc
+        * Preserve signal_entry_price for slippage calc
       - IF NO match found (Manual Trade):
         * Create new Trade record (strategy="MANUAL")
         * Notify "Position Opened"
-      
-   f. **Reconciliation (Robust Consistency Check):**
+
+   e. Reconciliation (Consistency Check):
       - Iterate ALL 'OPEN' trades in DB for this account
       - IF trade.ticker not in Current API Positions:
-        * DANGER: DB says OPEN, API says GONE
-        * Search Trade History for an Exit execution AFTER the trade entry time
-        * IF Exit Found in History:
-          - Confirmed Closed
-          - Auto-correct DB: Set status=CLOSED, update PnL/Fees
+        * DB says OPEN, API says GONE
+        * Search Trade History for an Exit after the trade entry time
+        * IF Exit Found:
+          - Confirmed Closed → auto-correct DB
+          - Set status=CLOSED, update PnL/Fees
           - Notify "Reconciled Trade Closed"
         * IF Not Found:
-           - Leave as OPEN (could be API lag or other issue)
-           - Log Warning
+          - Leave as OPEN (could be API lag)
+          - Log Warning
 
-   g. Update memory with current positions
+   f. Update memory with current positions
 ```
 
 ### Data Structures
@@ -343,8 +352,9 @@ _last_orphans_ids = {order_id1, order_id2, ...}
 ## 5. Force Flatten Flow
 
 ### Trigger
-- Manual: Dashboard "Flatten & Cancel All" button
+- Manual: Dashboard "Flatten" / "Flatten All" button
 - Scheduled: Auto-flatten at configured time
+- Automatic: Position action before blocked period
 
 ### Per-Account Flatten
 
@@ -373,10 +383,10 @@ async def auto_flatten_job():
     settings = get_global_settings()
     if not settings["auto_flatten_enabled"]:
         return
-    
+
     now = datetime.now(BRUSSELS_TZ)
     target_time = parse(settings["auto_flatten_time"])
-    
+
     if now.strftime("%H:%M") == target_time:
         await flatten_all_accounts()
 ```
@@ -387,7 +397,7 @@ async def auto_flatten_job():
 
 ### Purpose
 Prevent opening BUY on Account A if SHORT exists on Account B for same ticker.
-**This check is configurable via `block_cross_account_opposite` global setting.**
+**Configurable via `block_cross_account_opposite` global setting.**
 
 ### Logic
 
@@ -397,21 +407,21 @@ async def check_cross_account_direction(ticker, direction, client):
     global_settings = get_global_settings()
     if not global_settings.get("block_cross_account_opposite", True):
         return True, "Cross-account check disabled"
-    
+
     clean_ticker = normalize(ticker)
     accounts = await client.get_accounts()
-    
+
     for account in accounts:
         positions = await client.get_open_positions(account["id"])
-        
+
         for pos in positions:
             if clean_ticker in pos["contractId"]:
                 pos_side = "LONG" if pos["type"] == 1 else "SHORT"
                 signal_side = "LONG" if direction in ["BUY", "LONG"] else "SHORT"
-                
+
                 if pos_side != signal_side:
                     return False, f"Opposing {pos_side} exists on {account['name']}"
-    
+
     return True, ""
 ```
 
@@ -419,10 +429,10 @@ async def check_cross_account_direction(ticker, direction, client):
 
 | Account A | Account B | Signal | Result |
 |-----------|-----------|--------|--------|
-| No MNQ | No MNQ | BUY MNQ | ✅ Execute both |
-| LONG MNQ | No MNQ | BUY MNQ | ⚠️ Skip A (exists), ✅ Execute B |
-| LONG MNQ | No MNQ | SELL MNQ | ❌ Block all (opposing) |
-| SHORT MNQ | SHORT MNQ | SELL MNQ | ⚠️ Skip all (exists) |
+| No MNQ | No MNQ | BUY MNQ | Execute both |
+| LONG MNQ | No MNQ | BUY MNQ | Skip A (exists), Execute B |
+| LONG MNQ | No MNQ | SELL MNQ | Block all (opposing) |
+| SHORT MNQ | SHORT MNQ | SELL MNQ | Skip all (exists) |
 
 ---
 
@@ -441,17 +451,14 @@ async def check_cross_account_direction(ticker, direction, client):
 ```python
 def get_current_session():
     now_bru = datetime.now(BRUSSELS_TZ).time()
-    
-    for session in db.query(TradingSession).all():
-        if not session.is_active:
-            continue
-        
+
+    for session in db.query(TradingSession).filter(TradingSession.is_active).all():
         start = parse_time(session.start_time)
         end = parse_time(session.end_time)
-        
+
         if start <= now_bru <= end:
             return session.name
-    
+
     return None
 ```
 
@@ -461,25 +468,25 @@ def get_current_session():
 def check_session_allowed(account_id, strategy_tv_id):
     current_session = get_current_session()
     config = get_strategy_config(account_id, strategy_tv_id)
-    
+
     # If no active session, check allow_outside_sessions
     if not current_session:
         if config and config.allow_outside_sessions:
             return True, "Allowed outside sessions"
         return False, "Outside all trading sessions"
-    
+
     if not config:
         return True, ""  # No config = use defaults
-    
+
     allowed = config.allowed_sessions.split(",")
-    
+
     if current_session in allowed:
         return True, ""
-    
+
     # Not in allowed session, check allow_outside_sessions
     if config.allow_outside_sessions:
         return True, "Allowed outside defined sessions"
-    
+
     return False, f"Session {current_session} not allowed"
 ```
 
@@ -493,19 +500,19 @@ def check_session_allowed(account_id, strategy_tv_id):
 def calculate_position_size(entry_price, sl_price, risk_amount, tick_size, tick_value):
     # 1. Calculate stop distance in price
     stop_distance = abs(entry_price - sl_price)
-    
+
     # 2. Convert to ticks
     ticks_at_risk = stop_distance / tick_size
-    
+
     # 3. Calculate risk per contract
     risk_per_contract = ticks_at_risk * tick_value
-    
+
     # 4. Calculate quantity
     if risk_per_contract <= 0:
         return 1  # Minimum
-    
+
     qty = risk_amount / risk_per_contract
-    
+
     # 5. Round down to integer
     return max(1, int(qty))
 ```
@@ -532,36 +539,14 @@ def get_risk_amount(account_id, strategy_tv_id):
     # 1. Get account base risk
     account_settings = get_account_settings(account_id)
     base_risk = account_settings.risk_per_trade  # e.g., $200
-    
+
     # 2. Get strategy risk factor
     config = get_strategy_config(account_id, strategy_tv_id)
     factor = config.risk_factor if config else 1.0  # e.g., 0.5
-    
+
     # 3. Calculate effective risk
     return base_risk * factor  # $200 × 0.5 = $100
 ```
-
----
-
-## API Response Codes
-
-### Webhook Responses
-
-| Response | Meaning |
-|----------|---------|
-| `{status: "received", accounts: [...]}` | Signal processing on listed accounts |
-| `{status: "rejected", reason: "..."}` | Global check failed |
-| `{status: "skipped", reason: "..."}` | No eligible accounts |
-| `{status: "processed", accounts: [...]}` | PARTIAL/CLOSE executed |
-| `{status: "error", reason: "..."}` | System error |
-
-### TopStep API Responses
-
-| Field | Values |
-|-------|--------|
-| `success` | true/false |
-| `errorCode` | 0 = Success |
-| `errorMessage` | Human-readable error |
 
 ---
 
@@ -581,7 +566,8 @@ Strategy (Global Template)
 ├── default_risk_factor (e.g., 1.0)
 ├── default_allowed_sessions (e.g., "ASIA,UK,US")
 ├── default_partial_tp_percent (e.g., 50)
-└── default_move_sl_to_entry (e.g., true)
+├── default_move_sl_to_entry (e.g., true)
+└── default_allow_outside_sessions (e.g., false)
 
 AccountStrategyConfig (Per-Account Override)
 ├── account_id, strategy_id
@@ -590,8 +576,7 @@ AccountStrategyConfig (Per-Account Override)
 ├── allowed_sessions (overrides default)
 ├── partial_tp_percent (overrides default)
 ├── move_sl_to_entry (overrides default)
-├── move_sl_to_entry (overrides default)
-└── allow_outside_sessions (Managed in UI via "OUTSIDE" session option)
+└── allow_outside_sessions (managed in UI via "OUTSIDE" session option)
 ```
 
 ### Configuration Flow
@@ -599,16 +584,16 @@ AccountStrategyConfig (Per-Account Override)
 ```
 1. User creates Strategy Template (Global)
    - Defines default_* values
-   
+
 2. User adds Strategy to Account
    - Creates AccountStrategyConfig
    - Copies defaults from template
-   
+
 3. User edits Account Config (inline via UI)
    - Modifies: sessions (including OUTSIDE), risk_factor, partial_%, SL→BE
    - "OUTSIDE" in sessions list maps to allow_outside_sessions=True
    - Changes apply ONLY to that account
-   
+
 4. Signal Processing uses per-account values:
    - risk_factor from AccountStrategyConfig
    - allowed_sessions from AccountStrategyConfig
@@ -631,9 +616,7 @@ AccountStrategyConfig (Per-Account Override)
 
 1. **Template changes don't propagate** - Modifying a global template does NOT update existing AccountStrategyConfigs. Changes only affect NEW additions.
 
-2. **Risk calculation uses account config** - The `get_risk_amount()` function uses `AccountStrategyConfig.risk_factor`, not `Strategy.default_risk_factor`.
-
-
+2. **Risk calculation uses account config** - `get_risk_amount()` uses `AccountStrategyConfig.risk_factor`, not `Strategy.default_risk_factor`.
 
 3. **All operations are logged** - Create/update/delete operations on both templates and account configs are recorded in System Logs with JSON details.
 
@@ -642,11 +625,11 @@ AccountStrategyConfig (Per-Account Override)
 ## 10. API Health Check Flow
 
 ### Trigger
-Scheduled job every 60 seconds (backend).
+Scheduled job every 60 seconds.
 
 ### Sequence
 ```
-1. Call TopStep: GET /api/Status/ping
+1. Call TopStep: POST /api/Status/ping
 2. Calculate response time (ms)
 3. IF Success (200 OK):
    a. Update global health state (healthy=True)
@@ -668,7 +651,7 @@ Scheduled job every 60 seconds (backend).
 ## 11. Heartbeat Monitoring Flow
 
 ### Purpose
-External uptime monitoring via webhook pings. Allows systems like N8N to detect bot crashes and send alerts when heartbeats stop arriving.
+External uptime monitoring via webhook pings. Allows systems like N8N to detect bot crashes.
 
 ### Configuration
 ```env
@@ -682,18 +665,18 @@ HEARTBEAT_AUTH_TOKEN=your_secret_token
 ```
 1. Check if HEARTBEAT_WEBHOOK_URL is configured
    - IF not set: Skip (feature disabled)
-   
+
 2. Detect sleep/wake:
    - IF last heartbeat was > 2 minutes ago:
      - Reset start_time (uptime restarts from 0)
      - Log "Sleep detected"
-   
+
 3. Gather bot status:
    a. Calculate uptime since startup (or last wake)
    b. Get global trading_enabled status
    c. Count active accounts
    d. Get API health status
-   
+
 4. Build payload:
    {
      "bot_name": "TopStepBot",
@@ -706,12 +689,12 @@ HEARTBEAT_AUTH_TOKEN=your_secret_token
      "api_healthy": true,
      "version": "2.0.0"
    }
-   
+
 5. Build headers:
    - Content-Type: application/json
    - IF HEARTBEAT_AUTH_TOKEN set:
      - Authorization: {token}
-     
+
 6. POST to webhook URL (timeout: 10s)
 
 7. Track failures (log only, no Telegram to avoid loops)
@@ -722,157 +705,83 @@ HEARTBEAT_AUTH_TOKEN=your_secret_token
 On graceful shutdown (CTRL-C), sends special payload:
 
 ```
-1. Detect shutdown signal (SIGINT/SIGTERM)
-
-2. Build shutdown payload:
-   {
-     "bot_name": "TopStepBot",
-     "timestamp": "2026-01-15T14:31:00+01:00",
-     "timestamp_unix": 1736946660,
-     "event": "shutdown",
-     "reason": "graceful",
-     "uptime_seconds": 7200,
-     "uptime_formatted": "2h 0m",
-     "version": "2.0.0"
-   }
-   
-3. POST to webhook URL (timeout: 5s)
-
-4. Continue with normal shutdown sequence
-```
-
-### N8N Integration Example
-
-```
-Workflow: Heartbeat Receiver
-├── Webhook Trigger (receives heartbeat)
-├── IF event == "shutdown":
-│   └── Update status: "Gracefully stopped" (no alert)
-├── ELSE:
-│   └── Update last_ping using timestamp_unix
-│
-Workflow: Alert Monitor (runs every 2-3 mins)
-├── Check: last_ping > 2 minutes ago?
-├── IF true AND status != "Gracefully stopped":
-│   └── Send Telegram Alert: "Bot crashed!"
+{
+  "bot_name": "TopStepBot",
+  "timestamp": "2026-01-15T14:31:00+01:00",
+  "timestamp_unix": 1736946660,
+  "event": "shutdown",
+  "reason": "graceful",
+  "uptime_seconds": 7200,
+  "uptime_formatted": "2h 0m",
+  "version": "2.0.0"
+}
 ```
 
 ### Payload Comparison
 
 | Field | Heartbeat | Shutdown |
 |-------|-----------|----------|
-| `timestamp` | ✅ ISO string | ✅ ISO string |
-| `timestamp_unix` | ✅ integer | ✅ integer |
-| `event` | ❌ absent | `"shutdown"` |
-| `reason` | ❌ absent | `"graceful"` |
-| `trading_enabled` | ✅ | ❌ absent |
-| `active_accounts` | ✅ | ❌ absent |
-| `api_healthy` | ✅ | ❌ absent |
-| `uptime_*` | ✅ | ✅ |
+| `timestamp` | ISO string | ISO string |
+| `timestamp_unix` | integer | integer |
+| `event` | absent | `"shutdown"` |
+| `reason` | absent | `"graceful"` |
+| `trading_enabled` | present | absent |
+| `active_accounts` | present | absent |
+| `api_healthy` | present | absent |
+| `uptime_*` | present | present |
 
 ---
 
 ## 12. Economic Calendar Flow
 
 ### Trigger
-Daily Scheduled Job at 07:00 (Europe/Brussels).
+Daily scheduled job at 07:00 (Europe/Brussels).
 
 ### Sequence
 ```
 1. Scheduler triggers check_calendar_job()
 2. Call CalendarService.fetch_calendar()
    - GET XML from ForexFactory
-   - Parse XML to JSON
-   - Cache results
-3. Get Global Settings
-   - calendar_discord_enabled
-   - calendar_major_countries
-   - calendar_major_impacts
-4. IF enabled:
+   - Parse XML to JSON (events list)
+   - Cache results to local JSON file
+   - Throttle: Max 1 fetch per 60s
+3. Recalculate news blocks:
+   - Filter events by calendar_major_countries + calendar_major_impacts
+   - Generate time blocks (event_time ± buffer_minutes)
+   - Store for risk engine consumption
+4. IF calendar_discord_enabled:
    - Filter events by Country/Impact settings
    - IF events found:
      - Build Discord Embed with "Today's Major Events"
-     - Send Webhook
+     - Send via calendar webhook
 5. Frontend "Calendar" tab:
-   - Fetches cached data via /api/calendar
+   - Fetches cached data via /api/calendar/events
    - Displays filtered list based on user UI filters
 ```
 
----
-
-## 13. Webhook Validation
-
-### Purpose
-Ensure that incoming webhooks (e.g., from TradingView alerts) are legitimate and authorized.
-
-### Configuration
-```env
-WEBHOOK_AUTH_TOKEN=your_secret_webhook_token
+### News Alert Job (Every 1 minute)
 ```
-
-### Validation Flow
-```
-1. Receive POST request at /webhook/tradingview
-2. Check for 'Authorization' header
-   - IF header missing or token invalid:
-     - Log WARNING "Unauthorized webhook attempt"
-     - Return 401 Unauthorized
-3. Parse webhook payload
-4. Process alert
+1. Check if calendar_news_alert_enabled
+2. Get upcoming events within calendar_news_alert_minutes
+3. IF event found AND not already alerted:
+   - Send Discord alert with event details
+   - Mark event as alerted (deduplication)
 ```
 
 ---
 
-## 14. News Block Position Action Flow
-
-### Purpose
-Automatically manage positions based on upcoming news events. This is a specific implementation of the general `Position Action Flow` (Section 16).
-
-### Trigger
-Integrated into the `position_action_job` (every 30 seconds).
-
-### Sequence
-```
-1. Inside position_action_job, after checking for Manual Blocks:
-2. Call risk_engine.get_upcoming_news_block(buffer_minutes)
-   - Checks for high-impact news events from the Economic Calendar
-   - Considers `calendar_major_countries` and `calendar_major_impacts` settings
-   - Returns details of the next relevant news event if within buffer
-   
-3. IF News Block Found AND Not Already Handled:
-   
-   a. CASE "BREAKEVEN":
-      - Get open positions for all accounts
-      - Modify all Stop Loss orders to Entry Price
-      - Log "Moved to Breakeven due to upcoming news block"
-      - Notify via Telegram
-      
-   b. CASE "FLATTEN":
-      - Call execute_flatten_all()
-      - Closes all positions, cancels all orders
-      - Log "Flattened due to upcoming news block"
-      - Notify via Telegram
-      
-   c. Add news block ID to _handled_position_action_blocks (deduplication)
-```
-
----
-
-## 15. Unrealized PnL Flow
-
-### Purpose
-Display floating (unrealized) PnL for open positions across Dashboard, API, and Telegram commands.
+## 13. Unrealized PnL Flow
 
 ### Components
 
 | Component | Purpose |
 |-----------|---------|
-| `price_cache.py` | In-memory cache with 5-second TTL for contract prices |
-| `topstep_client.get_current_price()` | Fetches latest price via `/api/History/retrieveBars` |
+| `price_cache.py` | In-memory cache with 5s TTL for contract prices |
+| `topstep_client.get_current_price()` | Fetches via `/api/History/retrieveBars` (1s bars) |
 | `calculate_unrealized_pnl()` | Calculates PnL from entry/current price and tick info |
-| `price_refresh_job()` | Scheduled job to refresh prices every 5s |
+| `price_refresh_job()` | Scheduled job to refresh prices every 10s |
 
-### Price Refresh Job (Every 5s)
+### Price Refresh Job (Every 10s, offset +5s from monitor)
 
 ```
 1. Get all accounts from TopStep
@@ -885,46 +794,6 @@ Display floating (unrealized) PnL for open positions across Dashboard, API, and 
      - Uses /api/History/retrieveBars with 1-second bars
      - Looks back 10 seconds, returns most recent close price
      - Store in cache with timestamp
-
----
-
-## 14. Position Action Flow
-
-### Trigger
-Scheduled job every 30 seconds (`position_action_job`).
-
-### Purpose
-Automatically protect open positions before entering a prohibited trading period (Manual Block or News Event) by moving to Breakeven or Flattening.
-
-### Configuration
-- `blocked_hours_position_action`: NOTHING / BREAKEVEN / FLATTEN
-- `position_action_buffer_minutes`: Minutes before block start (default: 1)
-
-### Sequence
-```
-1. Get Global Settings
-2. IF blocked_hours_position_action == "NOTHING": Return
-
-3. Check for upcoming block:
-   - Call risk_engine.get_upcoming_block(buffer_minutes)
-   - Checks both Manual Blocks and Dynamic News Blocks
-   
-4. IF Block Found AND Not Already Handled:
-   
-   a. CASE "BREAKEVEN":
-      - Get open positions for all accounts
-      - Modify all Stop Loss orders to Entry Price
-      - Log "Moved to Breakeven due to upcoming block"
-      - Notify via Telegram
-      
-   b. CASE "FLATTEN":
-      - Call execute_flatten_all()
-      - Closes all positions, cancels all orders
-      - Log "Flattened due to upcoming block"
-      - Notify via Telegram
-      
-   c. Add block ID to _handled_position_action_blocks (deduplication)
-```
 ```
 
 ### PnL Calculation
@@ -939,7 +808,7 @@ def calculate_unrealized_pnl(entry_price, current_price, quantity, is_long, tick
         price_diff = current_price - entry_price
     else:
         price_diff = entry_price - current_price
-    
+
     ticks = price_diff / tick_size
     pnl = ticks * tick_value * quantity
     return round(pnl, 2)
@@ -948,7 +817,7 @@ def calculate_unrealized_pnl(entry_price, current_price, quantity, is_long, tick
 ### Dashboard API Flow
 
 ```
-GET /dashboard/positions/{account_id}
+GET /dashboard/accounts/{account_id}/positions
 
 1. Fetch positions from TopStep API
 2. FOR EACH position:
@@ -962,25 +831,160 @@ GET /dashboard/positions/{account_id}
 
 ```
 /status command:
-├── Shows per-position unrealized PnL: "• MNQ: 🟢 LONG x2 @ 21500 | 🟢 $125.50"
-└── Shows total unrealized: "📊 Unrealized: 🟢 $250.00"
+├── Shows per-position unrealized PnL: "• MNQ: LONG x2 @ 21500 | $125.50"
+└── Shows total unrealized: "Unrealized: $250.00"
 
 /status_all command:
 ├── Shows per-account unrealized when positions exist
-└── Shows total: "TOTAL: 🟢 $500 Realized | 🔴 -$25 Unrealized | 3 pos"
+└── Shows total: "TOTAL: $500 Realized | -$25 Unrealized | 3 pos"
 ```
-
-### Frontend Display
-
-The Open Positions table includes:
-- **Entry** column: Original entry price
-- **Current** column: Real-time price from cache
-- **PnL** column: Calculated unrealized PnL with green/red styling
 
 ### Cache Strategy
 
 | Setting | Value | Reason |
 |---------|-------|--------|
 | TTL | 5 seconds | Balance between freshness and API limits |
-| Refresh Rate | Every 5s | Matches position monitor frequency |
+| Refresh Rate | Every 10s | Staggered with position monitor |
 | Stale Handling | Returns None if expired | Frontend shows "-" for unavailable prices |
+
+---
+
+## 14. Position Action Flow
+
+### Trigger
+Scheduled job every 30 seconds (`position_action_job`).
+
+### Purpose
+Automatically protect open positions before entering a prohibited trading period (manual block or news event).
+
+### Configuration
+- `blocked_hours_position_action`: NOTHING / BREAKEVEN / FLATTEN
+- `position_action_buffer_minutes`: Minutes before block start (default: 1)
+
+### Sequence
+```
+1. Get Global Settings
+2. IF blocked_hours_position_action == "NOTHING": Return
+
+3. Check for upcoming block:
+   a. Check Manual Blocks:
+      - Iterate blocked_periods
+      - Compare current time + buffer to block start time
+   b. Check News Blocks:
+      - Call risk_engine.get_upcoming_news_block(buffer_minutes)
+      - Checks high-impact events from Economic Calendar
+
+4. IF Block Found AND Not Already Handled:
+
+   a. CASE "BREAKEVEN":
+      - Get open positions for all accounts
+      - FOR EACH position:
+        * Find matching OPEN trade in DB (for entry price)
+        * Modify Stop Loss order to entry_price
+      - Log "Moved to Breakeven due to upcoming block"
+      - Notify via Telegram
+
+   b. CASE "FLATTEN":
+      - Call execute_flatten_all()
+      - Closes all positions, cancels all orders
+      - Log "Flattened due to upcoming block"
+      - Notify via Telegram
+
+   c. Add block ID to _handled_position_action_blocks (deduplication)
+      - Prevents re-triggering for the same block
+      - Reset daily
+```
+
+---
+
+## 15. Startup & Shutdown Flow
+
+### Startup Sequence
+
+```
+1. init_db()
+   - Create all SQLAlchemy tables
+
+2. topstep_client.startup()
+   - Initialize persistent httpx.AsyncClient
+
+3. calendar_service.recalculate_news_blocks()
+   - Load cached calendar, compute today's news blocks
+
+4. seed_default_sessions(db)
+   - Create ASIA/UK/US sessions if missing
+
+5. check_and_run_startup_backup()
+   - Backup DB if no backup exists for today
+
+6. load_state()
+   - Restore _last_open_positions from persistence.json
+
+7. Log "System Restarted" to DB
+
+8. topstep_client.login()
+   - Authenticate with API key
+
+9. Pre-load all account positions:
+   - FOR EACH account:
+     * Fetch current positions
+     * Store in _last_open_positions (prevent false alerts)
+     * Collect for summary
+
+10. Send startup notification (Telegram):
+    - With positions: Summary of all open positions
+    - Without positions: "Bot Online" message
+
+11. Schedule all jobs:
+    - All with max_instances=1, coalesce=True
+    - Position monitor: 10s interval
+    - Price refresh: 10s interval (offset +5s)
+    - Auto flatten: 1m interval
+    - Position action: 30s interval
+    - API health: 60s interval
+    - Discord summary: 1m interval
+    - Heartbeat: configurable interval
+    - Calendar: daily 07:00 Brussels
+    - News alert: 1m interval
+    - Contract validation: daily 23:00 Brussels
+    - DB backup: daily 03:00 UTC
+    - Log cleanup: daily 03:15 UTC
+
+12. Start Telegram polling bot (background task)
+```
+
+### Shutdown Sequence
+
+```
+1. Stop scheduler (prevent new job runs)
+2. Stop Telegram polling
+3. Close persistent HTTP client
+4. Send shutdown webhook (heartbeat with event="shutdown")
+5. Save state to persistence.json:
+   - _last_open_positions for all accounts
+6. Send Telegram shutdown notification
+7. Wait for polling task to finish
+```
+
+---
+
+## API Response Codes
+
+### Webhook Responses
+
+| Response | Meaning |
+|----------|---------|
+| `{status: "received", accounts: [...]}` | Signal processing on listed accounts |
+| `{status: "rejected", reason: "..."}` | Global check failed |
+| `{status: "skipped", reason: "..."}` | No eligible accounts |
+| `{status: "processed", accounts: [...]}` | PARTIAL/CLOSE executed |
+| `{status: "error", reason: "..."}` | System error |
+| `{status: "duplicate"}` | Signal deduplication (30s cache hit) |
+
+### TopStep API Responses
+
+| Field | Values |
+|-------|--------|
+| `success` | true/false |
+| `errorCode` | 0 = Success |
+| `errorMessage` | Human-readable error |

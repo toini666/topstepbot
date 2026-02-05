@@ -64,7 +64,7 @@ export function Header({
     }, [accountDropdownOpen]);
 
     return (
-        <header className="max-w-7xl mx-auto mb-6 flex justify-between items-center bg-slate-900/50 p-6 rounded-2xl border border-slate-800">
+        <header className="max-w-7xl mx-auto mb-6 flex justify-between items-center bg-slate-900/50 p-6 rounded-2xl border border-slate-800/60 shadow-lg shadow-black/20">
             <div className="flex items-center gap-4">
                 <img src="/robot_favicon.png" alt="Bot Logo" className="w-12 h-12 rounded-xl" />
                 <div>
@@ -105,7 +105,7 @@ export function Header({
                     <button
                         onClick={connect}
                         disabled={loading}
-                        className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded-xl transition-all flex items-center gap-2 shadow-lg shadow-blue-900/20"
+                        className="btn-primary"
                     >
                         {loading ? "Connecting..." : "Connect TopStep"}
                     </button>
@@ -114,7 +114,7 @@ export function Header({
                 {/* Account Selector */}
                 {isConnected && (
                     <div className="flex items-center gap-2">
-                        <div className="bg-slate-900 border border-slate-800 p-2 rounded-xl min-w-[200px] flex flex-col justify-center relative group-account-selector">
+                        <div className="bg-slate-900 border border-slate-800/60 p-2 rounded-xl min-w-[200px] flex flex-col justify-center relative group-account-selector">
                             <p className="text-slate-400 text-xs uppercase tracking-wider mb-1 ml-1">Connected Account</p>
                             <button
                                 onClick={() => accounts.length > 0 && setAccountDropdownOpen(!accountDropdownOpen)}
@@ -176,11 +176,11 @@ export function Header({
                     </div>
                 )}
 
-                <div className="h-8 w-px bg-slate-800" />
+                <div className="h-8 w-px bg-slate-700/40" />
 
                 {/* Stats */}
                 <div className="flex gap-8">
-                    <div className="bg-slate-900 border border-slate-800 p-4 rounded-xl min-w-[150px] flex flex-col justify-between">
+                    <div className="bg-slate-900 border border-slate-800/60 p-4 rounded-xl min-w-[150px] flex flex-col justify-between shadow-lg shadow-black/20">
                         <p className="text-slate-400 text-xs uppercase tracking-wider mb-1">Daily P&L (Realized)</p>
                         <div className="flex items-center gap-2">
                             <DollarSign className={`w-5 h-5 ${dailyPnl >= 0 ? 'text-green-400' : 'text-red-400'}`} />
@@ -189,7 +189,7 @@ export function Header({
                             </span>
                         </div>
                     </div>
-                    <div className="bg-slate-900 border border-slate-800 p-4 rounded-xl min-w-[150px] flex flex-col justify-between">
+                    <div className="bg-slate-900 border border-slate-800/60 p-4 rounded-xl min-w-[150px] flex flex-col justify-between shadow-lg shadow-black/20">
                         <p className="text-slate-400 text-xs uppercase tracking-wider mb-1">Active Trades</p>
                         <div className="flex items-center gap-2">
                             <Activity className="w-5 h-5 text-blue-400" />
