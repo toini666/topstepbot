@@ -49,7 +49,7 @@ SIGNAL_CACHE_TTL = 30  # seconds
 def get_signal_hash(alert: TradingViewAlert) -> str:
     """Generate a unique hash for the signal."""
     # Combine key fields to identify duplicates
-    content = f"{alert.ticker}-{alert.side}-{alert.entry}-{alert.stop}-{alert.strategy}-{alert.timeframe}"
+    content = f"{alert.ticker}-{alert.side}-{alert.entry}-{alert.stop}-{alert.strat}-{alert.timeframe}"
     return hashlib.md5(content.encode()).hexdigest()
 
 def is_duplicate_signal(alert: TradingViewAlert) -> bool:

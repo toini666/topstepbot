@@ -50,7 +50,8 @@ class TopStepClient:
         payload: dict = None, 
         headers: dict = None,
         max_retries: int = 5,
-        log_on_success: bool = True
+        log_on_success: bool = True,
+        expect_json: bool = True
     ) -> tuple:
         """
         Centralized HTTP request handler with exponential backoff for rate limiting.
@@ -124,14 +125,19 @@ class TopStepClient:
                     # We must let the time run out naturally.
                     # self._rate_limit_until = None 
                     
-                    try:
-                        data = response.json()
+                    if expect_json:
+                        try:
+                            data = response.json()
+                            if log_on_success:
+                                self._log_api_call(method, url, payload, data, response.status_code)
+                            return (data, response.status_code, True)
+                        except json.JSONDecodeError:
+                            self._log_api_call(method, url, payload, {"raw": response.text}, response.status_code)
+                            return (None, response.status_code, False)
+                    else:
                         if log_on_success:
-                            self._log_api_call(method, url, payload, data, response.status_code)
-                        return (data, response.status_code, True)
-                    except json.JSONDecodeError:
-                        self._log_api_call(method, url, payload, {"raw": response.text}, response.status_code)
-                        return (None, response.status_code, False)
+                            self._log_api_call(method, url, payload, {"text": response.text}, response.status_code)
+                        return (response.text, response.status_code, True)
                         
             except httpx.TimeoutException:
                 self._consecutive_errors += 1
@@ -333,7 +339,7 @@ class TopStepClient:
         # Ping usually shouldn't trigger circuit breaker blocking, but 429s should still count?
         # Let's use _make_request but maybe allow it to pass even if CB is open? 
         # Actually standardizing is safer.
-        data, status_code, success = await self._make_request("GET", url, max_retries=1, log_on_success=False)
+        data, status_code, success = await self._make_request("GET", url, max_retries=1, log_on_success=False, expect_json=False)
         response_time = (time.time() - start_time) * 1000  # ms
         
         if success and status_code == 200:

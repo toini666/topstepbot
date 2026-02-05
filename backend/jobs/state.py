@@ -65,6 +65,14 @@ def get_last_open_positions() -> Dict[int, Dict[str, Any]]:
     """
     return _last_open_positions
 
+def set_last_open_positions(positions: Dict[int, Dict[str, Any]]) -> None:
+    """
+    Set the entire state of open positions (Direct access).
+    Used primarily for restoring state from persistence on startup.
+    """
+    global _last_open_positions
+    _last_open_positions = positions
+
 def get_last_orphans_ids() -> Set[str]:
     """Get the set of known orphan order IDs."""
     return _last_orphans_ids
