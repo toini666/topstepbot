@@ -171,7 +171,8 @@ export const useTopStep = () => {
                         const newOrders: Record<number, Order[]> = {};
                         const newTrades: Record<number, HistoricalTrade[]> = {};
 
-                        for (const account of accounts) {
+                        // Parallel Fetch for ALL accounts
+                        await Promise.all(accounts.map(async (account) => {
                             const aid = account.id;
                             try {
                                 const [posRes, ordRes, histRes] = await Promise.all([
@@ -179,6 +180,7 @@ export const useTopStep = () => {
                                     axios.get(`${API_BASE}/dashboard/orders/${aid}`, { params: { days } }),
                                     axios.get(`${API_BASE}/dashboard/trades`, { params: { account_id: aid, days, status: 'CLOSED' } })
                                 ]);
+
                                 newPositions[aid] = posRes.data;
                                 newOrders[aid] = ordRes.data;
 
@@ -215,7 +217,7 @@ export const useTopStep = () => {
                                 newOrders[aid] = [];
                                 newTrades[aid] = [];
                             }
-                        }
+                        }));
 
                         // Smart update for big objects
                         setPositionsByAccount(prev => JSON.stringify(prev) !== JSON.stringify(newPositions) ? newPositions : prev);

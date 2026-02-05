@@ -117,7 +117,8 @@ TradingView         Webhook Router         RiskEngine          TopStep API
     │                     │                     │── Notify Submitted │
     │                     │                     │   (Telegram)       │
     │                     │                     │                    │
-    │                     │                     │── Sleep 1s         │
+    │                     │                     │── Smart Polling    │
+    │                     │                     │   (Wait for fill)  │
     │                     │                     │                    │
     │                     │                     │── update_sl_tp()──▶│
     │                     │                     │   (Fix prices)     │

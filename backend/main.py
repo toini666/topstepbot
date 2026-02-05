@@ -54,6 +54,9 @@ async def lifespan(app: FastAPI):
     # Startup
     init_db()
     
+    # Initialize Persistent HTTP Client
+    await topstep_client.startup()
+    
     # Seed default trading sessions
     from backend.database import SessionLocal
     db = SessionLocal()
@@ -136,40 +139,41 @@ async def lifespan(app: FastAPI):
         print(f"Auto-login failed: {e}")
 
     # Add Scheduled Jobs
-    scheduler.add_job(auto_flatten_job, 'interval', minutes=1)
+    # Add max_instances=1 and coalesce=True to prevent job overlap and execution pile-up
+    scheduler.add_job(auto_flatten_job, 'interval', minutes=1, max_instances=1, coalesce=True)
     # Position monitoring: 10s interval
-    scheduler.add_job(monitor_closed_positions_job, 'interval', seconds=10, id='monitor_positions')
+    scheduler.add_job(monitor_closed_positions_job, 'interval', seconds=10, id='monitor_positions', max_instances=1, coalesce=True)
     # Price refresh: 10s interval, starts 5s after monitor job to stagger API calls
     price_refresh_start = datetime.now() + timedelta(seconds=5)
-    scheduler.add_job(price_refresh_job, 'interval', seconds=10, id='price_refresh', next_run_time=price_refresh_start)
+    scheduler.add_job(price_refresh_job, 'interval', seconds=10, id='price_refresh', next_run_time=price_refresh_start, max_instances=1, coalesce=True)
     
     # Maintenance Jobs
-    scheduler.add_job(backup_database, 'cron', hour=3, minute=0)
-    scheduler.add_job(clean_logs, 'cron', hour=3, minute=15, kwargs={'days': 7})
+    scheduler.add_job(backup_database, 'cron', hour=3, minute=0, max_instances=1, coalesce=True)
+    scheduler.add_job(clean_logs, 'cron', hour=3, minute=15, kwargs={'days': 7}, max_instances=1, coalesce=True)
     
     # API Health Check (every 60 seconds)
-    scheduler.add_job(api_health_check_job, 'interval', seconds=60)
+    scheduler.add_job(api_health_check_job, 'interval', seconds=60, max_instances=1, coalesce=True)
     
     # Discord Daily Summary (every minute, checks configured times per account)
-    scheduler.add_job(discord_daily_summary_job, 'interval', minutes=1)
+    scheduler.add_job(discord_daily_summary_job, 'interval', minutes=1, max_instances=1, coalesce=True)
     
     # Position Action Job (every 30 seconds - checks for upcoming blocked periods)
-    scheduler.add_job(position_action_job, 'interval', seconds=30)
+    scheduler.add_job(position_action_job, 'interval', seconds=30, max_instances=1, coalesce=True)
 
     # Heartbeat Job (configurable interval, default 60s)
     heartbeat_interval = int(os.getenv("HEARTBEAT_INTERVAL_SECONDS", "60"))
     if os.getenv("HEARTBEAT_WEBHOOK_URL"):
-        scheduler.add_job(heartbeat_job, 'interval', seconds=heartbeat_interval)
+        scheduler.add_job(heartbeat_job, 'interval', seconds=heartbeat_interval, max_instances=1, coalesce=True)
         print(f"Heartbeat configured: every {heartbeat_interval}s -> {os.getenv('HEARTBEAT_WEBHOOK_URL')}")
 
     # Initialize heartbeat start time
     init_heartbeat_start_time(datetime.now(BRUSSELS_TZ))
 
     # Calendar Job (7:00 AM Brussels)
-    scheduler.add_job(calendar_service.check_calendar_job, 'cron', hour=7, minute=0, timezone=BRUSSELS_TZ)
+    scheduler.add_job(calendar_service.check_calendar_job, 'cron', hour=7, minute=0, timezone=BRUSSELS_TZ, max_instances=1, coalesce=True)
 
     # Daily Contract Validation (Daily at 23:00 Brussels)
-    scheduler.add_job(contract_validator.validate_active_mappings, 'cron', hour=23, minute=0, timezone=BRUSSELS_TZ, id='contract_validation')
+    scheduler.add_job(contract_validator.validate_active_mappings, 'cron', hour=23, minute=0, timezone=BRUSSELS_TZ, id='contract_validation', max_instances=1, coalesce=True)
 
     scheduler.start()
     print("Scheduler started.")
@@ -189,6 +193,9 @@ async def lifespan(app: FastAPI):
     # Stop Telegram polling
     telegram_bot.stop_polling()
     print("   ✓ Telegram polling stopped")
+    
+    # Close Persistent HTTP Client
+    await topstep_client.shutdown()
     
     # Send shutdown notification to monitoring
     await send_shutdown_webhook()

@@ -20,7 +20,7 @@ class TopStepClient:
         # Official TopStepX API URL
         self.base_url = os.getenv("TOPSTEP_URL", "https://api.topstepx.com")
         self.username = os.getenv("TOPSTEP_USERNAME")
-        self.password = os.getenv("TOPSTEP_PASSWORD") # Not used for 'loginKey' auth but kept for compat
+        self.password = os.getenv("TOPSTEP_PASSWORD") # Not used for 'loginKey' auth but kept for compatibility
         self.api_key = os.getenv("TOPSTEP_APIKEY") # NEW: Required for ProjectX
 
         self.token = None
@@ -42,6 +42,22 @@ class TopStepClient:
             "orders": 5,         # 5 seconds for orders
             "trades": 10,        # 10 seconds for historical trades
         }
+        
+        # Persistent HTTP Client
+        self.client = None
+
+    async def startup(self):
+        """Initialize persistent HTTP client."""
+        if self.client is None:
+            self.client = httpx.AsyncClient(timeout=15.0)
+            logger.info("TopStepClient: Persistent HTTP client initialized.")
+
+    async def shutdown(self):
+        """Close persistent HTTP client."""
+        if self.client:
+            await self.client.aclose()
+            self.client = None
+            logger.info("TopStepClient: Persistent HTTP client closed.")
 
     async def _make_request(
         self, 
@@ -56,6 +72,10 @@ class TopStepClient:
         """
         Centralized HTTP request handler with exponential backoff for rate limiting.
         """
+        # Ensure client is initialized
+        if self.client is None:
+            await self.startup()
+
         # 1. CIRCUIT BREAKER CHECK
         if self._rate_limit_until and datetime.now(timezone.utc) < self._rate_limit_until:
             wait_time = (self._rate_limit_until - datetime.now(timezone.utc)).total_seconds()
@@ -66,78 +86,77 @@ class TopStepClient:
         
         for attempt in range(max_retries):
             try:
-                async with httpx.AsyncClient(timeout=15.0) as client:
-                    if method.upper() == "GET":
-                        response = await client.get(url, headers=headers)
-                    else:
-                        response = await client.post(url, json=payload, headers=headers)
+                if method.upper() == "GET":
+                    response = await self.client.get(url, headers=headers)
+                else:
+                    response = await self.client.post(url, json=payload, headers=headers)
+                
+                # Handle rate limiting (429) - TRIGGER CIRCUIT BREAKER
+                if response.status_code == 429:
+                    self._consecutive_errors += 1
                     
-                    # Handle rate limiting (429) - TRIGGER CIRCUIT BREAKER
-                    if response.status_code == 429:
-                        self._consecutive_errors += 1
-                        
-                        # Enable Circuit Breaker for 60 seconds
-                        cooldown = 60
-                        self._rate_limit_until = datetime.now(timezone.utc) + timedelta(seconds=cooldown)
-                        
-                        logger.error(
-                            f"Rate limit hit (429) on {url}. Circuit Breaker ACTIVATED for {cooldown}s. "
-                            f"Consecutive errors: {self._consecutive_errors}"
-                        )
-                        
-                        # Log to database
-                        self._log_api_call(method, url, payload, {"error": "Rate Limit Circuit Breaker Activated"}, 429)
-                        
-                        # Send Telegram alert immediately
-                        if not self._rate_limit_alert_sent:
-                            await self._send_rate_limit_alert(url, self._consecutive_errors)
-                        
-                        self._last_rate_limit_time = datetime.now(timezone.utc)
-                        
-                        # ABORT RETRIES - STOP HAMMERING
-                        return (None, 429, False)
+                    # Enable Circuit Breaker for 60 seconds
+                    cooldown = 60
+                    self._rate_limit_until = datetime.now(timezone.utc) + timedelta(seconds=cooldown)
                     
-                    # Handle auth errors
-                    if response.status_code == 401:
-                        self.token = None
-                        self._log_api_call(method, url, payload, None, 401)
-                        return (None, 401, False)
+                    logger.error(
+                        f"Rate limit hit (429) on {url}. Circuit Breaker ACTIVATED for {cooldown}s. "
+                        f"Consecutive errors: {self._consecutive_errors}"
+                    )
                     
-                    # Handle 502 Bad Gateway (Maintenance)
-                    if response.status_code == 502:
-                        logger.warning(f"Topstep API 502 Bad Gateway on {url}. Maintenance likely. Waiting 60s...")
-                        # Log it but don't count strictly as a "connection error" for circuit breaker, just maintenance
-                        self._log_api_call(method, url, payload, None, 502)
-                        await asyncio.sleep(60)
-                        continue # Retry
+                    # Log to database
+                    self._log_api_call(method, url, payload, {"error": "Rate Limit Circuit Breaker Activated"}, 429)
                     
-                    # Handle other errors
-                    if response.status_code >= 400:
-                        self._consecutive_errors += 1
-                        self._log_api_call(method, url, payload, None, response.status_code)
-                        return (None, response.status_code, False)
+                    # Send Telegram alert immediately
+                    if not self._rate_limit_alert_sent:
+                        await self._send_rate_limit_alert(url, self._consecutive_errors)
                     
-                    # Success - reset error counter
-                    self._consecutive_errors = 0
-                    self._rate_limit_alert_sent = False
-                    # DO NOT RESET CIRCUIT BREAKER ON SUCCESS
-                    # Concurrent requests might succeed while a ban is active.
-                    # We must let the time run out naturally.
-                    # self._rate_limit_until = None 
+                    self._last_rate_limit_time = datetime.now(timezone.utc)
                     
-                    if expect_json:
-                        try:
-                            data = response.json()
-                            if log_on_success:
-                                self._log_api_call(method, url, payload, data, response.status_code)
-                            return (data, response.status_code, True)
-                        except json.JSONDecodeError:
-                            self._log_api_call(method, url, payload, {"raw": response.text}, response.status_code)
-                            return (None, response.status_code, False)
-                    else:
+                    # ABORT RETRIES - STOP HAMMERING
+                    return (None, 429, False)
+                
+                # Handle auth errors
+                if response.status_code == 401:
+                    self.token = None
+                    self._log_api_call(method, url, payload, None, 401)
+                    return (None, 401, False)
+                
+                # Handle 502 Bad Gateway (Maintenance)
+                if response.status_code == 502:
+                    logger.warning(f"Topstep API 502 Bad Gateway on {url}. Maintenance likely. Waiting 60s...")
+                    # Log it but don't count strictly as a "connection error" for circuit breaker, just maintenance
+                    self._log_api_call(method, url, payload, None, 502)
+                    await asyncio.sleep(60)
+                    continue # Retry
+                
+                # Handle other errors
+                if response.status_code >= 400:
+                    self._consecutive_errors += 1
+                    self._log_api_call(method, url, payload, None, response.status_code)
+                    return (None, response.status_code, False)
+                
+                # Success - reset error counter
+                self._consecutive_errors = 0
+                self._rate_limit_alert_sent = False
+                # DO NOT RESET CIRCUIT BREAKER ON SUCCESS
+                # Concurrent requests might succeed while a ban is active.
+                # We must let the time run out naturally.
+                # self._rate_limit_until = None 
+                
+                if expect_json:
+                    try:
+                        data = response.json()
                         if log_on_success:
-                            self._log_api_call(method, url, payload, {"text": response.text}, response.status_code)
-                        return (response.text, response.status_code, True)
+                            self._log_api_call(method, url, payload, data, response.status_code)
+                        return (data, response.status_code, True)
+                    except json.JSONDecodeError:
+                        self._log_api_call(method, url, payload, {"raw": response.text}, response.status_code)
+                        return (None, response.status_code, False)
+                else:
+                    if log_on_success:
+                        self._log_api_call(method, url, payload, {"text": response.text}, response.status_code)
+                    return (response.text, response.status_code, True)
                         
             except httpx.TimeoutException:
                 self._consecutive_errors += 1
@@ -148,6 +167,10 @@ class TopStepClient:
             except Exception as e:
                 self._consecutive_errors += 1
                 logger.error(f"Request error on {url}: {e}")
+                # Sometimes network errors (like connection reset) need a retry
+                if attempt < max_retries - 1:
+                    await asyncio.sleep(base_delay)
+                    continue
                 return (None, 0, False)
         
         # All retries exhausted

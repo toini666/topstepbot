@@ -133,6 +133,8 @@ calculate_unrealized_pnl(entry_price, current_price, quantity, is_long, tick_siz
 ### 3. TopStep Client (`topstep_client.py`)
 
 Async HTTP client for TopStepX API with automatic token management.
+- **Persistent Connection**: Uses a single `httpx.AsyncClient` session throughout the application lifecycle to minimize TCP/TLS overhead.
+- **Circuit Breaker**: Integrated rate limiting protection.
 
 #### API Endpoints Used
 
@@ -294,7 +296,7 @@ Handles Discord notifications with robust reliability features:
 
 | Job | Schedule | Function |
 |-----|----------|----------|
-| Position Monitor | Every 5s | Detect closed positions, update Trade status to CLOSED with PnL/fees, notify via Telegram |
+| Position Monitor | Every 5s | Detect closed positions. **Optimized**: Async API fetch + Sync DB processing in thread pool to prevent event loop blocking. Batch queries to avoid N+1 issues. |
 | **Price Refresh** | Every 5s | Fetches current prices for all open positions, updates price cache for unrealized PnL |
 | Auto Flatten | Configurable time | Close all positions daily |
 | API Health Check | Every 60s | Pings API, tracks health, alerts on consecutive failures |
@@ -530,7 +532,9 @@ Webhook requests from other IPs are rejected with HTTP 403.
 8.  **Selective Logging** - Skip noisy polling endpoints.
 9.  **Background Execution** - Trade execution in FastAPI BackgroundTasks.
 10. **Polling Intervals** - 3s for data, 5s for position monitor.
-11. **Database Indexes** - On frequently queried columns.
+12. **Persistent HTTP Client** - Single `httpx.AsyncClient` session reduces connection overhead.
+13. **Parallel Frontend Fetching** - `Promise.all` used to fetch data for all accounts simultaneously.
+14. **Smart Polling** - Adaptive polling in Webhook router (0.5s intervals) instead of fixed sleeps.
 
 ---
 

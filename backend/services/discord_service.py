@@ -28,8 +28,8 @@ class DiscordService:
             db.add(log)
             db.commit()
             db.close()
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"FAILED TO LOG ERROR TO DB: {message} | Error: {e}")
     
     def _log_info(self, message: str):
         """Log info to database."""
@@ -39,8 +39,8 @@ class DiscordService:
             db.add(log)
             db.commit()
             db.close()
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"FAILED TO LOG INFO TO DB: {message} | Error: {e}")
     
     def get_settings(self, account_id: int) -> Optional[DiscordNotificationSettings]:
         """Get Discord notification settings for an account."""

@@ -58,9 +58,12 @@ def is_duplicate_signal(alert: TradingViewAlert) -> bool:
     now = time.time()
     
     # Clean expired
+    # Clean expired
     expired = [k for k, v in _signal_cache.items() if v < now]
     for k in expired:
-        del _signal_cache[k]
+        # Check if key exists before deleting to handle race conditions
+        if k in _signal_cache:
+            del _signal_cache[k]
         
     sig_hash = get_signal_hash(alert)
     if sig_hash in _signal_cache:
@@ -300,6 +303,36 @@ async def handle_signal(
         
         # Calculate position size for this account
         risk_amount = risk_engine.get_risk_amount(account_id, strategy_name)
+        # Input Validation: SL/TP Logic Check
+        # Ensure SL/TP are on the correct side of Entry
+        # BUY: SL < Entry, TP > Entry
+        # SELL: SL > Entry, TP < Entry
+        
+        if alert.stop:
+            if action == "BUY" and alert.stop >= alert.entry:
+                reason = f"Invalid SL for BUY: {alert.stop} >= Entry {alert.entry}"
+                db.add(Log(level="WARNING", message=f"Signal Ignored: {reason}"))
+                await telegram_service.notify_trade_rejection(alert.ticker, reason)
+                continue
+            elif action == "SELL" and alert.stop <= alert.entry:
+                reason = f"Invalid SL for SELL: {alert.stop} <= Entry {alert.entry}"
+                db.add(Log(level="WARNING", message=f"Signal Ignored: {reason}"))
+                await telegram_service.notify_trade_rejection(alert.ticker, reason)
+                continue
+
+        if alert.tp:
+            if action == "BUY" and alert.tp <= alert.entry:
+                 # Just warn, don't block? Or block? Stricter is better.
+                 reason = f"Invalid TP for BUY: {alert.tp} <= Entry {alert.entry}"
+                 db.add(Log(level="WARNING", message=f"Signal Ignored: {reason}"))
+                 await telegram_service.notify_trade_rejection(alert.ticker, reason)
+                 continue
+            elif action == "SELL" and alert.tp >= alert.entry:
+                 reason = f"Invalid TP for SELL: {alert.tp} >= Entry {alert.entry}"
+                 db.add(Log(level="WARNING", message=f"Signal Ignored: {reason}"))
+                 await telegram_service.notify_trade_rejection(alert.ticker, reason)
+                 continue
+
         qty = risk_engine.calculate_position_size(
             entry_price=alert.entry,
             sl_price=alert.stop,
@@ -539,8 +572,36 @@ async def handle_partial(alert: TradingViewAlert, db: Session) -> Dict[str, Any]
                 fill_price = response.get('fillPrice') or response.get('price')
                 
                 try:
-                    await asyncio.sleep(4.0)  # Wait for trade to settle
-                    recent_trades = await topstep_client.get_historical_trades(account_id, days=1)
+                    # SMART POLLING for Trade Settlement
+                    # Poll up to 5 seconds (10 attempts x 0.5s) for the new trade to appear
+                    recent_trades = []
+                    start_wait = time.time()
+                    
+                    found_new_fill = False
+                    for i in range(10):
+                        await asyncio.sleep(0.5)
+                        recent_trades = await topstep_client.get_historical_trades(account_id, days=1)
+                        
+                        # Check if we have a fill NEWER than our request time?
+                        # Or just check if aggregate matches?
+                        # Simplest check: Do we have recent trades in the last few seconds?
+                        
+                        # We re-run the aggregation logic inside loop to see if we reached target qty?
+                        # Optimization: Filter locally first
+                        
+                        # Check for latest timestamps
+                        if recent_trades:
+                             latest_ts_str = recent_trades[0].get('creationTimestamp') or recent_trades[0].get('timestamp')
+                             if latest_ts_str:
+                                 l_ts = parse_topstep_date(latest_ts_str)
+                                 if l_ts and (datetime.now(timezone.utc) - l_ts).total_seconds() < 5:
+                                     # Found a very recent trade, likely ours
+                                     found_new_fill = True
+                                     break
+                    
+                    if not found_new_fill:
+                        logger.warning(f"PARTIAL: Timeout waiting for trade verification on {account_name}")
+
                     
                     # Aggregate fills for this partial close
                     # We summed fills until we reach the reduced_qty
@@ -746,8 +807,25 @@ async def handle_close(alert: TradingViewAlert, db: Session) -> Dict[str, Any]:
             exit_px = 0.0
             
             try:
-                await asyncio.sleep(1.0) # Wait for fill to propagate
-                recent_trades = await topstep_client.get_historical_trades(account_id, days=1)
+                # SMART POLLING for Close Confirmation
+                # Poll up to 5 seconds
+                recent_trades = []
+                for i in range(10):
+                     await asyncio.sleep(0.5)
+                     recent_trades = await topstep_client.get_historical_trades(account_id, days=1)
+                     
+                     # Check for recent exit
+                     if recent_trades:
+                         # Quick check: Is there a trade very close to now on this contract?
+                         # (Logic below filters properly, so we just blindly poll)
+                         # Optimization: Check timestamp of first item
+                         latest = recent_trades[0]
+                         ts_str = latest.get('creationTimestamp') or latest.get('timestamp')
+                         if ts_str:
+                              l_ts = parse_topstep_date(ts_str)
+                              if l_ts and (datetime.now(timezone.utc) - l_ts).total_seconds() < 5:
+                                   break
+
                     
                 # Filter for trades relevant to this position
                 # Logic mirrors monitor_closed_positions_job
