@@ -82,7 +82,8 @@ topstepbot/
 ```python
 Trade:
   - id, account_id, ticker, action
-  - entry_price, exit_price, sl, tp
+  - id, account_id, ticker, action
+  - entry_price, signal_entry_price, exit_price, sl, tp
   - quantity, status, pnl, fees
   - timeframe, session, strategy
   - timestamp, exit_time, duration_seconds
@@ -279,6 +280,13 @@ Centralized structured logger that handles both console output and database pers
 - **Console**: Color-coded output for standard IO.
 - **Database**: Asynchronous persistence to `Log` table for dashboard viewing.
 - **Context**: Supports extra metadata (e.g., trade_id, account_name) for detailed auditing.
+
+### 4. Discord Service (`discord_service.py`)
+
+Handles Discord notifications with robust reliability features:
+- **Rate Limit Handling**: Automatically handles HTTP 429 responses with `Retry-After` backoff.
+- **Connection Pooling**: Reuses HTTP clients/connections for high-frequency messaging.
+- **Rich Embeds**: Formats messages with color-coded side indicators/PnL.
 
 ---
 

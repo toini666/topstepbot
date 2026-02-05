@@ -106,6 +106,7 @@ TradingView         Webhook Router         RiskEngine          TopStep API
     │                     │                     │                    │
     │                     │── Create Trade record (DB)               │
     │                     │   status=PENDING, session=current        │
+    │                     │   store signal_entry_price               │
     │                     │                     │                    │
     │                     │── BackgroundTask: execute_trade()        │
     │                     │                     │                    │
@@ -301,7 +302,8 @@ On bot startup, existing positions are pre-loaded to avoid false "Position Opene
       - Match against cached Trade History to get Entry Price/Time
       - Check DB for existing OPEN/PENDING trade
       - IF match found:
-        * Update Entry Price and Timestamp from API
+        * Update Entry Price (Fill) and Timestamp from API
+        * Preserve `signal_entry_price` for slippage calc
       - IF NO match found (Manual Trade):
         * Create new Trade record (strategy="MANUAL")
         * Notify "Position Opened"

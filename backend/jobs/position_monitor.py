@@ -364,13 +364,19 @@ async def monitor_closed_positions_job() -> None:
                                 # Prepare notification data
                                 strat = open_trade.strategy if open_trade else "MANUAL"
                                 tf = open_trade.timeframe if open_trade else "-"
+                                
+                                # Get signal entry price and tick size for slippage calculation
+                                signal_entry = open_trade.signal_entry_price if open_trade else None
+                                tick_size = ticker_map_entry.tick_size if ticker_map_entry else None
 
                                 await telegram_service.notify_position_opened(
                                     symbol=f"{matching_fill.get('symbol', curr_cid)} ({account_name})",
                                     side=side_str,
                                     quantity=matching_fill.get('size', 1),
                                     price=fill_price,
-                                    order_id=str(matching_fill.get('orderId', ''))
+                                    order_id=str(matching_fill.get('orderId', '')),
+                                    signal_entry_price=signal_entry,
+                                    tick_size=tick_size
                                 )
 
                                 # Discord notification

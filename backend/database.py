@@ -178,7 +178,8 @@ class Trade(Base):
     ticker = Column(String, index=True)
     action = Column(String)  # BUY / SELL
     entry_price = Column(Float)
-    exit_price = Column(Float, nullable=True)  # NEW: Exit price for analytics
+    signal_entry_price = Column(Float, nullable=True)  # Original signal price (before fill)
+    exit_price = Column(Float, nullable=True)  # Exit price for analytics
     sl = Column(Float)
     tp = Column(Float)
     quantity = Column(Integer)

@@ -318,6 +318,7 @@ async def handle_signal(
             ticker=alert.ticker,
             action=action,
             entry_price=alert.entry,
+            signal_entry_price=alert.entry,  # Preserve original signal price
             sl=alert.stop,
             tp=alert.tp,
             quantity=qty,

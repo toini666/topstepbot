@@ -63,41 +63,67 @@ class DiscordService:
         username: str = "TopStep Bot"
     ) -> bool:
         """
-        Send a message to Discord via webhook.
-        
-        Args:
-            webhook_url: Discord webhook URL
-            content: Plain text message
-            embeds: List of Discord embed objects
-            username: Bot username to display
-        
-        Returns:
-            True if message was sent successfully
+        Send a message to Discord via webhook with robust retry logic.
+        Handles rate limits (429) and network transients automatically.
         """
         if not webhook_url:
             return False
         
         payload = {"username": username}
+        if content: payload["content"] = content
+        if embeds: payload["embeds"] = embeds
         
-        if content:
-            payload["content"] = content
+        # Retry configuration
+        max_retries = 3
+        base_delay = 1.0
         
-        if embeds:
-            payload["embeds"] = embeds
-        
-        try:
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                response = await client.post(webhook_url, json=payload)
-                
-                if response.status_code == 204:
-                    return True
-                else:
-                    self._log_error(f"Discord webhook failed: HTTP {response.status_code}")
+        for attempt in range(max_retries + 1):
+            try:
+                # Use a fresh client for now to avoid complexity with event loops
+                # In a full valid implementation we would use a shared client on the app state
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    response = await client.post(webhook_url, json=payload)
+                    
+                    # Success
+                    if response.status_code in [200, 204]:
+                        return True
+                    
+                    # Rate Limit
+                    if response.status_code == 429:
+                        retry_after = float(response.headers.get("Retry-After", base_delay))
+                        # Cap retry wait to avoid hanging too long
+                        wait_time = min(retry_after, 5.0)
+                        
+                        warning_msg = f"Discord Rate Limit (429). Waiting {wait_time}s..."
+                        # Only log on first retry to avoid spam
+                        if attempt == 0:
+                            self._log_info(warning_msg)
+                        
+                        await asyncio.sleep(wait_time)
+                        continue
+                    
+                    # Other Server Errors (5xx) -> Retry
+                    if 500 <= response.status_code < 600:
+                        wait_time = base_delay * (2 ** attempt) # Exponential backoff
+                        await asyncio.sleep(wait_time)
+                        continue
+                        
+                    # Client Errors (4xx) -> Fail immediately (except 429)
+                    self._log_error(f"Discord Webhook Rejected ({response.status_code}): {response.text}")
                     return False
                     
-        except Exception as e:
-            self._log_error(f"Discord webhook error: {e}")
-            return False
+            except httpx.TimeoutException:
+                if attempt < max_retries:
+                    await asyncio.sleep(base_delay)
+                    continue
+                self._log_error("Discord Webhook Timeout")
+                
+            except Exception as e:
+                self._log_error(f"Discord Send Fail: {e}")
+                return False
+        
+        self._log_error(f"Discord Webhook failed after {max_retries} retries")
+        return False
     
     async def notify_position_opened(
         self,

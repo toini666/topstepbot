@@ -233,18 +233,34 @@ class TelegramService:
         quantity: int, 
         price: float, 
         order_id: str = None,
-        account_name: str = None
+        account_name: str = None,
+        signal_entry_price: float = None,
+        tick_size: float = None
     ):
-        """Notify real fill."""
+        """Notify real fill with optional slippage info."""
         side_upper = str(side).upper()
         emoji = "🔵" if "BUY" in side_upper or "LONG" in side_upper else "🟠"
         account_tag = f" ({account_name})" if account_name else ""
         
         msg = (
             f"{emoji} <b>Position Opened: {symbol}</b>{account_tag}\n"
-            f"{side_upper} {quantity}x @ {price:.2f}\n" 
-            f"<i>Filled</i>"
+            f"{side_upper} {quantity}x @ {price:.2f}\n"
         )
+        
+        # Add signal price and slippage if available
+        if signal_entry_price and tick_size and tick_size > 0:
+            slippage_ticks = round((price - signal_entry_price) / tick_size)
+            
+            # Adjust sign based on side (negative slippage is bad for buys, positive is bad for sells)
+            if "SELL" in side_upper or "SHORT" in side_upper:
+                slippage_ticks = -slippage_ticks
+            
+            slippage_emoji = "✅" if slippage_ticks <= 0 else "⚠️"
+            slippage_sign = "+" if slippage_ticks > 0 else ""
+            
+            msg += f"Signal: {signal_entry_price:.2f} | {slippage_emoji} Slip: {slippage_sign}{slippage_ticks} ticks\n"
+        
+        msg += f"<i>Filled</i>"
         await self.send_message(msg)
         self._log_info(f"Telegram: Position opened for {symbol} ({account_name or 'unknown'})")
 

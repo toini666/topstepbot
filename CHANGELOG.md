@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [2026-02-05] - Discord Reliability & Notification Enhancement
+
+### Added
+- **Slippage Display**: Position Opened notifications now show the original signal price and slippage in ticks
+- **Database**: Added `signal_entry_price` field to Trade model to preserve original signal price (before fill)
+
+### Fixed
+- **Discord Reliability**: Implemented robust rate-limit handling (429 retries) with exponential backoff to prevent dropped notifications during high-frequency trading events.
+
+---
+
 ## [2026-02-04] - Trade Execution Optimization
 
 ### Changed

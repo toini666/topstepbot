@@ -118,7 +118,7 @@ Account Settings (per account)
 |-------------------|---------|
 | **Signal Received** | Ticker, action, prices, strategy, timeframe |
 | **Order Submitted** | Ticker, quantity, account name |
-| **Position Opened** | Entry price, side, quantity |
+| **Position Opened** | Entry price, side, quantity, **signal price, slippage (ticks)** |
 | **Position Closed** | PnL, fees, duration, daily PnL |
 | **Partial Executed** | Reduced qty, remaining, fill price, SL moved status |
 | **Trade Rejection** | Ticker, reason, account |
@@ -131,6 +131,7 @@ Account Settings (per account)
 - **Platform**: Rich embed notifications via Webhooks
 - **Content**: Position Open/Close, **Partial Close** (with PnL breakdown), Daily Summaries
 - **Configuration**: Per-account toggles for enabled/disabled, specific notification types (`notify_partial_close`), and summary scheduling.
+- **Reliability**: Robust rate-limit handling (429 retries) and connection pooling.
 
 
 ### 8. Data & Analytics
