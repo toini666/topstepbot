@@ -47,14 +47,22 @@ async def news_alert_job():
             countries_setting = db.query(Setting).filter(Setting.key == "calendar_major_countries").first()
             webhook_setting = db.query(Setting).filter(Setting.key == "calendar_discord_url").first()
             
+            # New Settings
+            alert_enabled = db.query(Setting).filter(Setting.key == "calendar_news_alert_enabled").first()
+            alert_minutes = db.query(Setting).filter(Setting.key == "calendar_news_alert_minutes").first()
+            
+            # Defaults
             target_impacts = json.loads(impacts_setting.value) if impacts_setting and impacts_setting.value else ["High", "Medium"]
             target_countries = json.loads(countries_setting.value) if countries_setting and countries_setting.value else ["USD"]
             webhook_url = webhook_setting.value if webhook_setting else None
             
+            is_enabled = alert_enabled.value.lower() == "true" if alert_enabled and alert_enabled.value else False
+            minutes_before = int(alert_minutes.value) if alert_minutes and alert_minutes.value else 5
+            
         finally:
             db.close()
 
-        if not webhook_url:
+        if not webhook_url or not is_enabled:
             return
 
         alert_events = []
@@ -75,13 +83,8 @@ async def news_alert_job():
                 h, m = map(int, event_time_str.split(":"))
                 event_dt = now_bru.replace(hour=h, minute=m, second=0, microsecond=0)
                 
-                # Check logic: Event is in 5 minutes
-                # Means: event_dt - now is approx 5 minutes
-                # We run every minute, so we check if 4m30s < diff < 5m30s ? 
-                # Or just match the minute: event_dt.minute == (now + 5min).minute
-                # Let's match strictly on minutes to avoid double alerting if job drifts slightly
-                
-                target_check_time = now_bru + timedelta(minutes=5)
+                # Check logic: Event is in X minutes
+                target_check_time = now_bru + timedelta(minutes=minutes_before)
                 
                 if event_dt.hour == target_check_time.hour and event_dt.minute == target_check_time.minute:
                     alert_events.append(event)
@@ -91,26 +94,27 @@ async def news_alert_job():
                 continue
         
         if alert_events:
-            await send_pre_news_alert(webhook_url, alert_events)
+            await send_pre_news_alert(webhook_url, alert_events, minutes_before)
+
 
     except Exception as e:
         print(f"News alert job failed: {e}")
 
-async def send_pre_news_alert(webhook_url: str, events: list):
-    """Send the 5-minute warning to Discord."""
+async def send_pre_news_alert(webhook_url: str, events: list, minutes_before: int):
+    """Send the pre-news warning to Discord."""
     
     fields = []
     for ev in events:
         impact_emoji = "🔴" if ev.get("impact") == "High" else "🟠"
         fields.append({
             "name": f"{impact_emoji} {ev.get('time')} - {ev.get('country')} {ev.get('title')}",
-            "value": "Starting in 5 minutes",
+            "value": f"Starting in {minutes_before} minutes",
             "inline": False
         })
-
+    
     embed = {
         "title": "⚠️ Upcoming High-Impact News",
-        "description": "Trading volatility expected in **5 minutes**.",
+        "description": f"Trading volatility expected in **{minutes_before} minutes**.",
         "color": 0xFF0000, # Red
         "fields": fields,
         "footer": {"text": "TopStep Bot News Alert"}

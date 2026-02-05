@@ -18,6 +18,8 @@ class CalendarSettings(BaseModel):
     enabled: bool = False
     major_countries: List[str] = ["USD"]
     major_impacts: List[str] = ["High", "Medium"]
+    news_alert_enabled: bool = False
+    news_alert_minutes: int = 5
 
 @router.get("/")
 async def get_calendar():
@@ -52,11 +54,16 @@ def get_settings(db: Session = Depends(get_db)):
     impacts_setting = db.query(Setting).filter(Setting.key == "calendar_major_impacts").first()
     countries_setting = db.query(Setting).filter(Setting.key == "calendar_major_countries").first()
     
+    alert_enabled_setting = db.query(Setting).filter(Setting.key == "calendar_news_alert_enabled").first()
+    alert_minutes_setting = db.query(Setting).filter(Setting.key == "calendar_news_alert_minutes").first()
+    
     return {
         "discord_url": url_setting.value if url_setting else "",
         "enabled": (today_setting.value == "true") if today_setting else False,
         "major_countries": json.loads(countries_setting.value) if countries_setting and countries_setting.value else ["USD"],
-        "major_impacts": json.loads(impacts_setting.value) if impacts_setting and impacts_setting.value else ["High", "Medium"]
+        "major_impacts": json.loads(impacts_setting.value) if impacts_setting and impacts_setting.value else ["High", "Medium"],
+        "news_alert_enabled": (alert_enabled_setting.value == "true") if alert_enabled_setting else False,
+        "news_alert_minutes": int(alert_minutes_setting.value) if alert_minutes_setting else 5
     }
 
 @router.post("/settings")
@@ -96,6 +103,23 @@ async def update_settings(settings: CalendarSettings, db: Session = Depends(get_
         db.add(impacts_setting)
     else:
         impacts_setting.value = impacts_json
+
+    # News Alert Enabled
+    alert_enabled_setting = db.query(Setting).filter(Setting.key == "calendar_news_alert_enabled").first()
+    val_str = "true" if settings.news_alert_enabled else "false"
+    if not alert_enabled_setting:
+        alert_enabled_setting = Setting(key="calendar_news_alert_enabled", value=val_str)
+        db.add(alert_enabled_setting)
+    else:
+        alert_enabled_setting.value = val_str
+
+    # News Alert Minutes
+    alert_minutes_setting = db.query(Setting).filter(Setting.key == "calendar_news_alert_minutes").first()
+    if not alert_minutes_setting:
+        alert_minutes_setting = Setting(key="calendar_news_alert_minutes", value=str(settings.news_alert_minutes))
+        db.add(alert_minutes_setting)
+    else:
+        alert_minutes_setting.value = str(settings.news_alert_minutes)
         
     db.commit()
     

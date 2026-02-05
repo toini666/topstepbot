@@ -58,6 +58,9 @@ async def lifespan(app: FastAPI):
     # Initialize Persistent HTTP Client
     await topstep_client.startup()
     
+    # Initialize Calendar (Load cache & calculate news blocks)
+    await calendar_service.recalculate_news_blocks()
+    
     # Seed default trading sessions
     from backend.database import SessionLocal
     db = SessionLocal()

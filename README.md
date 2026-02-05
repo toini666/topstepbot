@@ -40,7 +40,7 @@ A professional-grade automated trading system for TopStepX. Executes TradingView
 - **Automated Fetch**: Daily sync with ForexFactory data (with smart throttling)
 - **Manual Refresh**: On-demand calendar update via dashboard button
 - **Daily Briefing**: Morning Discord notification with today's high-impact events
-- **Pre-Event Alerts**: Discord notification 5 minutes before high-impact news starts
+- **Pre-Event Alerts**: Configurable Discord notification (e.g., 5 mins before) high-impact news starts
 - **Timezone Smart**: Auto-converts to your local trading time (Brussels)
 
 ### 🔍 Contract Validation

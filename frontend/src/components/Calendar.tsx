@@ -22,6 +22,8 @@ interface CalendarSettings {
     enabled: boolean;
     major_countries: string[];
     major_impacts: string[];
+    news_alert_enabled: boolean;
+    news_alert_minutes: number;
 }
 
 export function Calendar() {
@@ -31,7 +33,9 @@ export function Calendar() {
         discord_url: '',
         enabled: false,
         major_countries: ['USD'],
-        major_impacts: ['High', 'Medium']
+        major_impacts: ['High', 'Medium'],
+        news_alert_enabled: false,
+        news_alert_minutes: 5,
     });
     const [settingsOpen, setSettingsOpen] = useState(false);
     const [saving, setSaving] = useState(false);
@@ -226,6 +230,34 @@ export function Calendar() {
                                     <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${settings.enabled ? 'translate-x-6' : 'translate-x-1'}`} />
                                 </button>
                             </div>
+
+                            {/* Pre-News Alerts Section */}
+                            <div className="flex items-center justify-between p-4 bg-slate-800/50 rounded-xl border border-slate-700">
+                                <div>
+                                    <p className="font-medium text-slate-200">Pre-News Alerts</p>
+                                    <p className="text-xs text-slate-400">Receive a warning {settings.news_alert_minutes} minutes before major events</p>
+                                </div>
+                                <button
+                                    onClick={() => setSettings({ ...settings, news_alert_enabled: !settings.news_alert_enabled })}
+                                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${settings.news_alert_enabled ? 'bg-indigo-500' : 'bg-slate-600'}`}
+                                >
+                                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${settings.news_alert_enabled ? 'translate-x-6' : 'translate-x-1'}`} />
+                                </button>
+                            </div>
+
+                            {settings.news_alert_enabled && (
+                                <div className="animate-fade-in-down">
+                                    <label className="block text-sm text-slate-400 mb-2">Minutes Before Event</label>
+                                    <input
+                                        type="number"
+                                        min="1"
+                                        max="60"
+                                        value={settings.news_alert_minutes}
+                                        onChange={(e) => setSettings({ ...settings, news_alert_minutes: parseInt(e.target.value) || 5 })}
+                                        className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-3 text-slate-200 focus:outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/50 transition-all font-mono text-sm"
+                                    />
+                                </div>
+                            )}
 
                             {settings.enabled && (
                                 <div className="animate-fade-in-down">

@@ -17,7 +17,35 @@ class CalendarService:
     def __init__(self):
         self._cache = None
         self._last_fetch = None
-        self._today_news_blocks: List[Dict] = []  # Dynamic news blocks for today
+        self._today_news_blocks: List[Dict] = []
+        self._cache_file = "calendar_cache.json"
+        
+        # Try load from disk on startup
+        self._load_from_disk()
+
+    def _load_from_disk(self):
+        """Load calendar events from local JSON file."""
+        import os
+        try:
+            if os.path.exists(self._cache_file):
+                with open(self._cache_file, "r") as f:
+                    data = json.load(f)
+                    
+                    # Optional: Check if data is stale (e.g. from last week)
+                    # But for now even stale data is better than nothing, 
+                    # fetch_calendar will update it if needed/allowed.
+                    self._cache = data
+                    logger.info(f"Loaded {len(data)} calendar events from disk")
+        except Exception as e:
+            logger.error(f"Failed to load calendar from disk: {e}")
+
+    def _save_to_disk(self, events: List[Dict]):
+        """Save calendar events to local JSON file."""
+        try:
+            with open(self._cache_file, "w") as f:
+                json.dump(events, f)
+        except Exception as e:
+            logger.error(f"Failed to save calendar to disk: {e}")
 
     async def fetch_calendar(self) -> List[Dict]:
         """
@@ -32,6 +60,7 @@ class CalendarService:
             # Update fetch time immediately to prevent race conditions/parallel calls
             self._last_fetch = datetime.now()
             
+            logger.info("Fetching calendar from ForexFactory...")
             async with httpx.AsyncClient(timeout=10.0) as client:
                 response = await client.get(CALENDAR_URL)
                 response.raise_for_status()
@@ -51,15 +80,11 @@ class CalendarService:
                 try:
                     if raw_time and ":" in raw_time:
                         # Parse e.g. "8:30am" or "2:00pm"
-                        # Sometimes format is "Day 1" or similar for all day events, handle that
                         if "am" in raw_time.lower() or "pm" in raw_time.lower():
                             dt = datetime.strptime(raw_time, "%I:%M%p")
                             # Add 1 hour
                             dt = dt + timedelta(hours=1)
                             final_time = dt.strftime("%H:%M")
-                        else:
-                            # Try 24h just in case or leave as is
-                            pass
                 except Exception:
                     pass
 
@@ -73,17 +98,19 @@ class CalendarService:
                     "previous": ev.get("previous")
                 })
             
-            # Sort by date and time
-            # Note: parsing these custom time formats for sorting might be heavy, 
-            # but usually the XML is already sorted by time.
-            
             self._cache = formatted_events
             self._last_fetch = datetime.now()
+            
+            # SAVE TO DISK
+            self._save_to_disk(formatted_events)
             
             return formatted_events
 
         except Exception as e:
             self._log_error(f"Failed to fetch calendar: {e}")
+            # Fallback to cache if available (even if stale)
+            if self._cache:
+                return self._cache
             return []
 
     def get_cached_calendar(self) -> List[Dict]:

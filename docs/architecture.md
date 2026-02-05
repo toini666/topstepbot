@@ -581,4 +581,5 @@ HEARTBEAT_AUTH_TOKEN=your_secret_token
 | `calendar_discord_enabled` | false | Enable daily calendar briefing |
 | `calendar_discord_url` | "" | Webhook URL for calendar |
 | `calendar_major_countries` | ["USD"] | Countries to highlight/notify |
-| `calendar_major_impacts` | ["High","Medium"] | Impacts to highlight/notify |
+| `calendar_news_alert_enabled` | false | Enable pre-news warnings |
+| `calendar_news_alert_minutes` | 5 | Minutes before event to warn |
