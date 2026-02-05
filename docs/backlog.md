@@ -38,6 +38,8 @@ This document outlines the roadmap to evolve the current functional prototype in
 - [x] **Reconciliation**: Fixed TypeError when importing missing trades by parsing string timestamps to datetime objects.
 - [x] **Discord Reliability**: Implemented robust rate-limit handling (429 retries) to prevent dropped notifications.
 - [x] **Slippage Analytics**: Added signal price tracking and slippage display in Telegram notifications.
+- [x] **Frontend Polling**: Fixed race condition in data fetching loop causing API rate limit spam.
+- [x] **Circuit Breaker**: Enforced strict cooldown logic to prevent concurrent successes from resetting the timer.
 
 
 

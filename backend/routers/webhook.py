@@ -639,6 +639,7 @@ async def handle_close(alert: TradingViewAlert, db: Session) -> Dict[str, Any]:
     """
     strategy_name = alert.strat or "default"
     from backend.services.telegram_service import telegram_service
+    from backend.services.discord_service import discord_service
     
     # BR-3: Notification moved after finding matching trades
     
@@ -773,6 +774,21 @@ async def handle_close(alert: TradingViewAlert, db: Session) -> Dict[str, Any]:
                 fill_price=exit_px if exit_px else None,
                 pnl=current_pnl,
                 fees=current_fees
+            )
+            
+            # Notify Discord
+            await discord_service.notify_position_closed(
+                account_id=account_id,
+                symbol=alert.ticker,
+                side=trade.action,
+                entry_price=trade.entry_price,
+                exit_price=exit_px if exit_px else 0.0,
+                pnl=current_pnl,
+                quantity=matching_pos.get('size', 0),
+                fees=current_fees,
+                strategy=strategy_name,
+                timeframe=alert.timeframe,
+                account_name=account_name
             )
             
             processed.append(account_name)

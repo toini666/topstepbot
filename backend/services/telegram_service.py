@@ -49,6 +49,7 @@ class TelegramService:
 
     def _log_error(self, message: str):
         """Log error to database (non-blocking in thread pool when in async context)."""
+        print(f"❌ TELEGRAM ERROR: {message}")  # Ensure console visibility
         import asyncio
         try:
             loop = asyncio.get_running_loop()

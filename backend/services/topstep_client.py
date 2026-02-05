@@ -116,10 +116,13 @@ class TopStepClient:
                         self._log_api_call(method, url, payload, None, response.status_code)
                         return (None, response.status_code, False)
                     
-                    # Success - reset error counter & circuit breaker
+                    # Success - reset error counter
                     self._consecutive_errors = 0
                     self._rate_limit_alert_sent = False
-                    self._rate_limit_until = None
+                    # DO NOT RESET CIRCUIT BREAKER ON SUCCESS
+                    # Concurrent requests might succeed while a ban is active.
+                    # We must let the time run out naturally.
+                    # self._rate_limit_until = None 
                     
                     try:
                         data = response.json()
@@ -191,6 +194,9 @@ class TopStepClient:
                 f"Pausing all API calls for 60 seconds."
             )
             
+            # Print to console instantly as fallback to ensure visibility
+            print(f"🚨 RATE LIMIT ALERT: {error_count} consecutive 429s on {url}")
+            
             await telegram_service.send_message(message)
             self._rate_limit_alert_sent = True
             
@@ -208,6 +214,7 @@ class TopStepClient:
                 
         except Exception as e:
             logger.error(f"Failed to send rate limit alert: {e}")
+            print(f"CRITICAL: Failed to send Telegram alert for Rate Limit: {e}")
 
 
     def _log_api_call(self, method: str, url: str, payload: dict = None, response: dict = None, status_code: int = 0):

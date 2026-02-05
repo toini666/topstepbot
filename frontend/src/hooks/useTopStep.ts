@@ -67,149 +67,176 @@ export const useTopStep = () => {
     // DATA FETCHING
     // ==========================================================================
 
-    const fetchData = useCallback(async () => {
+    // ==========================================================================
+    // DATA FETCHING
+    // ==========================================================================
+
+    const fetchStaticData = useCallback(async () => {
         try {
-            // 1. Fetch Basic Data (always)
-            const [tradesRes, logsRes, statsRes, statusRes, configRes, marketRes, sessionsRes, strategiesRes] = await Promise.all([
+            const [configRes, sessionsRes, strategiesRes, accountsRes, settingsRes] = await Promise.all([
+                axios.get(`${API_BASE}/dashboard/config`),
+                axios.get(`${API_BASE}/settings/sessions`),
+                axios.get(`${API_BASE}/strategies`),
+                axios.get(`${API_BASE}/dashboard/accounts`),
+                axios.get(`${API_BASE}/settings/accounts`)
+            ]);
+
+            if (configRes.data) setGlobalConfig(configRes.data);
+            if (sessionsRes.data) setTradingSessions(sessionsRes.data);
+            if (strategiesRes.data) setStrategies(strategiesRes.data);
+            if (accountsRes.data) {
+                setAccounts(accountsRes.data);
+                if (accountsRes.data.length > 0 && !selectedAccountId) {
+                    // Only set initial account if not already selected
+                    // We use function update to be safe but here direct check is fine provided selectedAccountId is in closure
+                    // Actually, inside useCallback, selectedAccountId might be stale if strict deps. 
+                    // But for 'Static' fetch which happens once, we usually don't want to reset it.
+                    // Let's rely on the effect to set default if null.
+                }
+            }
+
+            if (settingsRes.data) {
+                const settingsMap: Record<number, AccountSettings> = {};
+                for (const s of settingsRes.data) {
+                    settingsMap[s.account_id] = s;
+                }
+                setAccountSettings(settingsMap);
+            }
+
+        } catch (error) {
+            console.error("Failed to fetch static data:", error);
+        }
+    }, []); // No dependencies, static fetch
+
+    const fetchPollingData = useCallback(async () => {
+        try {
+            // 1. Fetch Dynamic Data
+            const [tradesRes, logsRes, statsRes, statusRes, marketRes] = await Promise.all([
                 axios.get(`${API_BASE}/dashboard/trades`),
                 axios.get(`${API_BASE}/dashboard/logs`, {
                     params: { limit: logParams.limit, min_timestamp: logParams.min_timestamp }
                 }),
                 axios.get(`${API_BASE}/dashboard/stats`),
                 axios.get(`${API_BASE}/dashboard/status`),
-                axios.get(`${API_BASE}/dashboard/config`),
-                axios.get(`${API_BASE}/dashboard/market-status`),
-                axios.get(`${API_BASE}/settings/sessions`),
-                axios.get(`${API_BASE}/strategies`)
+                axios.get(`${API_BASE}/dashboard/market-status`)
             ]);
 
-            // Helper for smart updates
-            const smartSet = <T>(current: T, next: T, setter: (val: T) => void, comparator?: (a: T, b: T) => boolean) => {
-                if (comparator) {
-                    if (!comparator(current, next)) setter(next);
-                } else {
-                    if (JSON.stringify(current) !== JSON.stringify(next)) setter(next);
+            // Helper for smart updates to avoid effect triggering if data is same
+
+
+            // Note: We access state via function updates or just rely on React's optimization.
+            // But to use 'smartSet', we'd need current state in deps. 
+            // To break the loop, we should just set state. React 18+ auto-batches and shallow compares primitives.
+            // For objects/arrays, setting a new reference WILL trigger re-renders, but that's what we want if data changed.
+            // The issue was the *fetching* loop. 
+            // We will just set the data. React is smart enough.
+
+            setTrades(prev => JSON.stringify(prev) !== JSON.stringify(tradesRes.data) ? tradesRes.data : prev);
+
+            // For logs, check IDs
+            setLogs(prev => {
+                const newLogs = logsRes.data;
+                if (prev.length !== newLogs.length || (newLogs.length > 0 && prev[0]?.id !== newLogs[0].id)) {
+                    return newLogs;
                 }
-            };
+                return prev;
+            });
 
-            smartSet(trades, tradesRes.data, setTrades);
+            setStats(prev => JSON.stringify(prev) !== JSON.stringify(statsRes.data) ? statsRes.data : prev);
+            setMarketStatus(prev => JSON.stringify(prev) !== JSON.stringify(marketRes.data) ? marketRes.data : prev);
 
-            // For logs, check length + ID of newest log to avoid full stringify if possible
-            if (logs.length !== logsRes.data.length || (logsRes.data.length > 0 && logs[0]?.id !== logsRes.data[0].id)) {
-                setLogs(logsRes.data);
-            }
-
-            smartSet(stats, statsRes.data, setStats);
-
-            if (configRes.data) smartSet(globalConfig, configRes.data, setGlobalConfig);
-            if (marketRes.data) smartSet(marketStatus, marketRes.data, setMarketStatus);
-            if (sessionsRes.data) smartSet(tradingSessions, sessionsRes.data, setTradingSessions);
-            if (strategiesRes.data) smartSet(strategies, strategiesRes.data, setStrategies);
-
-            // 2. Check Connection Status
+            // 2. Check Connection & Fetch Account Details
             const currentlyConnected = statusRes.data.connected;
-            if (currentlyConnected !== isConnected) {
-                setIsConnected(currentlyConnected);
-            }
+            setIsConnected(currentlyConnected); // Primitives are cheap to set repeatedly
 
-            // 3. Fetch TopStep Data if Connected
             if (currentlyConnected) {
                 try {
-                    const accountsRes = await axios.get(`${API_BASE}/dashboard/accounts`);
-                    smartSet(accounts, accountsRes.data, setAccounts);
+                    // We need accounts list to iterate. We can assume static list is ok, or fetch briefly.
+                    // The 'accounts' list rarely changes, so we rely on static fetch or infrequent updates?
+                    // Let's rely on static fetch for the *list* of accounts. 
+                    // But we iterate 'accounts' state here. If 'accounts' is empty initially, we miss this?
+                    // We should pass the current accounts list to this function or use a ref.
+                    // Better: Fetch account list here too? No, expensive.
+                    // Actually, let's just fetch positions for *known* accounts from state.
+                    // But if we can't access state without deps...
+                    // We will fetch the account list light-weight or just trust the 'accounts' state if added to deps.
+                    // Adding 'accounts' to deps is safe IF 'accounts' itself doesn't change every poll.
+                    // With fetchStaticData, accounts only changes on mount, so it's safe!
 
-                    // Fetch account settings
-                    const settingsRes = await axios.get(`${API_BASE}/settings/accounts`);
-                    const settingsMap: Record<number, AccountSettings> = {};
-                    for (const s of settingsRes.data) {
-                        settingsMap[s.account_id] = s;
-                    }
-                    smartSet(accountSettings, settingsMap, setAccountSettings);
+                    // Wait, we need 'accounts' in scope.
 
-                    // Auto-select first account if none selected
-                    if (!selectedAccountId && accountsRes.data.length > 0) {
-                        setSelectedAccountId(accountsRes.data[0].id);
-                    }
+                    if (accounts.length > 0) {
+                        const days = historyFilter === 'today' ? 1 : 7;
+                        const newPositions: Record<number, Position[]> = {};
+                        const newOrders: Record<number, Order[]> = {};
+                        const newTrades: Record<number, HistoricalTrade[]> = {};
 
-                    // Fetch per-account data for ALL accounts
-                    const days = historyFilter === 'today' ? 1 : 7;
-                    const newPositions: Record<number, Position[]> = {};
-                    const newOrders: Record<number, Order[]> = {};
-                    const newTrades: Record<number, HistoricalTrade[]> = {};
+                        for (const account of accounts) {
+                            const aid = account.id;
+                            try {
+                                const [posRes, ordRes, histRes] = await Promise.all([
+                                    axios.get(`${API_BASE}/dashboard/positions/${aid}`),
+                                    axios.get(`${API_BASE}/dashboard/orders/${aid}`, { params: { days } }),
+                                    axios.get(`${API_BASE}/dashboard/trades`, { params: { account_id: aid, days, status: 'CLOSED' } })
+                                ]);
+                                newPositions[aid] = posRes.data;
+                                newOrders[aid] = ordRes.data;
 
-                    for (const account of accountsRes.data) {
-                        const aid = account.id;
-                        try {
-                            const [posRes, ordRes, histRes] = await Promise.all([
-                                axios.get(`${API_BASE}/dashboard/positions/${aid}`),
-                                axios.get(`${API_BASE}/dashboard/orders/${aid}`, { params: { days } }),
-                                // Use internal Trade table instead of TopStep API for aggregated view
-                                axios.get(`${API_BASE}/dashboard/trades`, { params: { account_id: aid, days, status: 'CLOSED' } })
-                            ]);
-                            newPositions[aid] = posRes.data;
-                            newOrders[aid] = ordRes.data;
-                            // Map Trade format to HistoricalTrade-like format for display
-                            // Helper to ensure timestamps are parsed as UTC
-                            const parseUtcTimestamp = (ts: string | null | undefined): string | null => {
-                                if (!ts) return null;
-                                // If timestamp doesn't end with Z and doesn't contain timezone info, add Z
-                                const tsStr = String(ts);
-                                if (!tsStr.endsWith('Z') && !tsStr.includes('+')) {
-                                    return tsStr.replace(' ', 'T') + 'Z';
-                                }
-                                return tsStr.replace(' ', 'T');
-                            };
+                                // Helper for UTC parsing
+                                const parseUtcTimestamp = (ts: string | null | undefined): string | null => {
+                                    if (!ts) return null;
+                                    const tsStr = String(ts);
+                                    if (!tsStr.endsWith('Z') && !tsStr.includes('+')) {
+                                        return tsStr.replace(' ', 'T') + 'Z';
+                                    }
+                                    return tsStr.replace(' ', 'T');
+                                };
 
-                            newTrades[aid] = histRes.data.map((t: Trade) => ({
-                                id: t.id,
-                                accountId: t.account_id || aid,
-                                contractId: t.ticker,
-                                creationTimestamp: parseUtcTimestamp(t.timestamp),
-                                price: t.entry_price,
-                                exitPrice: t.exit_price,
-                                exitTime: parseUtcTimestamp(t.exit_time),
-                                profitAndLoss: t.pnl,
-                                fees: t.fees,
-                                side: t.action === 'BUY' ? 0 : 1,
-                                size: t.quantity,
-                                strategy: t.strategy,
-                                timeframe: t.timeframe,
-                                // These fields help avoid needing aggregateTrades()
-                                entryPrice: t.entry_price,
-                                isAggregated: true
-                            }))
-                        } catch (e) {
-                            console.warn(`Error fetching data for account ${aid}:`, e);
-                            newPositions[aid] = [];
-                            newOrders[aid] = [];
-                            newTrades[aid] = [];
+                                newTrades[aid] = histRes.data.map((t: Trade) => ({
+                                    id: t.id,
+                                    accountId: t.account_id || aid,
+                                    contractId: t.ticker,
+                                    creationTimestamp: parseUtcTimestamp(t.timestamp),
+                                    price: t.entry_price,
+                                    exitPrice: t.exit_price,
+                                    exitTime: parseUtcTimestamp(t.exit_time),
+                                    profitAndLoss: t.pnl,
+                                    fees: t.fees,
+                                    side: t.action === 'BUY' ? 0 : 1,
+                                    size: t.quantity,
+                                    strategy: t.strategy,
+                                    timeframe: t.timeframe,
+                                    entryPrice: t.entry_price,
+                                    isAggregated: true
+                                }));
+                            } catch (e) {
+                                // console.warn(`Error fetching data for account ${aid}:`, e);
+                                newPositions[aid] = [];
+                                newOrders[aid] = [];
+                                newTrades[aid] = [];
+                            }
                         }
-                    }
 
-                    smartSet(positionsByAccount, newPositions, setPositionsByAccount);
-                    smartSet(ordersByAccount, newOrders, setOrdersByAccount);
-                    smartSet(tradesByAccount, newTrades, setTradesByAccount);
+                        // Smart update for big objects
+                        setPositionsByAccount(prev => JSON.stringify(prev) !== JSON.stringify(newPositions) ? newPositions : prev);
+                        setOrdersByAccount(prev => JSON.stringify(prev) !== JSON.stringify(newOrders) ? newOrders : prev);
+                        setTradesByAccount(prev => JSON.stringify(prev) !== JSON.stringify(newTrades) ? newTrades : prev);
+                    } else {
+                        // Maybe accounts not loaded yet?
+                        // If we just started, static fetch might be running.
+                    }
 
                 } catch (e) {
-                    console.warn("Error fetching accounts:", e);
+                    // console.warn("Error fetching detailed account data:", e);
                 }
-            } else {
-                setAccounts([]);
-                setPositionsByAccount({});
-                setOrdersByAccount({});
-                setTradesByAccount({});
             }
 
         } catch (error) {
-            console.error("Failed to fetch dashboard data:", error);
+            console.error("Failed to fetch polling data:", error);
         } finally {
             setLoading(false);
         }
-    }, [isConnected, selectedAccountId, logParams, historyFilter,
-        // Add dependencies for smart update checks mechanism (references)
-        trades, logs, stats, globalConfig, marketStatus, tradingSessions, strategies,
-        accounts, accountSettings, positionsByAccount, ordersByAccount, tradesByAccount
-    ]);
+    }, [logParams, historyFilter, accounts]); // Dependencies that *change what we fetch*, not the result of fetching
 
     // ==========================================================================
     // ACTIONS
@@ -226,7 +253,7 @@ export const useTopStep = () => {
         try {
             await axios.post(`${API_BASE}/dashboard/config`, newConfig);
             toast.success("Settings Saved Successfully");
-            fetchData();
+            fetchStaticData(); // Config is static/global
         } catch (error) {
             console.error("Failed to update config:", error);
             toast.error("Failed to save settings");
@@ -237,7 +264,7 @@ export const useTopStep = () => {
         try {
             await axios.post(`${API_BASE}/settings/accounts/${accountId}`, updates);
             toast.success("Account Settings Updated");
-            fetchData();
+            fetchStaticData(); // Account settings are static
         } catch (error) {
             console.error("Failed to update account settings:", error);
             toast.error("Failed to update account settings");
@@ -259,6 +286,7 @@ export const useTopStep = () => {
                 setIsConnected(true);
                 setSelectedAccountId(accountsRes.data[0].id);
                 toast.success("Connected to TopStep Successfully");
+                fetchPollingData(); // Fetch initial data
             } else {
                 toast.error("Connected but no accounts found");
                 setIsConnected(false);
@@ -291,7 +319,7 @@ export const useTopStep = () => {
         try {
             await axios.post(`${API_BASE}/dashboard/positions/${accountId}/close`, { contract_id: contractId });
             toast.success("Position Closed");
-            fetchData();
+            fetchPollingData();
         } catch (error) {
             console.error("Failed to close position:", error);
             toast.error("Failed to close position");
@@ -302,7 +330,7 @@ export const useTopStep = () => {
         try {
             await axios.post(`${API_BASE}/dashboard/account/${accountId}/flatten`);
             toast.success("Account Flattened");
-            fetchData();
+            fetchPollingData();
         } catch (error) {
             console.error("Failed to flatten account:", error);
             toast.error("Failed to flatten account");
@@ -313,7 +341,7 @@ export const useTopStep = () => {
         try {
             await axios.post(`${API_BASE}/dashboard/flatten-all`);
             toast.success("All Accounts Flattened");
-            fetchData();
+            fetchPollingData();
         } catch (error) {
             console.error("Failed to flatten all accounts:", error);
             toast.error("Failed to flatten all accounts");
@@ -336,7 +364,7 @@ export const useTopStep = () => {
             const res = await axios.post(`${API_BASE}/dashboard/reconcile/${accountId}/apply`, changes);
             if (res.data.success) {
                 toast.success(res.data.message || "Reconciliation applied");
-                fetchData();
+                fetchPollingData();
             }
             return res.data;
         } catch (error) {
@@ -360,34 +388,33 @@ export const useTopStep = () => {
     const allPositions = Object.values(positionsByAccount).flat();
     const allOrders = Object.values(ordersByAccount).flat();
 
-    // ==========================================================================
-    // EFFECTS
-    // ==========================================================================
+    // Initial Using Static Load
+    useEffect(() => {
+        fetchStaticData();
+    }, [fetchStaticData]);
 
-    // ==========================================================================
-    // EFFECTS
-    // ==========================================================================
-
+    // Polling Effect
     useEffect(() => {
         let isMounted = true;
         let timeoutId: ReturnType<typeof setTimeout>;
 
         const poll = async () => {
             if (!isMounted) return;
-            await fetchData();
+            await fetchPollingData();
             if (isMounted) {
+                // Determine poll interval based on connection status? 
+                // Stick to 5s for now as requested.
                 timeoutId = setTimeout(poll, 5000);
             }
         };
 
-        // Initial call
         poll();
 
         return () => {
             isMounted = false;
             clearTimeout(timeoutId);
         };
-    }, [fetchData]);
+    }, [fetchPollingData]); // Re-starts polling only if fetchPollingData changes (e.g. filter change)
 
     // ==========================================================================
     // RETURN
@@ -440,7 +467,7 @@ export const useTopStep = () => {
         previewReconciliation,
         applyReconciliation,
         loadMoreLogs,
-        refresh: fetchData,
+        refresh: () => { fetchStaticData(); fetchPollingData(); },
 
         // UI State
         historyFilter,

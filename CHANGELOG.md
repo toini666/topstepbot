@@ -16,6 +16,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **Discord Reliability**: Implemented robust rate-limit handling (429 retries) with exponential backoff to prevent dropped notifications during high-frequency trading events.
 - **Frontend Memory**: Fixed high memory usage (>3GB) by refactoring polling to recursive `setTimeout`, adding state update guards, and memoizing `LogsPanel`.
 - **SL/TP Updates**: Fixed intermittent SL/TP update failures by bypassing cache for critical order management operations.
+- **Circuit Breaker**: Enforced strict 60s cooldown by preventing successful concurrent requests from resetting the timer.
+- **Telegram**: Added console fallback logging for notification failures to prevent "silent" errors during network saturation.
+- **Frontend**: Fixed race condition in `useTopStep` polling loop causing excessive API requests (429 spam).
 
 ---
 
