@@ -30,6 +30,7 @@ from backend.jobs.health_checks import (
 )
 from backend.jobs.price_refresh import price_refresh_job
 from backend.jobs.discord_summary import discord_daily_summary_job
+from backend.jobs.news_alert import news_alert_job
 
 __all__ = [
     # State management
@@ -57,4 +58,5 @@ __all__ = [
     'send_shutdown_webhook',
     'price_refresh_job',
     'discord_daily_summary_job',
+    'news_alert_job',
 ]

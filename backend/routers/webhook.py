@@ -348,7 +348,7 @@ async def handle_signal(
             # BR-4: Notify qty=0 rejection per account
             account_settings = db.query(AccountSettings).filter(AccountSettings.account_id == account_id).first()
             account_name = (account_settings.account_name if account_settings and account_settings.account_name else str(account_id))
-            reason = f"Position size < 1 contract (risk: ${risk_amount}, SL distance too wide)"
+            reason = f"Position size &lt; 1 contract (risk: ${risk_amount}, SL distance too wide)"
             db.add(Log(level="WARNING", message=f"Qty=0 for {account_name}: {reason}"))
             await telegram_service.notify_trade_rejection(alert.ticker, reason, account_name=account_name)
             continue

@@ -33,4 +33,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [2026-02-05] - Notification Fixes & News Alerts
+
+### Added
+- **News Alerts**: Implemented a new scheduled job that runs every minute to detect high-impact news events starting in 5 minutes and sends a warning to Discord.
+
+### Fixed
+- **Telegram Formatting**: Fixed `Bad Request` error when sending rejection notifications for position sizes < 1 contract by properly escaping HTML special characters.
+
+---
+
 ## [2026-02-05] - Critical Audit Fixes

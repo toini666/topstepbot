@@ -308,6 +308,7 @@ Handles Discord notifications with robust reliability features:
 | Discord Daily Summary | Configurable | Sends account summary to Discord |
 | Discord Daily Summary | Configurable | Sends account summary to Discord |
 | **Economic Calendar** | Daily 07:00 | Fetches events, calculates news blocks, sends briefing |
+| **News Alert** | Every 1m | Checks for high-impact events starting in 5m, sends Discord alert |
 | **Contract Validation** | Daily 23:00 | Checks validity of configured contracts vs TopStep API |
 | **Position Action** | Every 30s | Checks upcoming blocks, executes BREAKEVEN/FLATTEN |
 

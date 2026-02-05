@@ -35,6 +35,7 @@ from backend.jobs import (
     price_refresh_job,
     discord_daily_summary_job,
 )
+from backend.jobs.news_alert import news_alert_job
 from backend.jobs.state import update_account_positions, init_heartbeat_start_time
 
 import asyncio
@@ -171,6 +172,9 @@ async def lifespan(app: FastAPI):
 
     # Calendar Job (7:00 AM Brussels)
     scheduler.add_job(calendar_service.check_calendar_job, 'cron', hour=7, minute=0, timezone=BRUSSELS_TZ, max_instances=1, coalesce=True)
+    
+    # News Alert Job (Every minute, checks for 5-min warning)
+    scheduler.add_job(news_alert_job, 'interval', minutes=1, max_instances=1, coalesce=True)
 
     # Daily Contract Validation (Daily at 23:00 Brussels)
     scheduler.add_job(contract_validator.validate_active_mappings, 'cron', hour=23, minute=0, timezone=BRUSSELS_TZ, id='contract_validation', max_instances=1, coalesce=True)
