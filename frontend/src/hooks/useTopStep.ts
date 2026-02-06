@@ -31,6 +31,7 @@ export const useTopStep = () => {
     const lastPositionsFetchRef = useRef(0);
     const lastOrdersFetchRef = useRef(0);
     const lastTradesFetchRef = useRef(0);
+    const lastAccountsFetchRef = useRef(0);
 
     // Keep latest positions in a ref to avoid extra deps
     const positionsByAccountRef = useRef<Record<number, Position[]>>({});
@@ -75,6 +76,12 @@ export const useTopStep = () => {
     useEffect(() => {
         positionsByAccountRef.current = positionsByAccount;
     }, [positionsByAccount]);
+
+    // Reset trades & orders fetch timers when history filter changes so data loads immediately
+    useEffect(() => {
+        lastTradesFetchRef.current = 0;
+        lastOrdersFetchRef.current = 0;
+    }, [historyFilter]);
 
     // ==========================================================================
     // DATA FETCHING
@@ -188,14 +195,17 @@ export const useTopStep = () => {
                         const positionsIntervalMs = hasOpenPositions ? 5000 : 15000;
                         const ordersIntervalMs = 30000;
                         const tradesIntervalMs = 60000;
+                        const accountsIntervalMs = 30000;
 
                         const shouldFetchPositions = now - lastPositionsFetchRef.current >= positionsIntervalMs;
                         const shouldFetchOrders = now - lastOrdersFetchRef.current >= ordersIntervalMs;
                         const shouldFetchTrades = now - lastTradesFetchRef.current >= tradesIntervalMs;
+                        const shouldFetchAccounts = now - lastAccountsFetchRef.current >= accountsIntervalMs;
 
                         if (shouldFetchPositions) lastPositionsFetchRef.current = now;
                         if (shouldFetchOrders) lastOrdersFetchRef.current = now;
                         if (shouldFetchTrades) lastTradesFetchRef.current = now;
+                        if (shouldFetchAccounts) lastAccountsFetchRef.current = now;
 
                         const days = historyFilter === 'today' ? 1 : 7;
                         const newPositions: Record<number, Position[]> | null = shouldFetchPositions ? {} : null;
@@ -274,6 +284,18 @@ export const useTopStep = () => {
                                 if (newTrades) newTrades[aid] = [];
                             }
                         }));
+
+                        // Refresh accounts (balance) periodically
+                        if (shouldFetchAccounts) {
+                            try {
+                                const accountsRes = await axios.get(`${API_BASE}/dashboard/accounts`);
+                                if (accountsRes.data) {
+                                    setAccounts(prev => JSON.stringify(prev) !== JSON.stringify(accountsRes.data) ? accountsRes.data : prev);
+                                }
+                            } catch {
+                                // Silently ignore - accounts will refresh next cycle
+                            }
+                        }
 
                         // Smart update for big objects
                         if (newPositions) {
