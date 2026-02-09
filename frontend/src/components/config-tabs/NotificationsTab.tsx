@@ -7,6 +7,7 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
 import { Bell, ChevronDown, CheckCircle, Power } from 'lucide-react';
+import { toast } from 'sonner';
 import type { Account } from '../../types';
 import { TimePicker } from '../TimePicker';
 import { API_BASE } from '../../config';
@@ -103,10 +104,11 @@ export function NotificationsTab({ accounts }: NotificationsTabProps) {
                 notify_daily_summary: notifyDailySummary,
                 daily_summary_time: dailySummaryTime
             });
-            // Toast would be handled by parent
+            toast.success('Discord settings saved');
             return true;
         } catch (e) {
             console.error("Failed to save Discord settings", e);
+            toast.error('Failed to save Discord settings');
             return false;
         } finally {
             setSaving(false);

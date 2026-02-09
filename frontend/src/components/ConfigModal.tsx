@@ -1,11 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
-import { X, Save, Settings, Bell } from 'lucide-react';
+import { X, Save, Settings, Bell, Key } from 'lucide-react';
 import { toast } from 'sonner';
 import type { GlobalConfig, TickerMap, TradingSession, Account } from '../types';
 import { TickerMapping } from './TickerMapping';
 import { API_BASE } from '../config';
-import { GeneralSettingsTab, SessionsTab, NotificationsTab, type GeneralSettingsState } from './config-tabs';
+import { GeneralSettingsTab, SessionsTab, NotificationsTab, CredentialsTab, type GeneralSettingsState } from './config-tabs';
 
 interface ConfigModalProps {
     isOpen: boolean;
@@ -15,7 +15,7 @@ interface ConfigModalProps {
 }
 
 export function ConfigModal({ isOpen, onClose, config, onSave }: ConfigModalProps) {
-    const [activeTab, setActiveTab] = useState<'general' | 'sessions' | 'mappings' | 'notifications'>('general');
+    const [activeTab, setActiveTab] = useState<'general' | 'sessions' | 'mappings' | 'notifications' | 'credentials'>('general');
     const [saving, setSaving] = useState(false);
     const initializedRef = useRef(false);
 
@@ -207,6 +207,7 @@ export function ConfigModal({ isOpen, onClose, config, onSave }: ConfigModalProp
         { key: 'sessions' as const, label: 'Sessions' },
         { key: 'mappings' as const, label: 'Mappings' },
         { key: 'notifications' as const, label: 'Notifications', icon: Bell },
+        { key: 'credentials' as const, label: 'Credentials', icon: Key },
     ];
 
     return (
@@ -227,14 +228,14 @@ export function ConfigModal({ isOpen, onClose, config, onSave }: ConfigModalProp
                 </div>
 
                 {/* Tabs */}
-                <div className="flex border-b border-slate-800 bg-slate-950/30 px-6 shrink-0" role="tablist" aria-label="Settings sections">
+                <div className="flex border-b border-slate-800 bg-slate-950/30 px-4 shrink-0 overflow-x-auto custom-scrollbar" role="tablist" aria-label="Settings sections">
                     {configTabs.map(tab => (
                         <button
                             key={tab.key}
                             role="tab"
                             aria-selected={activeTab === tab.key}
                             onClick={() => setActiveTab(tab.key)}
-                            className={`py-3 px-4 text-sm font-medium border-b-2 transition-colors capitalize ${activeTab === tab.key
+                            className={`py-3 px-3 text-xs font-medium border-b-2 transition-colors capitalize whitespace-nowrap ${activeTab === tab.key
                                 ? 'border-indigo-500 text-white'
                                 : 'border-transparent text-slate-400 hover:text-white'
                                 }`}
@@ -270,6 +271,10 @@ export function ConfigModal({ isOpen, onClose, config, onSave }: ConfigModalProp
                     {activeTab === 'notifications' && (
                         <NotificationsTab accounts={accounts} />
                     )}
+
+                    {activeTab === 'credentials' && (
+                        <CredentialsTab />
+                    )}
                 </div>
 
                 {/* Footer */}
@@ -286,7 +291,7 @@ export function ConfigModal({ isOpen, onClose, config, onSave }: ConfigModalProp
                             <Save size={16} /> {saving ? 'Saving...' : 'Save Changes'}
                         </button>
                     )}
-                    {activeTab === 'mappings' && (
+                    {(activeTab === 'mappings' || activeTab === 'credentials') && (
                         <button onClick={onClose} className="btn-primary">
                             Done
                         </button>

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ChevronRight, ChevronLeft, Check, AlertCircle, Loader2, Key, MessageCircle, Activity, Rocket } from 'lucide-react';
+import { ChevronRight, ChevronLeft, Check, AlertCircle, Loader2, Key, MessageCircle, Activity, Rocket, Globe, Copy, ExternalLink } from 'lucide-react';
 import axios from 'axios';
 import { API_BASE } from '../config';
 import type { SetupConfig } from '../types';
@@ -8,7 +8,7 @@ interface SetupWizardProps {
   onComplete: () => void;
 }
 
-const STEPS = ['Welcome', 'TopStep', 'Telegram', 'Heartbeat', 'Launch'] as const;
+const STEPS = ['Welcome', 'TopStep', 'Webhook', 'Telegram', 'Heartbeat', 'Launch'] as const;
 
 export function SetupWizard({ onComplete }: SetupWizardProps) {
   const [step, setStep] = useState(0);
@@ -108,6 +108,10 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
                   <span>TopStep API credentials <span className="text-slate-500">(required)</span></span>
                 </div>
                 <div className="flex items-center gap-3 text-sm text-slate-300">
+                  <Globe className="w-4 h-4 text-amber-400 flex-shrink-0" />
+                  <span>ngrok for TradingView webhooks <span className="text-slate-500">(required)</span></span>
+                </div>
+                <div className="flex items-center gap-3 text-sm text-slate-300">
                   <MessageCircle className="w-4 h-4 text-slate-500 flex-shrink-0" />
                   <span>Telegram bot token <span className="text-slate-500">(optional)</span></span>
                 </div>
@@ -159,8 +163,86 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
             </div>
           )}
 
-          {/* Step: Telegram */}
+          {/* Step: Webhook / ngrok */}
           {step === 2 && (
+            <div className="space-y-6">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-amber-600/20 rounded-xl flex items-center justify-center">
+                  <Globe className="w-5 h-5 text-amber-400" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-bold text-white">TradingView Webhook</h2>
+                  <p className="text-slate-500 text-xs">Required — connect TradingView alerts to your bot</p>
+                </div>
+              </div>
+
+              <div className="bg-slate-800/50 rounded-xl p-4 space-y-4">
+                <p className="text-sm text-slate-300 leading-relaxed">
+                  TopStepBot executes trades based on <span className="text-white font-medium">TradingView alert webhooks</span>.
+                  To receive these alerts, you need to expose your bot to the internet using <span className="text-white font-medium">ngrok</span>.
+                </p>
+
+                <div className="space-y-3">
+                  <div className="flex items-start gap-3">
+                    <span className="w-6 h-6 rounded-full bg-amber-600/20 text-amber-400 flex items-center justify-center text-xs font-bold flex-shrink-0 mt-0.5">1</span>
+                    <div>
+                      <p className="text-sm text-slate-300">Install ngrok from <a href="https://ngrok.com/download" target="_blank" rel="noopener noreferrer" className="text-amber-400 hover:text-amber-300 underline inline-flex items-center gap-1">ngrok.com <ExternalLink className="w-3 h-3" /></a></p>
+                      <p className="text-xs text-slate-500 mt-0.5">Create a free account and follow the install instructions</p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start gap-3">
+                    <span className="w-6 h-6 rounded-full bg-amber-600/20 text-amber-400 flex items-center justify-center text-xs font-bold flex-shrink-0 mt-0.5">2</span>
+                    <div>
+                      <p className="text-sm text-slate-300">Run this command on your machine:</p>
+                      <div className="mt-1.5 bg-slate-900 rounded-lg px-3 py-2 flex items-center justify-between gap-2">
+                        <code className="text-xs text-amber-300 font-mono">ngrok http 8080</code>
+                        <button
+                          onClick={() => {
+                            navigator.clipboard.writeText('ngrok http 8080');
+                          }}
+                          className="text-slate-500 hover:text-white transition-colors flex-shrink-0"
+                          title="Copy command"
+                        >
+                          <Copy className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start gap-3">
+                    <span className="w-6 h-6 rounded-full bg-amber-600/20 text-amber-400 flex items-center justify-center text-xs font-bold flex-shrink-0 mt-0.5">3</span>
+                    <div>
+                      <p className="text-sm text-slate-300">Copy the <span className="text-white font-medium">Forwarding</span> URL from ngrok</p>
+                      <p className="text-xs text-slate-500 mt-0.5">It looks like: <code className="text-amber-400/70 font-mono">https://abc123.ngrok-free.app</code></p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start gap-3">
+                    <span className="w-6 h-6 rounded-full bg-amber-600/20 text-amber-400 flex items-center justify-center text-xs font-bold flex-shrink-0 mt-0.5">4</span>
+                    <div>
+                      <p className="text-sm text-slate-300">In TradingView, set your alert webhook URL to:</p>
+                      <div className="mt-1.5 bg-slate-900 rounded-lg px-3 py-2">
+                        <code className="text-xs text-amber-300 font-mono">https://your-url.ngrok-free.app/api/webhook</code>
+                      </div>
+                      <p className="text-xs text-slate-500 mt-1">Replace <code className="font-mono text-slate-400">your-url</code> with your actual ngrok subdomain</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-2 bg-amber-500/5 border border-amber-500/10 rounded-xl p-3">
+                <AlertCircle className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
+                <p className="text-xs text-slate-400">
+                  ngrok must be running on the same machine as Docker whenever you want to receive TradingView alerts.
+                  You can set this up later — this step is informational only.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Step: Telegram */}
+          {step === 3 && (
             <div className="space-y-6">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 bg-blue-600/20 rounded-xl flex items-center justify-center">
@@ -207,7 +289,7 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
           )}
 
           {/* Step: Heartbeat */}
-          {step === 3 && (
+          {step === 4 && (
             <div className="space-y-6">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 bg-emerald-600/20 rounded-xl flex items-center justify-center">
@@ -264,7 +346,7 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
           )}
 
           {/* Step: Confirmation */}
-          {step === 4 && (
+          {step === 5 && (
             <div className="space-y-6">
               <div className="text-center">
                 <h2 className="text-lg font-bold text-white mb-1">Ready to Launch</h2>
@@ -278,6 +360,14 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
                     <span className="text-sm text-slate-300">TopStep</span>
                   </div>
                   <span className="badge-success">Configured</span>
+                </div>
+
+                <div className="flex items-center justify-between bg-slate-800/50 rounded-xl px-4 py-3">
+                  <div className="flex items-center gap-3">
+                    <Globe className="w-4 h-4 text-amber-400" />
+                    <span className="text-sm text-slate-300">Webhook (ngrok)</span>
+                  </div>
+                  <span className="badge-info">Setup externally</span>
                 </div>
 
                 <div className="flex items-center justify-between bg-slate-800/50 rounded-xl px-4 py-3">

@@ -8,6 +8,7 @@ status and save credentials (stored in the SQLite settings table).
 from fastapi import APIRouter
 from pydantic import BaseModel
 from typing import Optional
+import os
 from backend.database import SessionLocal, Setting
 from backend.services.config_service import (
     is_app_configured,
@@ -53,6 +54,32 @@ def get_setup_status():
             "heartbeat": is_heartbeat_configured(),
         },
     }
+
+
+def _mask_value(key: str, value: str | None) -> str:
+    """Mask sensitive values, show non-sensitive ones in full."""
+    if not value:
+        return ""
+    sensitive_keys = ["TOPSTEP_APIKEY", "TELEGRAM_BOT_TOKEN", "HEARTBEAT_AUTH_TOKEN"]
+    if key in sensitive_keys:
+        if len(value) <= 6:
+            return "*" * len(value)
+        return value[:3] + "*" * (len(value) - 6) + value[-3:]
+    return value
+
+
+@router.get("/setup/current")
+def get_current_config():
+    """Returns current configuration values with secrets masked."""
+    result = {}
+    for key in SETUP_KEYS:
+        raw = get_config_value(key)
+        result[key] = {
+            "value": _mask_value(key, raw),
+            "is_set": bool(raw),
+            "source": "env" if raw and os.getenv(key) else ("db" if raw else "none"),
+        }
+    return result
 
 
 @router.post("/setup/save")
