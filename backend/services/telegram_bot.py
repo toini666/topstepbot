@@ -15,6 +15,11 @@ class TelegramBot:
         # Reuse the sender service for replies
         self.sender = telegram_service
 
+    def reload_credentials(self):
+        """Reload admin ID from env vars (priority) then DB settings table."""
+        from backend.services.config_service import get_config_value
+        self.admin_id = get_config_value("TELEGRAM_ID")
+
     async def start_polling(self):
         """Starts the infinite polling loop."""
         if not self.sender.bot_token or not self.admin_id:

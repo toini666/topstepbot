@@ -10,7 +10,7 @@ Key Features:
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from backend.database import init_db, get_db, Setting, AccountSettings, seed_default_sessions, TickerMap
-from backend.routers import webhook, dashboard, strategies, export, calendar
+from backend.routers import webhook, dashboard, strategies, export, calendar, setup
 from contextlib import asynccontextmanager
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from backend.services.topstep_client import topstep_client
@@ -57,7 +57,12 @@ async def lifespan(app: FastAPI):
     
     # Initialize Persistent HTTP Client
     await topstep_client.startup()
-    
+
+    # Reload credentials from DB settings (supports Docker setup wizard flow)
+    topstep_client.reload_credentials()
+    telegram_service.reload_credentials()
+    telegram_bot.reload_credentials()
+
     # Initialize Calendar (Load cache & calculate news blocks)
     await calendar_service.recalculate_news_blocks()
     
@@ -92,55 +97,58 @@ async def lifespan(app: FastAPI):
     finally:
         db.close()
 
-    # Auto-Connect to TopStep
-    try:
-        await topstep_client.login()
-        
-        # Pre-load existing positions to avoid false "Position Opened" notifications
-        all_accounts = await topstep_client.get_accounts()
-        open_positions_summary = []
-        
-        for account in all_accounts:
-            account_id = account.get('id')
-            account_name = account.get('name', str(account_id))
-            
-            try:
-                positions = await topstep_client.get_open_positions(account_id)
-                current_map = {}
-                
-                for pos in positions:
-                    cid = str(pos.get('contractId'))
-                    current_map[cid] = pos
-                    
-                    # Collect for summary
-                    p_type = pos.get('type')
-                    side = "LONG" if str(p_type) == '1' else "SHORT"
-                    qty = pos.get('size', 1)
-                    open_positions_summary.append({
-                        'account': account_name,
-                        'contract': cid,
-                        'side': side,
-                        'qty': qty
-                    })
-                
-                # Store in state to prevent monitor from treating as new
-                await update_account_positions(account_id, current_map)
-                
-            except Exception as e:
-                print(f"Error pre-loading positions for {account_name}: {e}")
-        
-        # Send startup notification with positions summary
-        if open_positions_summary:
-            summary_msg = "🤖 <b>TopStep Bot Online</b>\n\n📈 <b>Open Positions:</b>\n"
-            for p in open_positions_summary:
-                side_emoji = "🟢" if p['side'] == "LONG" else "🔴"
-                summary_msg += f"• {side_emoji} {p['contract']} x{p['qty']} ({p['account']})\n"
-            await telegram_service.send_message(summary_msg)
-        else:
-            await telegram_service.notify_startup()
-        
-    except Exception as e:
-        print(f"Auto-login failed: {e}")
+    # Auto-Connect to TopStep (only if credentials are configured)
+    if topstep_client.username and topstep_client.api_key:
+        try:
+            await topstep_client.login()
+
+            # Pre-load existing positions to avoid false "Position Opened" notifications
+            all_accounts = await topstep_client.get_accounts()
+            open_positions_summary = []
+
+            for account in all_accounts:
+                account_id = account.get('id')
+                account_name = account.get('name', str(account_id))
+
+                try:
+                    positions = await topstep_client.get_open_positions(account_id)
+                    current_map = {}
+
+                    for pos in positions:
+                        cid = str(pos.get('contractId'))
+                        current_map[cid] = pos
+
+                        # Collect for summary
+                        p_type = pos.get('type')
+                        side = "LONG" if str(p_type) == '1' else "SHORT"
+                        qty = pos.get('size', 1)
+                        open_positions_summary.append({
+                            'account': account_name,
+                            'contract': cid,
+                            'side': side,
+                            'qty': qty
+                        })
+
+                    # Store in state to prevent monitor from treating as new
+                    await update_account_positions(account_id, current_map)
+
+                except Exception as e:
+                    print(f"Error pre-loading positions for {account_name}: {e}")
+
+            # Send startup notification with positions summary
+            if open_positions_summary:
+                summary_msg = "🤖 <b>TopStep Bot Online</b>\n\n📈 <b>Open Positions:</b>\n"
+                for p in open_positions_summary:
+                    side_emoji = "🟢" if p['side'] == "LONG" else "🔴"
+                    summary_msg += f"• {side_emoji} {p['contract']} x{p['qty']} ({p['account']})\n"
+                await telegram_service.send_message(summary_msg)
+            else:
+                await telegram_service.notify_startup()
+
+        except Exception as e:
+            print(f"Auto-login failed: {e}")
+    else:
+        print("TopStep credentials not configured. Visit the web UI to set up.")
 
     # Add Scheduled Jobs
     # Add max_instances=1 and coalesce=True to prevent job overlap and execution pile-up
@@ -165,10 +173,13 @@ async def lifespan(app: FastAPI):
     scheduler.add_job(position_action_job, 'interval', seconds=30, max_instances=1, coalesce=True)
 
     # Heartbeat Job (configurable interval, default 60s)
-    heartbeat_interval = int(os.getenv("HEARTBEAT_INTERVAL_SECONDS", "60"))
-    if os.getenv("HEARTBEAT_WEBHOOK_URL"):
+    from backend.services.config_service import get_config_value
+    heartbeat_url = get_config_value("HEARTBEAT_WEBHOOK_URL")
+    heartbeat_interval_str = get_config_value("HEARTBEAT_INTERVAL_SECONDS") or "60"
+    heartbeat_interval = int(heartbeat_interval_str)
+    if heartbeat_url:
         scheduler.add_job(heartbeat_job, 'interval', seconds=heartbeat_interval, max_instances=1, coalesce=True)
-        print(f"Heartbeat configured: every {heartbeat_interval}s -> {os.getenv('HEARTBEAT_WEBHOOK_URL')}")
+        print(f"Heartbeat configured: every {heartbeat_interval}s -> {heartbeat_url}")
 
     # Initialize heartbeat start time
     init_heartbeat_start_time(datetime.now(BRUSSELS_TZ))
@@ -185,9 +196,13 @@ async def lifespan(app: FastAPI):
     scheduler.start()
     print("Scheduler started.")
 
-    # Start Telegram Polling (Background)
-    polling_task = asyncio.create_task(telegram_bot.start_polling())
-    
+    # Start Telegram Polling (Background) - only if credentials are configured
+    polling_task = None
+    if telegram_service.bot_token and telegram_service.chat_id:
+        polling_task = asyncio.create_task(telegram_bot.start_polling())
+    else:
+        print("Telegram not configured. Polling disabled.")
+
     yield
     
     # Shutdown
@@ -219,10 +234,11 @@ async def lifespan(app: FastAPI):
     print("   ✓ Telegram notification sent")
     
     # Wait for polling task to finish
-    try:
-        await polling_task
-    except asyncio.CancelledError:
-        pass
+    if polling_task:
+        try:
+            await polling_task
+        except asyncio.CancelledError:
+            pass
     
     print("✅ Shutdown complete")
 
@@ -232,7 +248,7 @@ app = FastAPI(title="TopStep Trading Bot", version="2.0.0", lifespan=lifespan)
 # CORS Setup (for Frontend)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:5174"],
+    allow_origins=["http://localhost:5173", "http://localhost:5174", "http://localhost:8080"],
     allow_credentials=True,
     allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["Content-Type", "Authorization"],
@@ -244,6 +260,7 @@ app.include_router(dashboard.router, prefix="/api")
 app.include_router(strategies.router, prefix="/api")
 app.include_router(export.router, prefix="/api")
 app.include_router(calendar.router, prefix="/api")
+app.include_router(setup.router, prefix="/api")
 
 
 @app.get("/")

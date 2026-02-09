@@ -3,7 +3,7 @@ import os
 from typing import Optional
 from backend.database import Log, SessionLocal
 
-PERSISTENCE_FILE = "persistence.json"
+PERSISTENCE_FILE = os.getenv("PERSISTENCE_FILE", "persistence.json")
 
 def save_state(data: dict):
     """

@@ -47,6 +47,13 @@ class TopStepClient:
         # Persistent HTTP Client
         self.client = None
 
+    def reload_credentials(self):
+        """Reload credentials from env vars (priority) then DB settings table."""
+        from backend.services.config_service import get_config_value
+        self.base_url = get_config_value("TOPSTEP_URL") or "https://api.topstepx.com"
+        self.username = get_config_value("TOPSTEP_USERNAME")
+        self.api_key = get_config_value("TOPSTEP_APIKEY")
+
     async def startup(self):
         """Initialize persistent HTTP client."""
         if self.client is None:

@@ -2,6 +2,7 @@
 import httpx
 import xmltodict
 import logging
+import os
 from datetime import datetime, timedelta
 import asyncio
 from typing import List, Dict, Optional
@@ -18,7 +19,7 @@ class CalendarService:
         self._cache = None
         self._last_fetch = None
         self._today_news_blocks: List[Dict] = []
-        self._cache_file = "calendar_cache.json"
+        self._cache_file = os.getenv("CALENDAR_CACHE_FILE", "calendar_cache.json")
         
         # Try load from disk on startup
         self._load_from_disk()

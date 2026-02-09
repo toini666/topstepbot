@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useTopStep } from './hooks/useTopStep';
 import { Activity, FileText, Layers, Terminal, Settings, Calendar as CalendarIcon } from 'lucide-react';
 import axios from 'axios';
@@ -11,6 +11,7 @@ import { Calendar } from './components/Calendar';
 import ReconciliationModal from './components/ReconciliationModal';
 import { aggregateTrades } from './utils/tradeAggregator';
 import { API_BASE } from './config';
+import { SetupWizard } from './components/SetupWizard';
 
 // Dashboard Components
 import {
@@ -24,6 +25,38 @@ import {
 } from './components/dashboard';
 
 function App() {
+  const [isConfigured, setIsConfigured] = useState<boolean | null>(null);
+
+  const checkSetup = () => {
+    axios.get(`${API_BASE}/setup/status`)
+      .then(res => setIsConfigured(res.data.configured))
+      .catch(() => setIsConfigured(false));
+  };
+
+  useEffect(() => { checkSetup(); }, []);
+
+  // Loading state — checking configuration
+  if (isConfigured === null) {
+    return (
+      <div className="h-screen flex items-center justify-center bg-slate-950 text-white">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-8 h-8 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+          <span className="text-slate-400 text-sm">Checking configuration...</span>
+        </div>
+      </div>
+    );
+  }
+
+  // Setup wizard — credentials not configured
+  if (!isConfigured) {
+    return <SetupWizard onComplete={checkSetup} />;
+  }
+
+  // Configured — render dashboard
+  return <Dashboard />;
+}
+
+function Dashboard() {
   const {
     trades,
     logs,

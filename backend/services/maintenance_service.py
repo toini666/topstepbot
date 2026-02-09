@@ -5,7 +5,7 @@ from backend.database import DATABASE_URL, SessionLocal, Log
 
 # Extract path from sqlite:///./topstepbot.db
 DB_FILE_PATH = DATABASE_URL.replace("sqlite:///", "")
-BACKUP_DIR = "backups"
+BACKUP_DIR = os.getenv("BACKUP_DIR", "backups")
 
 def _vacuum_into_backup(src_path: str, dest_path: str) -> None:
     """

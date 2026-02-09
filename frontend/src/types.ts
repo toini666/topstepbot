@@ -248,6 +248,29 @@ export interface DiscordNotificationSettings {
 }
 
 // =============================================================================
+// SETUP WIZARD
+// =============================================================================
+
+export interface SetupStatus {
+  configured: boolean;
+  details: {
+    topstep: boolean;
+    telegram: boolean;
+    heartbeat: boolean;
+  };
+}
+
+export interface SetupConfig {
+  TOPSTEP_USERNAME: string;
+  TOPSTEP_APIKEY: string;
+  TELEGRAM_BOT_TOKEN?: string;
+  TELEGRAM_ID?: string;
+  HEARTBEAT_WEBHOOK_URL?: string;
+  HEARTBEAT_INTERVAL_SECONDS?: string;
+  HEARTBEAT_AUTH_TOKEN?: string;
+}
+
+// =============================================================================
 // LEGACY COMPATIBILITY (Config alias)
 // =============================================================================
 

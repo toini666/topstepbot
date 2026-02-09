@@ -1,0 +1,46 @@
+services:
+  topstepbot:
+    image: toini666/topstepbot:latest
+    container_name: topstepbot
+    ports:
+      - "8080:8080"
+    volumes:
+      - topstepbot_data:/app/data
+    environment:
+      # Required: TopStep API credentials
+      # Option 1: Set here (uncomment and fill in)
+      # TOPSTEP_USERNAME: "your_username"
+      # TOPSTEP_APIKEY: "your_api_key"
+      #
+      # Option 2: Leave empty and use the web-based setup wizard
+      #           Visit http://localhost:8080 after starting
+
+      # Optional: Telegram notifications
+      # TELEGRAM_BOT_TOKEN: "your_bot_token"
+      # TELEGRAM_ID: "your_telegram_id"
+
+      # Optional: Heartbeat monitoring
+      # HEARTBEAT_WEBHOOK_URL: "https://your-monitoring.com/webhook"
+      # HEARTBEAT_INTERVAL_SECONDS: "60"
+      # HEARTBEAT_AUTH_TOKEN: "your_secret_token"
+
+      # Timezone
+      TZ: "Europe/Brussels"
+    restart: unless-stopped
+
+  # Automatic updates: checks Docker Hub every hour for new images
+  # and restarts the container automatically with the new version.
+  # Data is preserved via the volume.
+  watchtower:
+    image: containrrr/watchtower
+    container_name: watchtower
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      WATCHTOWER_POLL_INTERVAL: 3600
+      WATCHTOWER_CLEANUP: "true"
+    restart: unless-stopped
+
+volumes:
+  topstepbot_data:
+    driver: local

@@ -26,6 +26,13 @@ class TelegramService:
         else:
             print("⚠️ Telegram Credentials Missing in .env")
 
+    def reload_credentials(self):
+        """Reload credentials from env vars (priority) then DB settings table."""
+        from backend.services.config_service import get_config_value
+        self.bot_token = get_config_value("TELEGRAM_BOT_TOKEN")
+        self.chat_id = get_config_value("TELEGRAM_ID")
+        self.base_url = f"https://api.telegram.org/bot{self.bot_token}"
+
     async def send_message(self, message: str):
         """Sends a raw message to Telegram."""
         if not self.bot_token or not self.chat_id:
