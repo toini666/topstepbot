@@ -345,8 +345,10 @@ export const useTopStep = () => {
     const updateGlobalConfig = async (newConfig: Partial<GlobalConfig>) => {
         try {
             await axios.post(`${API_BASE}/dashboard/config`, newConfig);
+            // Optimistic update: merge saved values into local state immediately
+            // No need for a re-fetch round-trip (which can fail in Docker/nginx)
+            setGlobalConfig(prev => ({ ...prev, ...newConfig }));
             toast.success("Settings Saved Successfully");
-            await fetchStaticData(); // Wait for config to be re-fetched before resolving
         } catch (error) {
             console.error("Failed to update config:", error);
             toast.error("Failed to save settings");
