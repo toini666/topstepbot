@@ -34,6 +34,10 @@ class TopStepClient:
         self._last_rate_limit_time = None
         self._rate_limit_until = None # Circuit Breaker timestamp
 
+        # Login backoff tracking (exponential backoff on auth failures)
+        self._login_failures = 0
+        self._login_backoff_until = None  # datetime when next login attempt is allowed
+
         # Short-term API response cache to reduce redundant calls
         # Key: (endpoint, account_id), Value: (data, timestamp)
         self._api_cache = {}
@@ -53,6 +57,9 @@ class TopStepClient:
         self.base_url = get_config_value("TOPSTEP_URL") or "https://api.topstepx.com"
         self.username = get_config_value("TOPSTEP_USERNAME")
         self.api_key = get_config_value("TOPSTEP_APIKEY")
+        # Reset login backoff so new credentials can be tried immediately
+        self._login_failures = 0
+        self._login_backoff_until = None
 
     async def startup(self):
         """Initialize persistent HTTP client."""
@@ -356,19 +363,27 @@ class TopStepClient:
 
     async def login(self):
         """Authenticates using UserName + API Key to get a Bearer Token."""
+        # Exponential backoff: skip if we're still in a cooldown period
+        if self._login_backoff_until and datetime.now(timezone.utc) < self._login_backoff_until:
+            remaining = (self._login_backoff_until - datetime.now(timezone.utc)).total_seconds()
+            logger.debug(f"Login backoff active. Next attempt in {remaining:.0f}s (failures: {self._login_failures})")
+            return False
+
         url = f"{self.base_url}/api/Auth/loginKey"
         payload = {
             "userName": self.username,
             "apiKey": self.api_key
         }
-        
+
         # Login is critical, careful not to loop if it fails inside _make_request (e.g. 401)
         # But _make_request handles 401 by clearing token, which is fine.
         data, status_code, success = await self._make_request("POST", url, payload, max_retries=3)
-        
+
         if success and data.get("success"):
             self.token = data["token"]
-            
+            self._login_failures = 0
+            self._login_backoff_until = None
+
             # Log high-level connection event
             db = SessionLocal()
             try:
@@ -376,9 +391,14 @@ class TopStepClient:
                 db.commit()
             finally:
                 db.close()
-                
+
             return True
         else:
+            self._login_failures += 1
+            # Exponential backoff: 30s, 60s, 120s, 240s, capped at 5 minutes
+            backoff_seconds = min(30 * (2 ** (self._login_failures - 1)), 300)
+            self._login_backoff_until = datetime.now(timezone.utc) + timedelta(seconds=backoff_seconds)
+            logger.warning(f"Login failed (attempt #{self._login_failures}). Next retry in {backoff_seconds}s.")
             print(f"Login failed: {data.get('errorMessage') if data else 'Unknown error'}")
             return False
 
