@@ -41,13 +41,10 @@ from backend.jobs.state import update_account_positions, init_heartbeat_start_ti
 import asyncio
 import os
 from datetime import datetime, timedelta
-import pytz
+from backend.services.timezone_service import get_user_tz_name, now_user_tz
 
 # Scheduler Setup
 scheduler = AsyncIOScheduler()
-
-# Brussels Timezone
-BRUSSELS_TZ = pytz.timezone("Europe/Brussels")
 
 
 @asynccontextmanager
@@ -182,16 +179,16 @@ async def lifespan(app: FastAPI):
         print(f"Heartbeat configured: every {heartbeat_interval}s -> {heartbeat_url}")
 
     # Initialize heartbeat start time
-    init_heartbeat_start_time(datetime.now(BRUSSELS_TZ))
+    init_heartbeat_start_time(now_user_tz())
 
     # Calendar Job (7:00 AM Brussels)
-    scheduler.add_job(calendar_service.check_calendar_job, 'cron', hour=7, minute=0, timezone=BRUSSELS_TZ, max_instances=1, coalesce=True)
+    scheduler.add_job(calendar_service.check_calendar_job, 'cron', hour=7, minute=0, timezone=get_user_tz_name(), max_instances=1, coalesce=True)
     
     # News Alert Job (Every minute, checks for 5-min warning)
     scheduler.add_job(news_alert_job, 'interval', minutes=1, max_instances=1, coalesce=True)
 
     # Daily Contract Validation (Daily at 23:00 Brussels)
-    scheduler.add_job(contract_validator.validate_active_mappings, 'cron', hour=23, minute=0, timezone=BRUSSELS_TZ, id='contract_validation', max_instances=1, coalesce=True)
+    scheduler.add_job(contract_validator.validate_active_mappings, 'cron', hour=23, minute=0, timezone=get_user_tz_name(), id='contract_validation', max_instances=1, coalesce=True)
 
     scheduler.start()
     print("Scheduler started.")

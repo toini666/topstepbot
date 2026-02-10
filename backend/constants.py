@@ -119,7 +119,10 @@ DEFAULT_TICK_SIZE = 0.25
 DEFAULT_TICK_VALUE = 0.5
 DEFAULT_MICRO_EQUIVALENT = 1
 
-# Market hours defaults (Brussels timezone)
+# Default timezone for backward compatibility
+DEFAULT_TIMEZONE = "Europe/Brussels"
+
+# Market hours defaults (in user's configured timezone)
 DEFAULT_MARKET_OPEN_TIME = "00:00"
 DEFAULT_MARKET_CLOSE_TIME = "22:00"
 DEFAULT_AUTO_FLATTEN_TIME = "21:55"

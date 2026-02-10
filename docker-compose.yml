@@ -24,7 +24,8 @@ services:
       # HEARTBEAT_INTERVAL_SECONDS: "60"
       # HEARTBEAT_AUTH_TOKEN: "your_secret_token"
 
-      # Timezone
+      # Timezone (IANA format, e.g. "America/New_York", "Europe/Paris")
+      # USER_TIMEZONE: "Europe/Brussels"
       TZ: "Europe/Brussels"
     restart: unless-stopped
 
@@ -32,7 +33,7 @@ services:
   # and restarts the container automatically with the new version.
   # Data is preserved via the volume.
   watchtower:
-    image: containrrr/watchtower
+    image: ghcr.io/nicholas-fedor/watchtower:latest
     container_name: watchtower
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock

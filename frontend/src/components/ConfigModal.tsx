@@ -35,7 +35,8 @@ export function ConfigModal({ isOpen, onClose, config, onSave }: ConfigModalProp
         newsBlockBefore: 5,
         newsBlockAfter: 5,
         positionAction: 'NOTHING',
-        positionActionBuffer: 1
+        positionActionBuffer: 1,
+        timezone: 'Europe/Brussels'
     });
 
     // === Sessions State ===
@@ -66,7 +67,8 @@ export function ConfigModal({ isOpen, onClose, config, onSave }: ConfigModalProp
                 newsBlockBefore: config.news_block_before_minutes ?? 5,
                 newsBlockAfter: config.news_block_after_minutes ?? 5,
                 positionAction: config.blocked_hours_position_action ?? 'NOTHING',
-                positionActionBuffer: config.position_action_buffer_minutes ?? 1
+                positionActionBuffer: config.position_action_buffer_minutes ?? 1,
+                timezone: config.timezone || 'Europe/Brussels'
             });
 
             fetchSessions();
@@ -179,7 +181,8 @@ export function ConfigModal({ isOpen, onClose, config, onSave }: ConfigModalProp
                 news_block_before_minutes: generalState.newsBlockBefore,
                 news_block_after_minutes: generalState.newsBlockAfter,
                 blocked_hours_position_action: generalState.positionAction,
-                position_action_buffer_minutes: generalState.positionActionBuffer
+                position_action_buffer_minutes: generalState.positionActionBuffer,
+                timezone: generalState.timezone
             });
 
             // Save Sessions if modified

@@ -6,7 +6,7 @@
 
 import { useState, useEffect } from 'react';
 import { DollarSign, ChevronDown, CheckCircle, RefreshCw } from 'lucide-react';
-import { format } from 'date-fns';
+import { formatInUserTz } from '../../utils/timezone';
 import type { AggregatedTrade, Strategy } from '../../types';
 
 interface TradesHistoryProps {
@@ -154,10 +154,10 @@ export function TradesHistory({
                         {filteredTrades.map((trade) => (
                             <tr key={trade.id} className="hover:bg-slate-800/30 transition-colors">
                                 <td className="py-3 px-4 text-slate-500 font-mono text-xs">
-                                    {format(new Date(trade.entryTime), 'MM/dd HH:mm:ss')}
+                                    {formatInUserTz(trade.entryTime, 'MM/dd HH:mm:ss')}
                                 </td>
                                 <td className="py-3 px-4 text-slate-500 font-mono text-xs">
-                                    {format(new Date(trade.exitTime), 'HH:mm:ss')}
+                                    {formatInUserTz(trade.exitTime, 'HH:mm:ss')}
                                 </td>
                                 <td className="py-3 px-4 text-violet-300 font-mono text-xs">
                                     {(() => {

@@ -12,6 +12,7 @@ import ReconciliationModal from './components/ReconciliationModal';
 import { aggregateTrades } from './utils/tradeAggregator';
 import { API_BASE } from './config';
 import { SetupWizard } from './components/SetupWizard';
+import { formatInUserTz } from './utils/timezone';
 
 // Dashboard Components
 import {
@@ -159,14 +160,12 @@ function Dashboard() {
     return aggregateTrades(enrichedHistory);
   }, [enrichedHistory]);
 
-  // Calculate Daily PnL
+  // Calculate Daily PnL (compare dates in user's configured timezone)
   const calculatedDailyPnl = historicalTrades
     .filter(trade => {
-      const tradeDate = new Date(trade.creationTimestamp);
-      const today = new Date();
-      return tradeDate.getDate() === today.getDate() &&
-        tradeDate.getMonth() === today.getMonth() &&
-        tradeDate.getFullYear() === today.getFullYear();
+      const tradeDateStr = formatInUserTz(trade.creationTimestamp, 'yyyy-MM-dd');
+      const todayStr = formatInUserTz(new Date(), 'yyyy-MM-dd');
+      return tradeDateStr === todayStr;
     })
     .reduce((acc, trade) => acc + (trade.profitAndLoss || 0) - (trade.fees || 0), 0);
 

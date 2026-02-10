@@ -9,19 +9,16 @@ import asyncio
 from datetime import datetime
 from typing import Any, Set
 
-import pytz
-
 from backend.database import SessionLocal, Log
 from backend.services.topstep_client import topstep_client
 from backend.services.telegram_service import telegram_service
 from backend.services.risk_engine import RiskEngine
+from backend.services.timezone_service import now_user_tz
 from backend.jobs.state import (
     get_handled_position_action_blocks,
     add_handled_position_action_block
 )
 from backend.jobs.auto_flatten import execute_flatten_all
-
-BRUSSELS_TZ = pytz.timezone("Europe/Brussels")
 
 
 async def position_action_job() -> None:
@@ -53,7 +50,7 @@ async def position_action_job() -> None:
             return
 
         # Create unique block ID for deduplication
-        block_id = f"{upcoming_block['start']}-{upcoming_block['end']}-{datetime.now(BRUSSELS_TZ).date()}"
+        block_id = f"{upcoming_block['start']}-{upcoming_block['end']}-{now_user_tz().date()}"
         
         handled_blocks = get_handled_position_action_blocks()
         if block_id in handled_blocks:

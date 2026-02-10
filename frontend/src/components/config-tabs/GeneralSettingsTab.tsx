@@ -7,10 +7,11 @@
 
 import { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Clock, Calendar, Plus, Trash2, ChevronDown, CheckCircle, Newspaper, AlertTriangle } from 'lucide-react';
+import { Clock, Calendar, Plus, Trash2, ChevronDown, CheckCircle, Newspaper, AlertTriangle, Globe } from 'lucide-react';
 import type { TimeBlock, NewsBlock } from '../../types';
 import { TimePicker } from '../TimePicker';
 import { API_BASE } from '../../config';
+import { getUserTimezone, setUserTimezone } from '../../utils/timezone';
 
 export interface GeneralSettingsState {
     blockedPeriodsEnabled: boolean;
@@ -28,6 +29,7 @@ export interface GeneralSettingsState {
     newsBlockAfter: number;
     positionAction: 'NOTHING' | 'BREAKEVEN' | 'FLATTEN';
     positionActionBuffer: number;
+    timezone: string;
 }
 
 interface GeneralSettingsTabProps {
@@ -35,9 +37,22 @@ interface GeneralSettingsTabProps {
     onChange: <K extends keyof GeneralSettingsState>(key: K, value: GeneralSettingsState[K]) => void;
 }
 
+const COMMON_TIMEZONES = [
+    'America/New_York', 'America/Chicago', 'America/Denver', 'America/Los_Angeles',
+    'America/Toronto', 'America/Sao_Paulo',
+    'Europe/London', 'Europe/Brussels', 'Europe/Paris', 'Europe/Berlin',
+    'Europe/Amsterdam', 'Europe/Madrid', 'Europe/Rome', 'Europe/Zurich',
+    'Europe/Moscow',
+    'Asia/Dubai', 'Asia/Kolkata', 'Asia/Singapore', 'Asia/Tokyo',
+    'Asia/Hong_Kong', 'Asia/Shanghai',
+    'Australia/Sydney', 'Pacific/Auckland',
+    'UTC',
+];
+
 export function GeneralSettingsTab({ state, onChange }: GeneralSettingsTabProps) {
     const [newsBlocks, setNewsBlocks] = useState<NewsBlock[]>([]);
     const [positionActionDropdownOpen, setPositionActionDropdownOpen] = useState(false);
+    const [allTimezones, setAllTimezones] = useState<string[]>([]);
 
     useEffect(() => {
         const fetchNewsBlocks = async () => {
@@ -50,6 +65,28 @@ export function GeneralSettingsTab({ state, onChange }: GeneralSettingsTabProps)
         };
         fetchNewsBlocks();
     }, []);
+
+    useEffect(() => {
+        const fetchTimezones = async () => {
+            try {
+                const res = await axios.get(`${API_BASE}/dashboard/timezones`);
+                setAllTimezones(res.data.timezones || []);
+            } catch {
+                // Fallback to common list
+                setAllTimezones(COMMON_TIMEZONES);
+            }
+        };
+        fetchTimezones();
+    }, []);
+
+    // Build deduplicated timezone list: current value + common + all
+    const currentTz = state.timezone || getUserTimezone();
+    const tzOptions = [...new Set([currentTz, ...COMMON_TIMEZONES, ...allTimezones])];
+
+    const handleTimezoneChange = (tz: string) => {
+        onChange('timezone', tz);
+        setUserTimezone(tz);
+    };
 
     // Close dropdown when clicking outside
     useEffect(() => {
@@ -81,11 +118,31 @@ export function GeneralSettingsTab({ state, onChange }: GeneralSettingsTabProps)
 
     return (
         <div className="space-y-6">
+            {/* Timezone */}
+            <div className="space-y-3">
+                <label className="text-sm font-semibold text-slate-300 flex items-center gap-2">
+                    <Globe className="w-4 h-4 text-slate-400" />
+                    Timezone
+                </label>
+                <select
+                    value={currentTz}
+                    onChange={e => handleTimezoneChange(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500 transition-colors"
+                >
+                    {tzOptions.map(tz => (
+                        <option key={tz} value={tz}>{tz}</option>
+                    ))}
+                </select>
+                <p className="text-[10px] text-slate-500 italic">
+                    All times (market hours, blocked periods, schedules, logs) use this timezone.
+                </p>
+            </div>
+
             {/* Market Hours */}
             <div className="space-y-3">
                 <label className="text-sm font-semibold text-slate-300 flex items-center gap-2">
                     <Calendar className="w-4 h-4 text-slate-400" />
-                    Market Hours (Brussels TZ)
+                    Market Hours ({currentTz.split('/').pop()?.replace(/_/g, ' ') || currentTz})
                 </label>
                 <div className="flex items-center gap-3">
                     <TimePicker

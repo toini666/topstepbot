@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ChevronRight, ChevronLeft, Check, AlertCircle, Loader2, Key, MessageCircle, Activity, Rocket, Globe, Copy, ExternalLink } from 'lucide-react';
+import { ChevronRight, ChevronLeft, Check, AlertCircle, Loader2, Key, MessageCircle, Activity, Rocket, Globe, Copy, ExternalLink, Clock } from 'lucide-react';
 import axios from 'axios';
 import { API_BASE } from '../config';
 import type { SetupConfig } from '../types';
@@ -8,12 +8,25 @@ interface SetupWizardProps {
   onComplete: () => void;
 }
 
-const STEPS = ['Welcome', 'TopStep', 'Webhook', 'Telegram', 'Heartbeat', 'Launch'] as const;
+const STEPS = ['Welcome', 'TopStep', 'Webhook', 'Timezone', 'Telegram', 'Heartbeat', 'Launch'] as const;
+
+const COMMON_TIMEZONES = [
+  'America/New_York', 'America/Chicago', 'America/Denver', 'America/Los_Angeles',
+  'America/Toronto', 'America/Sao_Paulo',
+  'Europe/London', 'Europe/Brussels', 'Europe/Paris', 'Europe/Berlin',
+  'Europe/Amsterdam', 'Europe/Madrid', 'Europe/Rome', 'Europe/Zurich',
+  'Europe/Moscow',
+  'Asia/Dubai', 'Asia/Kolkata', 'Asia/Singapore', 'Asia/Tokyo',
+  'Asia/Hong_Kong', 'Asia/Shanghai',
+  'Australia/Sydney', 'Pacific/Auckland',
+  'UTC',
+];
 
 export function SetupWizard({ onComplete }: SetupWizardProps) {
   const [step, setStep] = useState(0);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const detectedTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
   const [config, setConfig] = useState<SetupConfig>({
     TOPSTEP_USERNAME: '',
     TOPSTEP_APIKEY: '',
@@ -22,6 +35,7 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
     HEARTBEAT_WEBHOOK_URL: '',
     HEARTBEAT_INTERVAL_SECONDS: '60',
     HEARTBEAT_AUTH_TOKEN: '',
+    USER_TIMEZONE: detectedTz,
   });
 
   const updateField = (key: keyof SetupConfig, value: string) => {
@@ -241,8 +255,42 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
             </div>
           )}
 
-          {/* Step: Telegram */}
+          {/* Step: Timezone */}
           {step === 3 && (
+            <div className="space-y-6">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-violet-600/20 rounded-xl flex items-center justify-center">
+                  <Clock className="w-5 h-5 text-violet-400" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-bold text-white">Timezone</h2>
+                  <p className="text-slate-500 text-xs">All times (market hours, schedules, logs) use this timezone</p>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="label">Your Timezone</label>
+                  <select
+                    className="input"
+                    value={config.USER_TIMEZONE || detectedTz}
+                    onChange={e => updateField('USER_TIMEZONE', e.target.value)}
+                  >
+                    {/* Ensure detected TZ is always in the list */}
+                    {[...new Set([detectedTz, ...COMMON_TIMEZONES])].map(tz => (
+                      <option key={tz} value={tz}>{tz}</option>
+                    ))}
+                  </select>
+                  <p className="text-slate-600 text-xs mt-1">
+                    Detected from your browser: <span className="text-slate-400">{detectedTz}</span>
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Step: Telegram */}
+          {step === 4 && (
             <div className="space-y-6">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 bg-blue-600/20 rounded-xl flex items-center justify-center">
@@ -289,7 +337,7 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
           )}
 
           {/* Step: Heartbeat */}
-          {step === 4 && (
+          {step === 5 && (
             <div className="space-y-6">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 bg-emerald-600/20 rounded-xl flex items-center justify-center">
@@ -346,7 +394,7 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
           )}
 
           {/* Step: Confirmation */}
-          {step === 5 && (
+          {step === 6 && (
             <div className="space-y-6">
               <div className="text-center">
                 <h2 className="text-lg font-bold text-white mb-1">Ready to Launch</h2>
@@ -368,6 +416,14 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
                     <span className="text-sm text-slate-300">Webhook (ngrok)</span>
                   </div>
                   <span className="badge-info">Setup externally</span>
+                </div>
+
+                <div className="flex items-center justify-between bg-slate-800/50 rounded-xl px-4 py-3">
+                  <div className="flex items-center gap-3">
+                    <Clock className="w-4 h-4 text-violet-400" />
+                    <span className="text-sm text-slate-300">Timezone</span>
+                  </div>
+                  <span className="text-xs text-slate-400 font-mono">{config.USER_TIMEZONE || detectedTz}</span>
                 </div>
 
                 <div className="flex items-center justify-between bg-slate-800/50 rounded-xl px-4 py-3">

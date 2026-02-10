@@ -5,7 +5,7 @@ Batches API calls to reduce load and provides near real-time prices
 for unrealized PnL calculations.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, Optional
 import asyncio
 import logging
@@ -56,7 +56,7 @@ class PriceCache:
         """
         if contract_id in self._cache:
             entry = self._cache[contract_id]
-            age = (datetime.now() - entry["timestamp"]).total_seconds()
+            age = (datetime.now(timezone.utc) - entry["timestamp"]).total_seconds()
             
             # WebSocket prices are always fresh (no TTL)
             if entry.get("source") == "websocket":
@@ -77,7 +77,7 @@ class PriceCache:
         """Store price in cache (from polling)."""
         self._cache[contract_id] = {
             "price": price,
-            "timestamp": datetime.now(),
+            "timestamp": datetime.now(timezone.utc),
             "source": "polling"
         }
     
@@ -85,7 +85,7 @@ class PriceCache:
         """Store price from WebSocket (always fresh, no TTL)."""
         self._cache[contract_id] = {
             "price": price,
-            "timestamp": datetime.now(),
+            "timestamp": datetime.now(timezone.utc),
             "source": "websocket"
         }
     
@@ -113,7 +113,7 @@ class PriceCache:
                 # Log failure but keep any existing stale price
                 existing = self._cache.get(contract_id)
                 if existing:
-                    age = (datetime.now() - existing["timestamp"]).total_seconds()
+                    age = (datetime.now(timezone.utc) - existing["timestamp"]).total_seconds()
                     logger.warning(
                         f"Failed to refresh price for {contract_id}, "
                         f"keeping stale price (age: {age:.1f}s)"

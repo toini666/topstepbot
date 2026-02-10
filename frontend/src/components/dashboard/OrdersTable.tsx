@@ -5,7 +5,7 @@
  */
 
 import { TrendingUp } from 'lucide-react';
-import { format } from 'date-fns';
+import { formatInUserTz } from '../../utils/timezone';
 import type { Order } from '../../types';
 
 interface OrdersTableProps {
@@ -66,7 +66,7 @@ export function OrdersTable({
                         {sortedOrders.map((order) => (
                             <tr key={order.id} className="hover:bg-slate-800/30 transition-colors">
                                 <td className="py-3 px-4 text-slate-500 font-mono text-xs">
-                                    {format(new Date(order.creationTimestamp), 'MM/dd HH:mm:ss')}
+                                    {formatInUserTz(order.creationTimestamp, 'MM/dd HH:mm:ss')}
                                 </td>
                                 <td className="py-3 px-4 font-bold text-white">{order.symbolId}</td>
                                 <td className="py-3 px-4 text-center">

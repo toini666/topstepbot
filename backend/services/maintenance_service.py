@@ -43,7 +43,7 @@ def backup_database():
             print(f"Created backup directory: {BACKUP_DIR}")
 
         # Create filename with timestamp
-        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        timestamp = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%d_%H%M%S")
         backup_filename = f"topstepbot_backup_{timestamp}.db"
         backup_path = os.path.join(BACKUP_DIR, backup_filename)
 
@@ -97,7 +97,7 @@ def clean_logs(days=7):
     """
     db = SessionLocal()
     try:
-        cutoff_date = datetime.datetime.utcnow() - datetime.timedelta(days=days)
+        cutoff_date = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=days)
         
         # SQLAlchemy core delete for efficiency or ORM
         # Using ORM for simplicity or raw SQL for speed
@@ -139,7 +139,7 @@ def check_and_run_startup_backup():
     If not, triggers a backup immediately.
     """
     try:
-        today_str = datetime.datetime.now().strftime("%Y%m%d")
+        today_str = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%d")
         
         # Check if backup dir exists
         if not os.path.exists(BACKUP_DIR):

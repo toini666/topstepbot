@@ -122,6 +122,7 @@ export interface NewsBlock {
 }
 
 export interface GlobalConfig {
+    timezone: string;
     blocked_periods_enabled: boolean;
     blocked_periods: TimeBlock[];
     auto_flatten_enabled: boolean;
@@ -268,6 +269,7 @@ export interface SetupConfig {
   HEARTBEAT_WEBHOOK_URL?: string;
   HEARTBEAT_INTERVAL_SECONDS?: string;
   HEARTBEAT_AUTH_TOKEN?: string;
+  USER_TIMEZONE?: string;
 }
 
 // =============================================================================

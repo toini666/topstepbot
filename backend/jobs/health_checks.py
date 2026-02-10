@@ -10,19 +10,17 @@ from datetime import datetime
 from typing import Tuple, Optional
 
 import aiohttp
-import pytz
 
 from backend.database import SessionLocal, Log, Setting
 from backend.services.topstep_client import topstep_client
 from backend.services.telegram_service import telegram_service
+from backend.services.timezone_service import now_user_tz
 from backend.jobs.state import (
     get_api_health,
     update_api_health,
     get_heartbeat_state,
     update_heartbeat_state
 )
-
-BRUSSELS_TZ = pytz.timezone("Europe/Brussels")
 FAILURE_THRESHOLD = 3  # Notify after 3 consecutive failures
 
 
@@ -37,7 +35,7 @@ async def api_health_check_job() -> None:
     is_healthy, response_time, error = await topstep_client.ping()
     
     update_api_health(
-        last_check_time=datetime.now(BRUSSELS_TZ).isoformat(),
+        last_check_time=now_user_tz().isoformat(),
         last_response_time=response_time
     )
     
@@ -102,7 +100,7 @@ async def heartbeat_job() -> None:
     
     db = SessionLocal()
     try:
-        now = datetime.now(BRUSSELS_TZ)
+        now = now_user_tz()
         
         # Detect sleep: if last heartbeat was > 2 minutes ago, reset start_time
         if heartbeat_state["last_sent"]:
@@ -156,7 +154,7 @@ async def heartbeat_job() -> None:
             async with session.post(webhook_url, json=payload, headers=headers, timeout=10) as response:
                 if response.status in [200, 201, 202, 204]:
                     update_heartbeat_state(
-                        last_sent=datetime.now(BRUSSELS_TZ),
+                        last_sent=now_user_tz(),
                         consecutive_failures=0
                     )
                 else:
@@ -211,7 +209,7 @@ async def send_shutdown_webhook() -> None:
         return
     
     try:
-        now = datetime.now(BRUSSELS_TZ)
+        now = now_user_tz()
         
         # Calculate final uptime
         uptime_seconds = 0

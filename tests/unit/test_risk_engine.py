@@ -200,12 +200,12 @@ class TestMarketHoursCheck:
     @patch('backend.services.risk_engine.datetime')
     def test_market_closed_before_open(self, mock_datetime):
         """Test market closed before open time."""
-        from backend.services.risk_engine import RiskEngine, BRUSSELS_TZ
+        from backend.services.risk_engine import RiskEngine
+        from backend.services.timezone_service import get_user_tz
         from datetime import datetime, time
-        
-        # Mock 6:30 AM Brussels (before default 00:00 open - wait, that doesn't make sense)
-        # Actually default open is 00:00, so let's mock 23:00 which is after 22:00 close
-        mock_now = datetime(2025, 2, 4, 23, 0, 0, tzinfo=BRUSSELS_TZ)
+
+        # Mock 23:00 in user timezone (after 22:00 close)
+        mock_now = datetime(2025, 2, 4, 23, 0, 0, tzinfo=get_user_tz())
         mock_datetime.now.return_value = mock_now
         
         db = MagicMock()

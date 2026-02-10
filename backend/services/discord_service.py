@@ -10,7 +10,7 @@ Sends notifications to Discord channels using webhooks:
 import httpx
 import asyncio
 from typing import Optional
-from datetime import datetime
+from datetime import datetime, timezone
 from backend.database import SessionLocal, Log, DiscordNotificationSettings
 
 
@@ -163,7 +163,7 @@ class DiscordService:
             "description": description,
             "color": color,
             "footer": {"text": f"Timeframe: {timeframe}"},
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
         }
         
         await self.send_message(settings.webhook_url, embeds=[embed])
@@ -222,7 +222,7 @@ class DiscordService:
             "description": description,
             "color": color,
             "footer": {"text": f"Timeframe: {timeframe}"},
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
         }
         
         await self.send_message(settings.webhook_url, embeds=[embed])
@@ -259,7 +259,7 @@ class DiscordService:
             "title": "📊 Daily Trading Summary",
             "description": description,
             "color": color,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "footer": {"text": f"{account_name} • End of day"}
         }
         
@@ -321,7 +321,7 @@ class DiscordService:
             "description": description,
             "color": color,
             "footer": {"text": f"Timeframe: {timeframe} • {account_name}"},
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
         }
         
         await self.send_message(settings.webhook_url, embeds=[embed])

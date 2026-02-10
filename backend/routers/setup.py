@@ -30,6 +30,7 @@ SETUP_KEYS = [
     "HEARTBEAT_WEBHOOK_URL",
     "HEARTBEAT_INTERVAL_SECONDS",
     "HEARTBEAT_AUTH_TOKEN",
+    "USER_TIMEZONE",
 ]
 
 
@@ -41,6 +42,7 @@ class SetupConfig(BaseModel):
     HEARTBEAT_WEBHOOK_URL: Optional[str] = None
     HEARTBEAT_INTERVAL_SECONDS: Optional[str] = None
     HEARTBEAT_AUTH_TOKEN: Optional[str] = None
+    USER_TIMEZONE: Optional[str] = None
 
 
 @router.get("/setup/status")
@@ -114,6 +116,10 @@ async def save_setup(config: SetupConfig):
     topstep_client.reload_credentials()
     telegram_service.reload_credentials()
     telegram_bot.reload_credentials()
+
+    # Reload timezone if it was updated
+    from backend.services.timezone_service import reload_timezone
+    reload_timezone()
 
     # Attempt TopStep login to validate credentials
     connected = False

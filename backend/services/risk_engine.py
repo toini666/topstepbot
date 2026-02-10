@@ -14,7 +14,6 @@ Validation Flow (Per Account):
 import json
 from datetime import datetime, timezone, time
 from typing import Optional, Tuple, List, Dict, Any
-import pytz
 from sqlalchemy.orm import Session
 
 from backend.database import (
@@ -28,9 +27,7 @@ from backend.services.settings_cache import (
     get_cached_strategy_configs,
     invalidate_global_settings
 )
-
-# Brussels Timezone for all time calculations
-BRUSSELS_TZ = pytz.timezone("Europe/Brussels")
+from backend.services.timezone_service import now_user_tz
 
 
 class RiskEngine:
@@ -126,7 +123,7 @@ class RiskEngine:
     
     def get_current_session(self) -> Optional[str]:
         """Returns the name of the current active session, or None if outside all sessions."""
-        now_bru = datetime.now(BRUSSELS_TZ).time()
+        now_local = now_user_tz().time()
         
         sessions = self.get_trading_sessions()
         for session in sessions:
@@ -141,10 +138,10 @@ class RiskEngine:
                 
                 # Handle midnight crossing
                 if t_start > t_end:
-                    if now_bru >= t_start or now_bru <= t_end:
+                    if now_local >= t_start or now_local <= t_end:
                         return session.name
                 else:
-                    if t_start <= now_bru <= t_end:
+                    if t_start <= now_local <= t_end:
                         return session.name
             except Exception as e:
                 print(f"Session parse error for {session.name}: {e}")
@@ -211,14 +208,14 @@ class RiskEngine:
         Does NOT check trading_days (user preference) or blocked_periods.
         Returns (is_open, reason).
         """
-        now_bru = datetime.now(BRUSSELS_TZ)
-        now_time = now_bru.time()
+        now_local = now_user_tz()
+        now_time = now_local.time()
         settings = self.get_global_settings()
         
         # Weekend check based on weekend_markets_open setting
-        if now_bru.weekday() >= 5:  # Saturday=5, Sunday=6
+        if now_local.weekday() >= 5:  # Saturday=5, Sunday=6
             if not settings.get("weekend_markets_open", False):
-                day_full = now_bru.strftime("%A")
+                day_full = now_local.strftime("%A")
                 return False, f"Market closed ({day_full})"
         
         # Market hours check
@@ -245,19 +242,19 @@ class RiskEngine:
         Used for trade validation, NOT for UI banner.
         Returns (allowed, reason).
         """
-        now_bru = datetime.now(BRUSSELS_TZ)
-        now_time = now_bru.time()
+        now_local = now_user_tz()
+        now_time = now_local.time()
         
         # Get settings
         settings = self.get_global_settings()
         
         # Day of week check (user preference)
         day_names = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"]
-        current_day = day_names[now_bru.weekday()]
+        current_day = day_names[now_local.weekday()]
         enabled_days = settings.get("trading_days", ["MON", "TUE", "WED", "THU", "FRI"])
         
         if current_day not in enabled_days:
-            day_full = now_bru.strftime("%A")
+            day_full = now_local.strftime("%A")
             return False, f"Trading disabled on {day_full}"
         
         # Market hours check
@@ -290,7 +287,7 @@ class RiskEngine:
         if not settings.get("blocked_periods_enabled", True):
             return True, "OK"
         
-        now_bru = datetime.now(BRUSSELS_TZ).time()
+        now_local = now_user_tz().time()
         
         # Check manual blocked periods
         for block in settings.get("blocked_periods", []):
@@ -306,10 +303,10 @@ class RiskEngine:
                 
                 # Handle midnight crossing
                 if t_start > t_end:
-                    if now_bru >= t_start or now_bru <= t_end:
+                    if now_local >= t_start or now_local <= t_end:
                         return False, f"Blocked Time ({block['start']}-{block['end']})"
                 else:
-                    if t_start <= now_bru <= t_end:
+                    if t_start <= now_local <= t_end:
                         return False, f"Blocked Time ({block['start']}-{block['end']})"
             except Exception as e:
                 print(f"Block parse error: {e}")
@@ -328,10 +325,10 @@ class RiskEngine:
                 
                 # Handle midnight crossing
                 if t_start > t_end:
-                    if now_bru >= t_start or now_bru <= t_end:
+                    if now_local >= t_start or now_local <= t_end:
                         return False, f"News Block ({block.get('event', 'Event')} - {block['start']}-{block['end']})"
                 else:
-                    if t_start <= now_bru <= t_end:
+                    if t_start <= now_local <= t_end:
                         return False, f"News Block ({block.get('event', 'Event')} - {block['start']}-{block['end']})"
             except Exception as e:
                 print(f"News block parse error: {e}")
@@ -379,19 +376,19 @@ class RiskEngine:
         """
         from datetime import timedelta
         
-        now_bru = datetime.now(BRUSSELS_TZ)
+        now_local = now_user_tz()
         all_blocks = self.get_all_blocked_periods()
         
         for block in all_blocks:
             try:
                 start_h, start_m = map(int, block["start"].split(':'))
-                block_start = now_bru.replace(hour=start_h, minute=start_m, second=0, microsecond=0)
+                block_start = now_local.replace(hour=start_h, minute=start_m, second=0, microsecond=0)
                 
                 # Calculate the trigger time (buffer_minutes before block starts)
                 trigger_time = block_start - timedelta(minutes=buffer_minutes)
                 
                 # Check if we're in the trigger window (between trigger_time and block_start)
-                if trigger_time <= now_bru < block_start:
+                if trigger_time <= now_local < block_start:
                     return block
             except Exception as e:
                 print(f"Upcoming block check error: {e}")

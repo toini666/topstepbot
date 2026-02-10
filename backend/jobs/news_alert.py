@@ -5,15 +5,14 @@ Sends Discord notification 5 minutes before the event.
 """
 
 from datetime import datetime, timedelta
-import pytz
 import logging
 import json
 from backend.services.calendar_service import calendar_service
 from backend.services.discord_service import discord_service
+from backend.services.timezone_service import now_user_tz
 from backend.database import SessionLocal, Setting, Log
 
 logger = logging.getLogger("topstepbot")
-BRUSSELS_TZ = pytz.timezone("Europe/Brussels")
 
 async def news_alert_job():
     """
@@ -30,8 +29,8 @@ async def news_alert_job():
             if not events:
                 return
 
-        now_bru = datetime.now(BRUSSELS_TZ)
-        today_str = now_bru.strftime("%m-%d-%Y")
+        now_local = now_user_tz()
+        today_str = now_local.strftime("%m-%d-%Y")
         
         # Filter for today
         todays_events = [e for e in events if e.get("date") == today_str]
@@ -81,10 +80,10 @@ async def news_alert_job():
             try:
                 # Parse event time
                 h, m = map(int, event_time_str.split(":"))
-                event_dt = now_bru.replace(hour=h, minute=m, second=0, microsecond=0)
+                event_dt = now_local.replace(hour=h, minute=m, second=0, microsecond=0)
                 
                 # Check logic: Event is in X minutes
-                target_check_time = now_bru + timedelta(minutes=minutes_before)
+                target_check_time = now_local + timedelta(minutes=minutes_before)
                 
                 if event_dt.hour == target_check_time.hour and event_dt.minute == target_check_time.minute:
                     alert_events.append(event)

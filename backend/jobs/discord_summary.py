@@ -8,14 +8,11 @@ Sends daily summary with P&L, trade count, and balance.
 from datetime import datetime
 from typing import List, Dict, Any
 
-import pytz
-
 from backend.database import SessionLocal, Log, DiscordNotificationSettings, Trade
 from backend.services.topstep_client import topstep_client
 from backend.services.discord_service import discord_service
 from backend.services.risk_engine import RiskEngine
-
-BRUSSELS_TZ = pytz.timezone("Europe/Brussels")
+from backend.services.timezone_service import now_user_tz
 
 
 async def discord_daily_summary_job() -> None:
@@ -32,14 +29,14 @@ async def discord_daily_summary_job() -> None:
         settings = risk_engine.get_global_settings()
         trading_days = settings.get("trading_days", ["MON", "TUE", "WED", "THU", "FRI"])
         
-        now_brussels = datetime.now(BRUSSELS_TZ)
-        day_abbr = now_brussels.strftime("%a").upper()[:3]  # MON, TUE, etc.
+        now_local = now_user_tz()
+        day_abbr = now_local.strftime("%a").upper()[:3]  # MON, TUE, etc.
         
         if day_abbr not in trading_days:
             # Not a trading day, skip
             return
         
-        current_time = now_brussels.strftime("%H:%M")
+        current_time = now_local.strftime("%H:%M")
         
         # Get all Discord settings with daily summary enabled
         all_discord_settings = db.query(DiscordNotificationSettings).filter(

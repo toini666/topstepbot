@@ -6,8 +6,8 @@
 
 import { useState, memo } from 'react';
 import { Terminal, ChevronDown, ChevronRight, Copy } from 'lucide-react';
-import { format } from 'date-fns';
 import { toast } from 'sonner';
+import { formatInUserTz } from '../../utils/timezone';
 import type { Log } from '../../types';
 
 interface LogsPanelProps {
@@ -64,7 +64,7 @@ export const LogsPanel = memo(function LogsPanel({ logs, loadMoreLogs }: LogsPan
                                             isExpanded ? <ChevronDown className="w-3 h-3 text-slate-400" /> : <ChevronRight className="w-3 h-3 text-slate-400" />
                                         )}
                                         {!canExpand && <div className="w-3" />}
-                                        {format(new Date(log.timestamp), 'dd/MM HH:mm:ss')}
+                                        {formatInUserTz(log.timestamp, 'dd/MM HH:mm:ss')}
                                     </span>
                                     <span className={`shrink-0 w-16 ${log.level === 'ERROR' ? 'text-red-400' :
                                         log.level === 'WARNING' ? 'text-yellow-400' :

@@ -3,11 +3,12 @@ import httpx
 import xmltodict
 import logging
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import asyncio
 from typing import List, Dict, Optional
 from backend.database import SessionLocal, Log, Setting
 from backend.services.discord_service import discord_service
+from backend.services.timezone_service import now_user_tz, get_et_offset_hours
 
 logger = logging.getLogger("topstepbot")
 
@@ -54,12 +55,12 @@ class CalendarService:
         parses it, and returns a list of events.
         """
         # Throttling: Prevent fetching more than once per minute
-        if self._last_fetch and (datetime.now() - self._last_fetch).total_seconds() < 60:
+        if self._last_fetch and (datetime.now(timezone.utc) - self._last_fetch).total_seconds() < 60:
             return self._cache or []
 
         try:
             # Update fetch time immediately to prevent race conditions/parallel calls
-            self._last_fetch = datetime.now()
+            self._last_fetch = datetime.now(timezone.utc)
             
             logger.info("Fetching calendar from ForexFactory...")
             async with httpx.AsyncClient(timeout=10.0) as client:
@@ -75,7 +76,7 @@ class CalendarService:
                 
             formatted_events = []
             for ev in events_raw:
-                # Parse and adjust time (Add 1 hour for Brussels, convert to 24h)
+                # Parse and adjust time (convert from ET to user's timezone)
                 raw_time = ev.get("time", "")
                 final_time = raw_time
                 try:
@@ -83,8 +84,9 @@ class CalendarService:
                         # Parse e.g. "8:30am" or "2:00pm"
                         if "am" in raw_time.lower() or "pm" in raw_time.lower():
                             dt = datetime.strptime(raw_time, "%I:%M%p")
-                            # Add 1 hour
-                            dt = dt + timedelta(hours=1)
+                            # Convert from ET to user's configured timezone
+                            offset = get_et_offset_hours()
+                            dt = dt + timedelta(hours=offset)
                             final_time = dt.strftime("%H:%M")
                 except Exception:
                     pass
@@ -100,8 +102,8 @@ class CalendarService:
                 })
             
             self._cache = formatted_events
-            self._last_fetch = datetime.now()
-            
+            self._last_fetch = datetime.now(timezone.utc)
+
             # SAVE TO DISK
             self._save_to_disk(formatted_events)
             
@@ -138,9 +140,9 @@ class CalendarService:
             return []
         
         # Get today's events from cache
-        today_str = datetime.now().strftime("%m-%d-%Y")
+        today_str = now_user_tz().strftime("%m-%d-%Y")
         todays_events = [e for e in self._cache if e.get("date") == today_str]
-        
+
         # Recalculate blocks
         blocks = await self.calculate_news_blocks(todays_events)
         logger.info(f"Recalculated news blocks: {len(blocks)} blocks for today")
@@ -191,7 +193,7 @@ class CalendarService:
                 try:
                     # Parse event time
                     hour, minute = map(int, event_time.split(":"))
-                    event_dt = datetime.now().replace(hour=hour, minute=minute, second=0, microsecond=0)
+                    event_dt = now_user_tz().replace(hour=hour, minute=minute, second=0, microsecond=0)
                     
                     # Calculate block start and end
                     block_start = event_dt - timedelta(minutes=before_minutes)
@@ -256,8 +258,8 @@ class CalendarService:
         
         # Filter for today
         # XML Date Format: MM-DD-YYYY (e.g., 01-16-2025)
-        today_str = datetime.now().strftime("%m-%d-%Y")
-        
+        today_str = now_user_tz().strftime("%m-%d-%Y")
+
         todays_events = [e for e in events if e.get("date") == today_str]
         
         if todays_events:
@@ -307,7 +309,7 @@ class CalendarService:
                 })
 
             embed = {
-                "title": f"📅 Economic Calendar - {datetime.now().strftime('%d %B %Y')}",
+                "title": f"📅 Economic Calendar - {now_user_tz().strftime('%d %B %Y')}",
                 "description": "Major events scheduled for today:",
                 "color": 0x3b82f6, # Blue
                 "fields": embed_fields,

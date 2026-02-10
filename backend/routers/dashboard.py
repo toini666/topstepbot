@@ -87,7 +87,9 @@ def get_global_config(db: Session = Depends(get_db)):
     risk_engine = RiskEngine(db)
     settings = risk_engine.get_global_settings()
     
+    from backend.services.timezone_service import get_user_tz_name
     return GlobalSettingsResponse(
+        timezone=get_user_tz_name(),
         blocked_periods_enabled=settings.get("blocked_periods_enabled", True),
         blocked_periods=[TimeBlock(**b) for b in settings.get("blocked_periods", [])],
         auto_flatten_enabled=settings.get("auto_flatten_enabled", False),
@@ -179,7 +181,15 @@ def update_global_config(req: GlobalSettingsUpdate, db: Session = Depends(get_db
     
     if req.position_action_buffer_minutes is not None:
         set_setting("position_action_buffer_minutes", str(req.position_action_buffer_minutes))
-    
+
+    # Timezone
+    if req.timezone is not None:
+        from backend.services.timezone_service import is_valid_timezone, reload_timezone
+        if is_valid_timezone(req.timezone):
+            set_setting("USER_TIMEZONE", req.timezone)
+            reload_timezone()
+            log_messages.append(f"Timezone changed to {req.timezone}")
+
     # Log changes
     for msg in log_messages:
         db.add(Log(level="INFO", message=f"Global Settings: {msg}"))
@@ -187,6 +197,29 @@ def update_global_config(req: GlobalSettingsUpdate, db: Session = Depends(get_db
     db.add(Log(level="INFO", message="Global Settings Updated", details=json.dumps(req.model_dump(), default=str)))
     db.commit()
     return {"status": "updated"}
+
+
+# =============================================================================
+# TIMEZONE
+# =============================================================================
+
+@router.get("/dashboard/timezones")
+def list_timezones():
+    """Return list of common IANA timezone names for the frontend selector."""
+    common = [
+        "America/New_York", "America/Chicago", "America/Denver", "America/Los_Angeles",
+        "America/Toronto", "America/Sao_Paulo",
+        "Europe/London", "Europe/Brussels", "Europe/Paris", "Europe/Berlin",
+        "Europe/Amsterdam", "Europe/Madrid", "Europe/Rome", "Europe/Zurich",
+        "Europe/Moscow",
+        "Asia/Dubai", "Asia/Kolkata", "Asia/Singapore", "Asia/Tokyo",
+        "Asia/Hong_Kong", "Asia/Shanghai",
+        "Australia/Sydney", "Pacific/Auckland",
+        "UTC",
+    ]
+    from zoneinfo import available_timezones
+    all_tzs = sorted(available_timezones())
+    return {"common": common, "all": all_tzs}
 
 
 # =============================================================================
@@ -570,25 +603,23 @@ def get_trades(
     
     # Filter by date range
     if days > 0:
-        import pytz
         from datetime import timedelta
-        brussels_tz = pytz.timezone("Europe/Brussels")
-        now_utc = datetime.now(timezone.utc)
-        now_brussels = now_utc.astimezone(brussels_tz)
-        
-        # Get start of today in Brussels time
-        today_start_brussels = now_brussels.replace(hour=0, minute=0, second=0, microsecond=0)
-        
+        from backend.services.timezone_service import now_user_tz
+        now_local = now_user_tz()
+
+        # Get start of today in user's timezone
+        today_start_local = now_local.replace(hour=0, minute=0, second=0, microsecond=0)
+
         if days == 1:
-            # Today: from midnight Brussels time
-            start_date_brussels = today_start_brussels
+            # Today: from midnight in user's timezone
+            start_date_local = today_start_local
         else:
             # Last N days (including today)
             # e.g. days=7 -> today + 6 previous days = start from 6 days ago midnight
-            start_date_brussels = today_start_brussels - timedelta(days=days-1)
-            
+            start_date_local = today_start_local - timedelta(days=days-1)
+
         # Convert back to UTC for DB comparison
-        start_date = start_date_brussels.astimezone(timezone.utc)
+        start_date = start_date_local.astimezone(timezone.utc)
         
         # Ensure correct type for comparison (offset-aware or naive depending on DB)
         # SQLite usually stores naive strings, but our models use DateTime(timezone=True) or similar?

@@ -3,8 +3,8 @@ import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import axios from 'axios';
 import { Calendar as CalendarIcon, RefreshCw, Bell, Settings, CheckCircle, Filter, X, Globe, ChevronDown, Check } from 'lucide-react';
-import { format } from 'date-fns';
 import { API_BASE } from '../config';
+import { formatInUserTz } from '../utils/timezone';
 import { toast } from 'sonner';
 
 interface CalendarEvent {
@@ -109,7 +109,7 @@ export function Calendar() {
     };
 
     // Helper to get Today's events
-    const todayStr = format(new Date(), 'MM-dd-yyyy');
+    const todayStr = formatInUserTz(new Date(), 'MM-dd-yyyy');
     const todaysEvents = events.filter(e => e.date === todayStr);
 
     // Helper to get unique countries

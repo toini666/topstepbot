@@ -10,7 +10,6 @@ import asyncio
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict, Any, List, Set
 
-import pytz
 
 from backend.database import SessionLocal, Log, Trade, TickerMap
 from backend.services.topstep_client import topstep_client
@@ -205,7 +204,7 @@ async def monitor_closed_positions_job() -> None:
                                     open_trade.exit_price = exit_px
                                     open_trade.pnl = pnl_val
                                     open_trade.fees = total_fees
-                                    open_trade.exit_time = datetime.now(pytz.UTC)
+                                    open_trade.exit_time = datetime.now(timezone.utc)
                                     db.commit()
 
                                     side_str = "FLAT"
@@ -354,7 +353,7 @@ async def monitor_closed_positions_job() -> None:
                                         status="OPEN",
                                         strategy="MANUAL",
                                         timeframe="-",
-                                        timestamp=entry_ts or datetime.now(pytz.UTC)
+                                        timestamp=entry_ts or datetime.now(timezone.utc)
                                     )
                                     db.add(manual_trade)
                                     db.commit()
@@ -467,7 +466,7 @@ async def monitor_closed_positions_job() -> None:
 
                             trade.status = "CLOSED"
                             trade.exit_price = exit_px
-                            trade.exit_time = datetime.now(pytz.UTC)
+                            trade.exit_time = datetime.now(timezone.utc)
                             trade.pnl = pnl_val
                             trade.fees = fees_val
                             db.commit()

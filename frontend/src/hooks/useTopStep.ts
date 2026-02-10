@@ -6,6 +6,7 @@ import type {
     GlobalConfig, MarketStatus, AccountSettings, TradingSession, Strategy
 } from '../types';
 import { API_BASE } from '../config';
+import { setUserTimezone, todayMidnightUtcIso } from '../utils/timezone';
 
 /**
  * Main hook for TopStep Trading Bot.
@@ -38,6 +39,7 @@ export const useTopStep = () => {
 
     // Settings
     const [globalConfig, setGlobalConfig] = useState<GlobalConfig>({
+        timezone: 'Europe/Brussels',
         blocked_periods_enabled: true,
         blocked_periods: [],
         auto_flatten_enabled: false,
@@ -68,7 +70,7 @@ export const useTopStep = () => {
     const [selectedAccountId, setSelectedAccountId] = useState<number | null>(null);
     const [historyFilter, setHistoryFilter] = useState<'today' | 'week'>('today');
     const [logParams, setLogParams] = useState<{ min_timestamp: string | null; limit: number }>({
-        min_timestamp: new Date(new Date().setHours(0, 0, 0, 0)).toISOString(),
+        min_timestamp: todayMidnightUtcIso(),
         limit: 1000
     });
 
@@ -101,7 +103,12 @@ export const useTopStep = () => {
                 axios.get(`${API_BASE}/settings/accounts`)
             ]);
 
-            if (configRes.data) setGlobalConfig(configRes.data);
+            if (configRes.data) {
+                setGlobalConfig(configRes.data);
+                if (configRes.data.timezone) {
+                    setUserTimezone(configRes.data.timezone);
+                }
+            }
             if (sessionsRes.data) setTradingSessions(sessionsRes.data);
             if (strategiesRes.data) setStrategies(strategiesRes.data);
             if (accountsRes.data) {

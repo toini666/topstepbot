@@ -203,6 +203,7 @@ class TimeBlock(BaseModel):
 
 class GlobalSettingsResponse(BaseModel):
     """All global settings combined."""
+    timezone: str = "Europe/Brussels"
     blocked_periods_enabled: bool = True
     blocked_periods: List[TimeBlock] = []
     auto_flatten_enabled: bool = False
@@ -225,6 +226,7 @@ class GlobalSettingsResponse(BaseModel):
 
 
 class GlobalSettingsUpdate(BaseModel):
+    timezone: Optional[str] = None
     blocked_periods_enabled: Optional[bool] = None
     blocked_periods: Optional[List[TimeBlock]] = None
     auto_flatten_enabled: Optional[bool] = None

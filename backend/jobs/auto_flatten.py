@@ -10,12 +10,11 @@ import logging
 from datetime import time
 from typing import Any, List, Dict
 
-import pytz
-
 from backend.database import SessionLocal, Log
 from backend.services.topstep_client import topstep_client
 from backend.services.telegram_service import telegram_service
 from backend.services.risk_engine import RiskEngine
+from backend.services.timezone_service import now_user_tz
 from backend.constants import (
     RATE_LIMIT_DELAY_BETWEEN_CALLS,
     BATCH_SIZE_CANCEL_ORDERS,
@@ -24,7 +23,6 @@ from backend.constants import (
 )
 
 logger = logging.getLogger("topstepbot")
-BRUSSELS_TZ = pytz.timezone("Europe/Brussels")
 
 
 async def auto_flatten_job() -> None:
@@ -44,14 +42,14 @@ async def auto_flatten_job() -> None:
             return
 
         flatten_time = settings.get("auto_flatten_time", "21:55")
-        now_bru = datetime.now(BRUSSELS_TZ)
+        now_local = now_user_tz()
 
         try:
             flatten_h, flatten_m = map(int, flatten_time.split(':'))
             target = time(flatten_h, flatten_m)
 
             # Check if within 1 minute window (since job runs every minute)
-            current_time = now_bru.time()
+            current_time = now_local.time()
             if current_time.hour == target.hour and current_time.minute == target.minute:
                 print("⏰ Auto-Flatten Triggered!")
 
