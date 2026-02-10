@@ -346,7 +346,7 @@ export const useTopStep = () => {
         try {
             await axios.post(`${API_BASE}/dashboard/config`, newConfig);
             toast.success("Settings Saved Successfully");
-            fetchStaticData(); // Config is static/global
+            await fetchStaticData(); // Wait for config to be re-fetched before resolving
         } catch (error) {
             console.error("Failed to update config:", error);
             toast.error("Failed to save settings");
