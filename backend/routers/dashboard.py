@@ -196,6 +196,11 @@ def update_global_config(req: GlobalSettingsUpdate, db: Session = Depends(get_db
     
     db.add(Log(level="INFO", message="Global Settings Updated", details=json.dumps(req.model_dump(), default=str)))
     db.commit()
+
+    # Invalidate cached settings so next GET returns fresh data
+    from backend.services.settings_cache import invalidate_global_settings
+    invalidate_global_settings()
+
     return {"status": "updated"}
 
 

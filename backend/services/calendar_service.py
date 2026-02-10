@@ -8,7 +8,7 @@ import asyncio
 from typing import List, Dict, Optional
 from backend.database import SessionLocal, Log, Setting
 from backend.services.discord_service import discord_service
-from backend.services.timezone_service import now_user_tz, get_et_offset_hours
+from backend.services.timezone_service import now_user_tz, get_utc_offset_hours
 
 logger = logging.getLogger("topstepbot")
 
@@ -76,7 +76,7 @@ class CalendarService:
                 
             formatted_events = []
             for ev in events_raw:
-                # Parse and adjust time (convert from ET to user's timezone)
+                # Parse and adjust time (convert from UTC to user's timezone)
                 raw_time = ev.get("time", "")
                 final_time = raw_time
                 try:
@@ -84,8 +84,9 @@ class CalendarService:
                         # Parse e.g. "8:30am" or "2:00pm"
                         if "am" in raw_time.lower() or "pm" in raw_time.lower():
                             dt = datetime.strptime(raw_time, "%I:%M%p")
-                            # Convert from ET to user's configured timezone
-                            offset = get_et_offset_hours()
+                            # Convert from UTC to user's configured timezone
+                            # (ForexFactory XML feed provides times in UTC)
+                            offset = get_utc_offset_hours()
                             dt = dt + timedelta(hours=offset)
                             final_time = dt.strftime("%H:%M")
                 except Exception:

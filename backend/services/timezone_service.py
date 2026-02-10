@@ -88,9 +88,18 @@ def is_valid_timezone(tz_name: str) -> bool:
 def get_et_offset_hours() -> float:
     """
     Calculate the offset in hours from ET (America/New_York) to user's timezone.
-    Used by calendar_service to convert ForexFactory ET times.
     """
     now = datetime.now(timezone.utc)
     et_offset = now.astimezone(ET_TIMEZONE).utcoffset().total_seconds()
     user_offset = now.astimezone(get_user_tz()).utcoffset().total_seconds()
     return (user_offset - et_offset) / 3600
+
+
+def get_utc_offset_hours() -> float:
+    """
+    Calculate the offset in hours from UTC to user's timezone.
+    Used by calendar_service to convert ForexFactory XML times (which are in UTC).
+    """
+    now = datetime.now(timezone.utc)
+    user_offset = now.astimezone(get_user_tz()).utcoffset().total_seconds()
+    return user_offset / 3600
