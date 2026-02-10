@@ -16,18 +16,20 @@ RUN npm run build
 # =============================================================================
 # Stage 2: Python Runtime
 # =============================================================================
-FROM python:3.12-slim AS runtime
+FROM python:3.12-slim-trixie AS runtime
 
-# Install nginx and supervisor
+# Upgrade system packages to get latest security patches, then install dependencies
 RUN apt-get update && \
+    apt-get upgrade -y && \
     apt-get install -y --no-install-recommends nginx supervisor curl && \
     rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-# Install Python dependencies
+# Upgrade pip to latest version, then install Python dependencies
 COPY backend/requirements.txt ./backend/requirements.txt
-RUN pip install --no-cache-dir -r backend/requirements.txt
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r backend/requirements.txt
 
 # Copy backend source
 COPY backend/ ./backend/
