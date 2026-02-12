@@ -26,6 +26,7 @@ from backend.services.topstep_client import topstep_client
 import hashlib
 from collections import OrderedDict
 import time
+from backend.jobs.position_monitor import parse_topstep_date
 
 router = APIRouter()
 

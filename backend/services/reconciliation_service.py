@@ -239,6 +239,14 @@ async def preview_reconciliation(account_id: int, db: Session) -> Dict[str, Any]
                 # determine type: if it was open (no db_exit) and now has exit, it's a close
                 p_type = "close" if (not db_exit and rt['exit_time']) else "pnl_update"
                 
+                # Skip false positives: if it's a pnl_update but nothing meaningful changed
+                if p_type == "pnl_update":
+                    pnl_same = abs(db_pnl - rt['pnl']) <= 0.01
+                    fees_same = abs(db_fees - rt['fees']) <= 0.01
+                    exit_price_same = abs(db_exit_price - (rt['exit_price'] or 0)) <= 0.01
+                    if pnl_same and fees_same and exit_price_same:
+                        continue  # No meaningful change, skip
+                
                 proposed_changes.append({
                     "trade_id": trade.id,
                     "ticker": trade.ticker,
