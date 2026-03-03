@@ -1,11 +1,12 @@
 """
 Webhook Handler - Multi-Account Signal Execution
 
-Handles 4 alert types:
+Handles 5 alert types:
 - SETUP: Informational, logged only
 - SIGNAL: Opens positions on ALL configured accounts
 - PARTIAL: Reduces position size on matching positions
 - CLOSE: Closes positions completely
+- MOVEBE: Move stop loss to break even (entry price)
 
 All signals iterate ALL accounts and execute where strategy is configured.
 """
@@ -147,6 +148,9 @@ async def receive_webhook(
     
     elif alert_type == "CLOSE":
         return await handle_close(alert, db)
+    
+    elif alert_type == "MOVEBE":
+        return await handle_movebe(alert, db)
     
     return {"status": "ignored", "reason": f"Unknown Alert Type: {alert.type}"}
 
@@ -916,6 +920,107 @@ async def handle_close(alert: TradingViewAlert, db: Session) -> Dict[str, Any]:
     if processed:
         return {"status": "processed", "accounts": processed, "type": "CLOSE"}
     return {"status": "skipped", "reason": "No positions closed"}
+
+
+# =============================================================================
+# MOVEBE HANDLER
+# =============================================================================
+
+async def handle_movebe(alert: TradingViewAlert, db: Session) -> Dict[str, Any]:
+    """
+    MOVEBE: Move stop loss to break even (entry price) for matching positions.
+    Matches on ticker + timeframe + strategy.
+    Does NOT close or reduce the position — only modifies the SL order.
+    """
+    strategy_name = alert.strat or "default"
+    from backend.services.telegram_service import telegram_service
+
+    # Find matching open trades in our DB
+    matching_trades = db.query(Trade).filter(
+        Trade.ticker == alert.ticker,
+        Trade.timeframe == alert.timeframe,
+        Trade.strategy == strategy_name,
+        Trade.status == TradeStatus.OPEN
+    ).all()
+
+    if not matching_trades:
+        db.add(Log(level="INFO", message=f"MOVEBE: No matching position for {alert.ticker} TF={alert.timeframe} [{strategy_name}]"))
+        db.commit()
+        return {"status": "skipped", "reason": "No matching position"}
+
+    # Notify signal received
+    await telegram_service.notify_movebe_signal(
+        ticker=alert.ticker,
+        timeframe=alert.timeframe,
+        strategy=strategy_name,
+        price=alert.entry
+    )
+
+    db.add(Log(level="INFO", message=f"MOVEBE: Found {len(matching_trades)} matching trade(s) for {alert.ticker}"))
+
+    processed = []
+
+    for trade in matching_trades:
+        account_id = trade.account_id
+
+        try:
+            # Verify position still exists on TopStep
+            positions = await topstep_client.get_open_positions(account_id)
+            clean_ticker = alert.ticker.replace("1!", "").replace("2!", "").upper()
+
+            matching_pos = None
+            for pos in positions:
+                if clean_ticker in pos.get('contractId', '').upper():
+                    matching_pos = pos
+                    break
+
+            if not matching_pos:
+                db.add(Log(level="WARNING", message=f"MOVEBE: No open position on TopStep for {alert.ticker} on account {account_id}"))
+                continue
+
+            # Move SL to entry price (break even)
+            entry_price = trade.entry_price
+            if not entry_price:
+                db.add(Log(level="WARNING", message=f"MOVEBE: No entry price for trade {trade.id}, cannot move SL"))
+                continue
+
+            # Update SL to entry price, keep TP unchanged
+            await topstep_client.update_sl_tp_orders(
+                account_id=account_id,
+                ticker=alert.ticker,
+                sl_price=entry_price,
+                tp_price=trade.tp if trade.tp else 0  # Keep existing TP
+            )
+
+            # Get account name for logging and notification
+            account_settings = db.query(AccountSettings).filter(
+                AccountSettings.account_id == account_id
+            ).first()
+            account_name = (
+                account_settings.account_name
+                if account_settings and account_settings.account_name
+                else str(account_id)
+            )
+
+            db.add(Log(level="INFO", message=f"MOVEBE: SL moved to BE ({entry_price}) for {alert.ticker} on {account_name}"))
+
+            # Notify per-account execution
+            await telegram_service.notify_movebe_executed(
+                ticker=alert.ticker,
+                entry_price=entry_price,
+                account_name=account_name
+            )
+
+            processed.append(account_name)
+
+        except Exception as e:
+            db.add(Log(level="ERROR", message=f"MOVEBE failed for account {account_id}: {e}"))
+
+    db.commit()
+
+    if processed:
+        return {"status": "processed", "accounts": processed, "type": "MOVEBE"}
+    return {"status": "skipped", "reason": "No positions processed"}
 
 
 # =============================================================================

@@ -398,6 +398,41 @@ class TelegramService:
         await self.send_message(msg)
         self._log_info(f"Telegram: Close executed for {ticker} ({account_name or 'unknown'})")
 
+    async def notify_movebe_signal(
+        self,
+        ticker: str,
+        timeframe: str,
+        strategy: str,
+        price: float = None
+    ):
+        """Notify of incoming MOVEBE signal."""
+        msg = (
+            f"🔒 <b>MOVEBE Signal</b>\n"
+            f"Ticker: <b>{ticker}</b> ({timeframe})\n"
+            f"Strategy: [{strategy}]"
+        )
+        if price:
+            msg += f"\nTV Price: {price}"
+        msg += f"\n<i>Moving SL to break even on matching accounts...</i>"
+        await self.send_message(msg)
+        self._log_info(f"📤 Telegram: MOVEBE signal for {ticker} [{strategy}] TF={timeframe}")
+
+    async def notify_movebe_executed(
+        self,
+        ticker: str,
+        entry_price: float,
+        account_name: str = None
+    ):
+        """Notify SL moved to break even."""
+        account_tag = f" ({account_name})" if account_name else ""
+        msg = (
+            f"✅ <b>SL → Break Even</b>{account_tag}\n"
+            f"Ticker: <b>{ticker}</b>\n"
+            f"SL moved to: {entry_price}"
+        )
+        await self.send_message(msg)
+        self._log_info(f"📤 Telegram: MOVEBE executed for {ticker} on {account_name or 'unknown'}")
+
     # =========================================================================
     # REJECTION & WARNING NOTIFICATIONS
     # =========================================================================

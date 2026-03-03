@@ -9,7 +9,7 @@ interface MockWebhookModalProps {
     onClose: () => void;
 }
 
-const ALERT_TYPES = ['SETUP', 'SIGNAL', 'PARTIAL', 'CLOSE'] as const;
+const ALERT_TYPES = ['SETUP', 'SIGNAL', 'PARTIAL', 'CLOSE', 'MOVEBE'] as const;
 const TIMEFRAMES = ['M1', 'M2', 'M5', 'M15', 'H1', 'H4', 'D1'] as const;
 
 export function MockWebhookModal({ isOpen, onClose }: MockWebhookModalProps) {
@@ -59,8 +59,8 @@ export function MockWebhookModal({ isOpen, onClose }: MockWebhookModalProps) {
                 type: formData.type,
                 side: formData.side,
                 entry: parseNumber(formData.entry),
-                stop: formData.type === 'CLOSE' ? null : parseNumber(formData.sl),
-                tp: formData.type === 'CLOSE' ? null : parseNumber(formData.tp),
+                stop: ['CLOSE', 'MOVEBE'].includes(formData.type) ? null : parseNumber(formData.sl),
+                tp: ['CLOSE', 'MOVEBE'].includes(formData.type) ? null : parseNumber(formData.tp),
                 strat: formData.strat || 'default',
                 timeframe: formData.timeframe
             };
@@ -74,7 +74,7 @@ export function MockWebhookModal({ isOpen, onClose }: MockWebhookModalProps) {
         }
     };
 
-    const showEntry = formData.type === 'SIGNAL' || formData.type === 'PARTIAL' || formData.type === 'CLOSE';
+    const showEntry = formData.type === 'SIGNAL' || formData.type === 'PARTIAL' || formData.type === 'CLOSE' || formData.type === 'MOVEBE';
     const showSlTp = formData.type === 'SIGNAL' || formData.type === 'PARTIAL';
     const showSide = formData.type !== 'CLOSE';
 
@@ -104,7 +104,8 @@ export function MockWebhookModal({ isOpen, onClose }: MockWebhookModalProps) {
                                 <span className={`font-mono ${formData.type === 'SIGNAL' ? 'text-emerald-400' :
                                     formData.type === 'PARTIAL' ? 'text-amber-400' :
                                         formData.type === 'CLOSE' ? 'text-red-400' :
-                                            'text-slate-400'
+                                            formData.type === 'MOVEBE' ? 'text-blue-400' :
+                                                'text-slate-400'
                                     }`}>{formData.type}</span>
                                 <ChevronDown className={`w-4 h-4 text-slate-500 transition-transform ${typeOpen ? 'rotate-180' : ''}`} />
                             </button>
@@ -123,7 +124,8 @@ export function MockWebhookModal({ isOpen, onClose }: MockWebhookModalProps) {
                                                 ? opt === 'SIGNAL' ? 'text-emerald-400 bg-emerald-500/10'
                                                     : opt === 'PARTIAL' ? 'text-amber-400 bg-amber-500/10'
                                                         : opt === 'CLOSE' ? 'text-red-400 bg-red-500/10'
-                                                            : 'text-slate-400 bg-slate-500/10'
+                                                            : opt === 'MOVEBE' ? 'text-blue-400 bg-blue-500/10'
+                                                                : 'text-slate-400 bg-slate-500/10'
                                                 : 'text-slate-300'
                                                 }`}
                                         >
@@ -292,7 +294,8 @@ export function MockWebhookModal({ isOpen, onClose }: MockWebhookModalProps) {
                         className={`w-full font-bold py-3 rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 ${formData.type === 'SIGNAL' ? 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-900/30' :
                             formData.type === 'PARTIAL' ? 'bg-amber-600 hover:bg-amber-700 shadow-amber-900/30' :
                                 formData.type === 'CLOSE' ? 'bg-red-600 hover:bg-red-700 shadow-red-900/30' :
-                                    'bg-slate-600 hover:bg-slate-700 shadow-slate-900/30'
+                                    formData.type === 'MOVEBE' ? 'bg-blue-600 hover:bg-blue-700 shadow-blue-900/30' :
+                                        'bg-slate-600 hover:bg-slate-700 shadow-slate-900/30'
                             } text-white`}
                     >
                         <Play className="w-4 h-4" />

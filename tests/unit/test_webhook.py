@@ -141,6 +141,26 @@ class TestTradingViewAlertSchema:
         # strat defaults to "default" when not provided
         assert alert.strat == "default" or alert.strat is None
 
+    def test_valid_movebe_alert(self):
+        """Test parsing a valid MOVEBE alert (no stop/tp required)."""
+        from backend.schemas import TradingViewAlert
+        
+        alert = TradingViewAlert(
+            ticker="MNQ1!",
+            type="MOVEBE",
+            side="BUY",
+            entry=20000.00,
+            strat="rob_rev",
+            timeframe="M5"
+        )
+        
+        assert alert.type == "MOVEBE"
+        assert alert.ticker == "MNQ1!"
+        assert alert.stop is None
+        assert alert.tp is None
+        assert alert.strat == "rob_rev"
+        assert alert.timeframe == "M5"
+
 
 class TestAlertTypeRouting:
     """Tests for alert type routing logic."""
@@ -169,6 +189,16 @@ class TestAlertTypeRouting:
             )
             assert alert.type.upper() == "CLOSE"
 
+    def test_movebe_type_case_variations(self):
+        """Test MOVEBE type case handling."""
+        from backend.schemas import TradingViewAlert
+        
+        for type_val in ["MOVEBE", "movebe", "MoveBE"]:
+            alert = TradingViewAlert(
+                ticker="MNQ1!", type=type_val, side="BUY", entry=20000.00, timeframe="M5"
+            )
+            assert alert.type.upper() == "MOVEBE"
+
 
 class TestIPVerification:
     """Tests for TradingView IP verification."""
@@ -191,3 +221,4 @@ class TestIPVerification:
         assert "127.0.0.1" in LOCALHOST_IPS
         assert "localhost" in LOCALHOST_IPS
         assert "::1" in LOCALHOST_IPS
+

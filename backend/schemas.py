@@ -10,7 +10,7 @@ from datetime import datetime
 class TradingViewAlert(BaseModel):
     """Alert payload from TradingView webhooks."""
     ticker: str
-    type: str  # SETUP, SIGNAL, PARTIAL, CLOSE
+    type: str  # SETUP, SIGNAL, PARTIAL, CLOSE, MOVEBE
     side: str  # BUY, SELL (renamed from 'direction')
     entry: float
     stop: Optional[float] = None  # Optional for PARTIAL/CLOSE
