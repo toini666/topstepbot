@@ -70,9 +70,9 @@ Automated trading system for TopStepX. Executes TradingView alerts with risk man
 ## Quick Start
 
 ### Prerequisites
-- Python 3.12+
-- Node.js 18+ & npm
-- ngrok (for webhook URL)
+- A Mac with internet access
+- [ngrok](https://ngrok.com) account — for receiving TradingView webhooks
+- Everything else (Python 3.12, Node.js) is installed automatically by `install.sh`
 
 ### Installation
 
@@ -81,10 +81,14 @@ Automated trading system for TopStepX. Executes TradingView alerts with risk man
 git clone https://github.com/toini666/topstepbot.git
 cd topstepbot
 
-# Configure
-cp .env.example .env
-# Edit .env with your credentials
+# Install everything (run once)
+./install.sh
 ```
+
+Then start the bot and open http://localhost:5173 — a setup wizard will guide you through entering your credentials on first launch.
+
+> **Alternative**: power users can skip the wizard by copying `.env.example` to `.env` and filling it in before starting.
+
 
 ### Environment Variables (`.env`)
 ```env
@@ -92,14 +96,14 @@ cp .env.example .env
 TOPSTEP_USERNAME=your_username
 TOPSTEP_APIKEY=your_api_key
 
-# Telegram (required)
+# Telegram (optional)
 TELEGRAM_BOT_TOKEN=your_bot_token
 TELEGRAM_ID=your_chat_id
 
 # Database
 DATABASE_URL=sqlite:///./topstepbot.db
 
-# Ngrok (optional)
+# Ngrok (required for TradingView webhooks)
 NGROK_AUTHTOKEN=your_ngrok_token
 
 # Heartbeat Monitoring (optional)
@@ -116,7 +120,13 @@ This handles: Backend API, Frontend, Ngrok, Sleep prevention, Ngrok URL change d
 
 **Access Points:**
 - Dashboard: http://localhost:5173
-- API Docs: http://localhost:8000/docs
+- API Docs: http://localhost:8080/docs
+
+### Update
+```bash
+./update.sh
+./start_bot.sh
+```
 
 ---
 
@@ -180,8 +190,8 @@ https://your-ngrok-url.ngrok-free.app/api/webhook
 ```
 
 ### Stack
-- **Backend**: Python 3.12+, FastAPI, SQLAlchemy, APScheduler, httpx
-- **Frontend**: React 19, TypeScript 5, Vite 7, Tailwind CSS 4
+- **Backend**: Python 3.12+, FastAPI, SQLAlchemy, APScheduler, httpx — port 8080
+- **Frontend**: React 19, TypeScript 5, Vite 7, Tailwind CSS 4 — port 5173
 - **Database**: SQLite with auto-backup
 - **Notifications**: Telegram Bot API, Discord Webhooks
 - **External**: TopStepX REST API, ForexFactory (economic calendar)

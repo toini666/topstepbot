@@ -35,13 +35,12 @@ while pgrep -f "uvicorn backend.main:app" > /dev/null; do
     fi
 done
 
-# Ensure port 8000 is free
-if lsof -t -i :8000 >/dev/null; then
-    lsof -t -i :8000 | xargs kill -9
+# Ensure port 8080 is free
+if lsof -t -i :8080 >/dev/null; then
+    lsof -t -i :8080 | xargs kill -9
 fi
 
 pkill -f "vite" || true
-sleep 1
 
 # 2. Activate Python Environment
 echo "🐍 Activating Virtual Environment..."
@@ -51,8 +50,6 @@ source ./venv/bin/activate
 cleanup() {
     echo ""
     echo "🛑 Stopping services..."
-    # Only kill jobs started by this script (backend & frontend)
-    # Ngrok is disowned so it won't be killed here
     kill $(jobs -p) 2>/dev/null
     echo "✅ Done. Bye!"
     exit
@@ -60,18 +57,20 @@ cleanup() {
 trap cleanup SIGINT
 
 # 2. Start Backend
-echo "⚙️  Starting Backend Server (Port 8000)..."
-uvicorn backend.main:app --reload --no-access-log &
+echo "⚙️  Starting Backend Server (Port 8080)..."
+uvicorn backend.main:app --host 0.0.0.0 --port 8080 --no-access-log &
 BACKEND_PID=$!
 
 # Wait for backend to initialize
 sleep 3
 
 # 3. Start Frontend
-echo "💻 Starting Frontend Dashboard..."
+echo "💻 Starting Frontend (Port 5173)..."
 cd frontend
-npm run dev &
-FRONTEND_PID=$!
+npm run preview &
+cd ..
+
+sleep 2
 
 # 4. Start Ngrok (Persistent)
 echo "🌍 Checking Ngrok Tunnel..."
@@ -129,7 +128,7 @@ echo "==================================================="
 # Send Ngrok URL to backend for change detection
 if [ -n "$NGROK_URL" ] && [ "$NGROK_URL" != "Not available (Install 'ngrok')" ]; then
     sleep 2  # Wait for backend to be fully ready
-    curl -s -X POST "http://localhost:8000/api/ngrok-url" \
+    curl -s -X POST "http://localhost:8080/api/ngrok-url" \
         -H "Content-Type: application/json" \
         -d "{\"url\": \"$NGROK_URL\"}" > /dev/null 2>&1 &
 fi

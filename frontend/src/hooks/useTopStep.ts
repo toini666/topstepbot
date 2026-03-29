@@ -346,7 +346,7 @@ export const useTopStep = () => {
         try {
             await axios.post(`${API_BASE}/dashboard/config`, newConfig);
             // Optimistic update: merge saved values into local state immediately
-            // No need for a re-fetch round-trip (which can fail in Docker/nginx)
+            // No need for a re-fetch round-trip
             setGlobalConfig(prev => ({ ...prev, ...newConfig }));
             toast.success("Settings Saved Successfully");
         } catch (error) {

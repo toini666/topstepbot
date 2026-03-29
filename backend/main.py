@@ -55,7 +55,7 @@ async def lifespan(app: FastAPI):
     # Initialize Persistent HTTP Client
     await topstep_client.startup()
 
-    # Reload credentials from DB settings (supports Docker setup wizard flow)
+    # Reload credentials from DB settings (supports setup wizard flow)
     topstep_client.reload_credentials()
     telegram_service.reload_credentials()
     telegram_bot.reload_credentials()
@@ -245,7 +245,7 @@ app = FastAPI(title="TopStep Trading Bot", version="2.0.0", lifespan=lifespan)
 # CORS Setup (for Frontend)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:5174", "http://localhost:8080"],
+    allow_origins=["http://localhost:5173", "http://localhost:8080"],
     allow_credentials=True,
     allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["Content-Type", "Authorization"],
@@ -258,11 +258,6 @@ app.include_router(strategies.router, prefix="/api")
 app.include_router(export.router, prefix="/api")
 app.include_router(calendar.router, prefix="/api")
 app.include_router(setup.router, prefix="/api")
-
-
-@app.get("/")
-def read_root():
-    return {"status": "online", "service": "TopStep Trading Bot", "version": "2.0.0"}
 
 
 @app.get("/health")

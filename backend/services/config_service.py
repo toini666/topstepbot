@@ -3,8 +3,7 @@ Config Service - Centralized configuration resolution.
 
 Priority: Environment variable > SQLite settings table > None
 
-This allows Docker users to configure the app either via env vars
-(docker-compose.yml) or via the web-based setup wizard (which saves to DB).
+Credentials can be set via .env file or via the web-based setup wizard (which saves to DB).
 """
 
 import os
@@ -14,7 +13,7 @@ from typing import Optional
 def get_config_value(key: str) -> Optional[str]:
     """
     Get a configuration value with priority:
-    1. Environment variable (set via .env, docker-compose, or shell)
+    1. Environment variable (set via .env or shell)
     2. SQLite settings table (set via setup wizard)
     3. None
     """
