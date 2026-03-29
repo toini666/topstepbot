@@ -18,11 +18,12 @@ if ! command -v brew &> /dev/null; then
 fi
 
 # --- Python 3.12 ---
-if ! python3 --version 2>/dev/null | grep -qE "3\.(1[2-9]|[2-9][0-9])"; then
+if ! command -v python3.12 &> /dev/null; then
     echo "Installing Python 3.12..."
     brew install python@3.12
-    brew link --force python@3.12
 fi
+# Always use the explicit python3.12 binary (avoids using system Python)
+PYTHON=$(command -v python3.12)
 
 # --- Node.js ---
 if ! command -v node &> /dev/null; then
@@ -32,7 +33,7 @@ fi
 
 # --- Python virtual environment ---
 echo "Setting up Python environment..."
-python3 -m venv venv
+"$PYTHON" -m venv venv
 source venv/bin/activate
 pip install --upgrade pip --quiet
 pip install -r backend/requirements.txt
