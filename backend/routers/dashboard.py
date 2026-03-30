@@ -121,6 +121,8 @@ def get_global_config(db: Session = Depends(get_db)):
         # Network / Performance
         api_timeout_seconds=int(settings.get("API_TIMEOUT_SECONDS", 15)),
         job_interval_seconds=int(settings.get("JOB_INTERVAL_SECONDS", 10)),
+        # Manual Trading Mode
+        websocket_disabled=settings.get("websocket_disabled", False),
     )
 
 
@@ -207,6 +209,12 @@ def update_global_config(req: GlobalSettingsUpdate, db: Session = Depends(get_db
         val = max(5, min(60, req.job_interval_seconds))
         set_setting("JOB_INTERVAL_SECONDS", str(val))
         log_messages.append(f"Job interval set to {val}s (takes effect on next restart)")
+
+    # Manual Trading Mode
+    if req.websocket_disabled is not None:
+        set_setting("websocket_disabled", "true" if req.websocket_disabled else "false")
+        status = "DISABLED" if req.websocket_disabled else "ENABLED"
+        log_messages.append(f"WebSocket {status} (manual trading mode {'ON' if req.websocket_disabled else 'OFF'})")
 
     # Timezone
     if req.timezone is not None:

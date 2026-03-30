@@ -12,6 +12,7 @@ from backend.services.topstep_client import topstep_client
 from backend.services.price_cache import price_cache
 from backend.services.market_hub_client import market_hub_client
 from backend.jobs.state import get_last_open_positions_safely
+from backend.services.config_service import get_config_value
 
 
 async def price_refresh_job() -> None:
@@ -44,10 +45,16 @@ async def price_refresh_job() -> None:
                     active_contracts.add(contract_id)
         
         # ===== WebSocket Lifecycle Management =====
-        
+
+        websocket_disabled = get_config_value("websocket_disabled") == "true"
+
+        if websocket_disabled and market_hub_client.is_connected:
+            await market_hub_client.disconnect()
+            price_cache.set_websocket_active(False)
+
         if active_contracts:
-            # Positions exist - try to use WebSocket
-            if not market_hub_client.is_connected:
+            # Positions exist - try to use WebSocket (unless manually disabled)
+            if not websocket_disabled and not market_hub_client.is_connected:
                 # Get token and connect
                 token = getattr(topstep_client, 'token', None)
                 if token:
@@ -66,8 +73,8 @@ async def price_refresh_job() -> None:
                 else:
                     price_cache.set_websocket_active(False)
             
-            # Subscribe to new contracts if connected
-            if market_hub_client.is_connected:
+            # Subscribe to new contracts if connected (and not disabled)
+            if not websocket_disabled and market_hub_client.is_connected:
                 current_subs = market_hub_client.subscribed_contracts
                 for contract_id in active_contracts:
                     if contract_id not in current_subs:
@@ -77,8 +84,8 @@ async def price_refresh_job() -> None:
                 for contract_id in current_subs - active_contracts:
                     await market_hub_client.unsubscribe_contract(contract_id)
             
-            # Fallback: Use polling if WebSocket is not active
-            if price_cache.should_use_polling_fallback:
+            # Fallback: Use polling if WebSocket is not active or disabled
+            if websocket_disabled or price_cache.should_use_polling_fallback:
                 await price_cache.refresh_prices(
                     list(active_contracts), 
                     topstep_client, 

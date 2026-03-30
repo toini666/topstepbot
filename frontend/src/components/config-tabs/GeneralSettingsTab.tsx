@@ -32,6 +32,7 @@ export interface GeneralSettingsState {
     timezone: string;
     apiTimeout: number;
     jobInterval: number;
+    websocketDisabled: boolean;
 }
 
 interface GeneralSettingsTabProps {
@@ -474,6 +475,23 @@ export function GeneralSettingsTab({ state, onChange }: GeneralSettingsTabProps)
                         className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${state.blockCrossAccount ? 'bg-indigo-500' : 'bg-slate-700'}`}
                     >
                         <span className={`${state.blockCrossAccount ? 'translate-x-5' : 'translate-x-1'} inline-block h-3 w-3 transform rounded-full bg-white transition-transform`} />
+                    </button>
+                </div>
+
+                {/* Manual Trading Mode */}
+                <div className={`flex justify-between items-center p-3 rounded-xl border transition-colors ${state.websocketDisabled ? 'border-amber-500/40 bg-amber-500/5' : 'border-slate-800'}`}>
+                    <div>
+                        <span className="text-sm text-slate-300">Mode trading manuel</span>
+                        <p className="text-[10px] text-slate-500">Désactive le WebSocket pour trader manuellement sur TopstepX en parallèle</p>
+                        {state.websocketDisabled && (
+                            <p className="text-[10px] text-amber-400 mt-0.5">WebSocket désactivé — prix via polling HTTP uniquement</p>
+                        )}
+                    </div>
+                    <button
+                        onClick={() => onChange('websocketDisabled', !state.websocketDisabled)}
+                        className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${state.websocketDisabled ? 'bg-amber-500' : 'bg-slate-700'}`}
+                    >
+                        <span className={`${state.websocketDisabled ? 'translate-x-5' : 'translate-x-1'} inline-block h-3 w-3 transform rounded-full bg-white transition-transform`} />
                     </button>
                 </div>
             </div>

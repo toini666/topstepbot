@@ -228,6 +228,9 @@ class GlobalSettingsResponse(BaseModel):
     api_timeout_seconds: int = 15
     job_interval_seconds: int = 10
 
+    # Manual Trading Mode
+    websocket_disabled: bool = False
+
 
 class GlobalSettingsUpdate(BaseModel):
     timezone: Optional[str] = None
@@ -254,6 +257,9 @@ class GlobalSettingsUpdate(BaseModel):
     # Network / Performance
     api_timeout_seconds: Optional[int] = None
     job_interval_seconds: Optional[int] = None
+
+    # Manual Trading Mode
+    websocket_disabled: Optional[bool] = None
 
 
 # =============================================================================

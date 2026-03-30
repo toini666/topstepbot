@@ -39,6 +39,7 @@ export function ConfigModal({ isOpen, onClose, config, onSave }: ConfigModalProp
         timezone: 'Europe/Brussels',
         apiTimeout: 15,
         jobInterval: 10,
+        websocketDisabled: false,
     });
 
     // === Sessions State ===
@@ -73,6 +74,7 @@ export function ConfigModal({ isOpen, onClose, config, onSave }: ConfigModalProp
                 timezone: config.timezone || 'Europe/Brussels',
                 apiTimeout: config.api_timeout_seconds ?? 15,
                 jobInterval: config.job_interval_seconds ?? 10,
+                websocketDisabled: config.websocket_disabled ?? false,
             });
 
             fetchSessions();
@@ -189,6 +191,7 @@ export function ConfigModal({ isOpen, onClose, config, onSave }: ConfigModalProp
                 timezone: generalState.timezone,
                 api_timeout_seconds: generalState.apiTimeout,
                 job_interval_seconds: generalState.jobInterval,
+                websocket_disabled: generalState.websocketDisabled,
             });
 
             // Save Sessions if modified

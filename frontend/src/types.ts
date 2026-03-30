@@ -144,6 +144,7 @@ export interface GlobalConfig {
     position_action_buffer_minutes: number;
     api_timeout_seconds: number;
     job_interval_seconds: number;
+    websocket_disabled: boolean;
 }
 
 

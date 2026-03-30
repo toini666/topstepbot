@@ -57,6 +57,7 @@ export const useTopStep = () => {
         position_action_buffer_minutes: 5,
         api_timeout_seconds: 15,
         job_interval_seconds: 10,
+        websocket_disabled: false,
     });
     const [accountSettings, setAccountSettings] = useState<Record<number, AccountSettings>>({});
     const [tradingSessions, setTradingSessions] = useState<TradingSession[]>([]);
