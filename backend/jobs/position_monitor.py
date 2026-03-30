@@ -520,6 +520,8 @@ async def monitor_closed_positions_job() -> None:
 
         set_last_orphans_ids(current_orphan_ids)
 
+    except asyncio.CancelledError:
+        pass  # Normal shutdown — job interrupted mid-flight
     except Exception as e:
         logger.error(f"Monitor Job Failed: {e}", exc_info=True)
         # Notify user of critical monitoring failure
