@@ -6,8 +6,11 @@
  */
 
 import { useState, useEffect } from 'react';
-import { DollarSign, Activity, CheckCircle, ChevronDown, Power } from 'lucide-react';
+import { DollarSign, Activity, CheckCircle, ChevronDown, Power, RefreshCw } from 'lucide-react';
+import axios from 'axios';
+import { toast } from 'sonner';
 import type { Account, AccountSettings, MarketStatus } from '../../types';
+import { API_BASE } from '../../config';
 
 interface HeaderProps {
     // Connection
@@ -49,7 +52,25 @@ export function Header({
     onDisconnect,
 }: HeaderProps) {
     const [accountDropdownOpen, setAccountDropdownOpen] = useState(false);
+    const [reconnecting, setReconnecting] = useState(false);
     const isMarketOpen = marketStatus.is_open;
+
+    const handleForceReconnect = async () => {
+        setReconnecting(true);
+        try {
+            const res = await axios.post(`${API_BASE}/reconnect`);
+            if (res.data.success) {
+                toast.success("Reconnected successfully");
+                connect();
+            } else {
+                toast.error(res.data.message);
+            }
+        } catch {
+            toast.error("Reconnection failed");
+        } finally {
+            setReconnecting(false);
+        }
+    };
 
     // Close dropdown when clicking outside
     useEffect(() => {
@@ -100,15 +121,26 @@ export function Header({
             </div>
 
             <div className="flex items-center gap-8">
-                {/* Connect Button */}
+                {/* Connect / Force Reconnect Buttons */}
                 {!isConnected && (
-                    <button
-                        onClick={connect}
-                        disabled={loading}
-                        className="btn-primary"
-                    >
-                        {loading ? "Connecting..." : "Connect TopStep"}
-                    </button>
+                    <div className="flex gap-2">
+                        <button
+                            onClick={connect}
+                            disabled={loading}
+                            className="btn-primary"
+                        >
+                            {loading ? "Connecting..." : "Connect TopStep"}
+                        </button>
+                        <button
+                            onClick={handleForceReconnect}
+                            disabled={reconnecting}
+                            title="Reset all backoff timers and force a fresh login"
+                            className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-amber-400 border border-amber-500/40 rounded-lg hover:bg-amber-500/10 transition-colors disabled:opacity-50"
+                        >
+                            <RefreshCw className={`w-3.5 h-3.5 ${reconnecting ? 'animate-spin' : ''}`} />
+                            {reconnecting ? "..." : "Force"}
+                        </button>
+                    </div>
                 )}
 
                 {/* Account Selector */}

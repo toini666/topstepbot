@@ -224,6 +224,10 @@ class GlobalSettingsResponse(BaseModel):
     blocked_hours_position_action: str = "NOTHING"  # NOTHING, BREAKEVEN, FLATTEN
     position_action_buffer_minutes: int = 1
 
+    # Network / Performance
+    api_timeout_seconds: int = 15
+    job_interval_seconds: int = 10
+
 
 class GlobalSettingsUpdate(BaseModel):
     timezone: Optional[str] = None
@@ -246,6 +250,10 @@ class GlobalSettingsUpdate(BaseModel):
     # Position Action on Blocked Hours
     blocked_hours_position_action: Optional[str] = None
     position_action_buffer_minutes: Optional[int] = None
+
+    # Network / Performance
+    api_timeout_seconds: Optional[int] = None
+    job_interval_seconds: Optional[int] = None
 
 
 # =============================================================================

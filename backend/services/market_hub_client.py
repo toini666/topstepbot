@@ -229,7 +229,8 @@ class MarketHubClient:
     def _schedule_reconnect(self):
         """Schedule reconnection attempt."""
         if self._reconnect_attempts >= self._max_reconnect_attempts:
-            logger.error("Max reconnection attempts reached")
+            logger.error("Max reconnection attempts reached. Resetting counter — price_refresh_job will retry.")
+            self._reconnect_attempts = 0
             return
         
         self._reconnect_attempts += 1
@@ -241,15 +242,19 @@ class MarketHubClient:
     async def _reconnect_after_delay(self, delay: float):
         """Attempt reconnection after delay."""
         await asyncio.sleep(delay)
-        
-        if self._access_token and not self._is_connected:
-            contracts_to_resub = self._subscribed_contracts.copy()
-            self._subscribed_contracts.clear()
-            
-            success = await self.connect(self._access_token)
-            if success:
-                for contract_id in contracts_to_resub:
-                    await self.subscribe_contract(contract_id)
+
+        if not self._is_connected:
+            # Prefer the latest token from topstep_client (may have re-logged in since last connect)
+            from backend.services.topstep_client import topstep_client
+            token = getattr(topstep_client, 'token', None) or self._access_token
+            if token:
+                contracts_to_resub = self._subscribed_contracts.copy()
+                self._subscribed_contracts.clear()
+
+                success = await self.connect(token)
+                if success:
+                    for contract_id in contracts_to_resub:
+                        await self.subscribe_contract(contract_id)
 
 
 # Global singleton

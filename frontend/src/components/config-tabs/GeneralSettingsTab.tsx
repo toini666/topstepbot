@@ -30,6 +30,8 @@ export interface GeneralSettingsState {
     positionAction: 'NOTHING' | 'BREAKEVEN' | 'FLATTEN';
     positionActionBuffer: number;
     timezone: string;
+    apiTimeout: number;
+    jobInterval: number;
 }
 
 interface GeneralSettingsTabProps {
@@ -473,6 +475,77 @@ export function GeneralSettingsTab({ state, onChange }: GeneralSettingsTabProps)
                     >
                         <span className={`${state.blockCrossAccount ? 'translate-x-5' : 'translate-x-1'} inline-block h-3 w-3 transform rounded-full bg-white transition-transform`} />
                     </button>
+                </div>
+            </div>
+
+            {/* Network / Performance */}
+            <div className="space-y-3 pt-4 border-t border-slate-800">
+                <div className="flex items-center justify-between">
+                    <label className="text-sm font-semibold text-slate-300">Network / Performance</label>
+                    <div className="flex gap-1.5">
+                        <button
+                            type="button"
+                            onClick={() => { onChange('apiTimeout', 15); onChange('jobInterval', 10); }}
+                            className="text-[10px] px-2 py-0.5 rounded-full border border-indigo-500/40 text-indigo-400 hover:bg-indigo-500/10 transition-colors"
+                        >
+                            Brussels
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => { onChange('apiTimeout', 25); onChange('jobInterval', 30); }}
+                            className="text-[10px] px-2 py-0.5 rounded-full border border-amber-500/40 text-amber-400 hover:bg-amber-500/10 transition-colors"
+                        >
+                            Thailand
+                        </button>
+                    </div>
+                </div>
+
+                {/* API Timeout */}
+                <div className="bg-slate-900/60 rounded-xl p-3 space-y-2 border border-slate-800/60">
+                    <div className="flex justify-between items-center">
+                        <div>
+                            <span className="text-sm text-slate-300">API Timeout</span>
+                            <span className="text-[10px] text-slate-500 ml-1.5">seconds</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded font-mono ${state.apiTimeout <= 15 ? 'bg-green-500/10 text-green-400' : state.apiTimeout <= 25 ? 'bg-amber-500/10 text-amber-400' : 'bg-orange-500/10 text-orange-400'}`}>
+                                {state.apiTimeout <= 15 ? 'Low latency' : state.apiTimeout <= 25 ? 'Med latency' : 'High latency'}
+                            </span>
+                            <input
+                                type="number"
+                                min={3}
+                                max={60}
+                                value={state.apiTimeout}
+                                onChange={e => onChange('apiTimeout', Math.max(3, Math.min(60, Number(e.target.value))))}
+                                className="w-16 bg-slate-950 border border-slate-700 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-indigo-500 transition-colors font-mono text-center"
+                            />
+                        </div>
+                    </div>
+                    <p className="text-[10px] text-slate-500">Temps max d'attente par requête TopStep. Si la requête dépasse ce délai, elle est annulée et retentée.</p>
+                </div>
+
+                {/* Job Interval */}
+                <div className="bg-slate-900/60 rounded-xl p-3 space-y-2 border border-slate-800/60">
+                    <div className="flex justify-between items-center">
+                        <div>
+                            <span className="text-sm text-slate-300">Job Interval</span>
+                            <span className="text-[10px] text-slate-500 ml-1.5">seconds</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded font-mono ${state.jobInterval <= 15 ? 'bg-blue-500/10 text-blue-400' : state.jobInterval <= 30 ? 'bg-amber-500/10 text-amber-400' : 'bg-slate-700 text-slate-400'}`}>
+                                {state.jobInterval <= 15 ? 'Réactif' : state.jobInterval <= 30 ? 'Modéré' : 'Lent'}
+                            </span>
+                            <input
+                                type="number"
+                                min={5}
+                                max={60}
+                                value={state.jobInterval}
+                                onChange={e => onChange('jobInterval', Math.max(5, Math.min(60, Number(e.target.value))))}
+                                className="w-16 bg-slate-950 border border-slate-700 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-indigo-500 transition-colors font-mono text-center"
+                            />
+                        </div>
+                    </div>
+                    <p className="text-[10px] text-slate-500">Fréquence de vérification des positions. Nécessite un redémarrage pour être pris en compte.</p>
                 </div>
             </div>
         </div>

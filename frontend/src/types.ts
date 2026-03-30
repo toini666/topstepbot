@@ -142,6 +142,8 @@ export interface GlobalConfig {
     // Position Action on Blocked Hours
     blocked_hours_position_action: 'NOTHING' | 'BREAKEVEN' | 'FLATTEN';
     position_action_buffer_minutes: number;
+    api_timeout_seconds: number;
+    job_interval_seconds: number;
 }
 
 

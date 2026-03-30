@@ -149,12 +149,15 @@ async def lifespan(app: FastAPI):
 
     # Add Scheduled Jobs
     # Add max_instances=1 and coalesce=True to prevent job overlap and execution pile-up
+    from backend.services.config_service import get_config_value
     scheduler.add_job(auto_flatten_job, 'interval', minutes=1, max_instances=1, coalesce=True)
-    # Position monitoring: 10s interval
-    scheduler.add_job(monitor_closed_positions_job, 'interval', seconds=10, id='monitor_positions', max_instances=1, coalesce=True)
-    # Price refresh: 10s interval, starts 5s after monitor job to stagger API calls
+    # Position monitoring and price refresh: configurable interval (default 10s)
+    job_interval_str = get_config_value("JOB_INTERVAL_SECONDS") or "10"
+    job_interval = max(5, int(job_interval_str))
+    scheduler.add_job(monitor_closed_positions_job, 'interval', seconds=job_interval, id='monitor_positions', max_instances=1, coalesce=True)
     price_refresh_start = datetime.now() + timedelta(seconds=5)
-    scheduler.add_job(price_refresh_job, 'interval', seconds=10, id='price_refresh', next_run_time=price_refresh_start, max_instances=1, coalesce=True)
+    scheduler.add_job(price_refresh_job, 'interval', seconds=job_interval, id='price_refresh', next_run_time=price_refresh_start, max_instances=1, coalesce=True)
+    print(f"Monitoring jobs interval: {job_interval}s")
     
     # Maintenance Jobs
     scheduler.add_job(backup_database_async, 'cron', hour=3, minute=0, max_instances=1, coalesce=True)
@@ -170,7 +173,6 @@ async def lifespan(app: FastAPI):
     scheduler.add_job(position_action_job, 'interval', seconds=30, max_instances=1, coalesce=True)
 
     # Heartbeat Job (configurable interval, default 60s)
-    from backend.services.config_service import get_config_value
     heartbeat_url = get_config_value("HEARTBEAT_WEBHOOK_URL")
     heartbeat_interval_str = get_config_value("HEARTBEAT_INTERVAL_SECONDS") or "60"
     heartbeat_interval = int(heartbeat_interval_str)

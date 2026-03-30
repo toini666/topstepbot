@@ -36,7 +36,9 @@ export function ConfigModal({ isOpen, onClose, config, onSave }: ConfigModalProp
         newsBlockAfter: 5,
         positionAction: 'NOTHING',
         positionActionBuffer: 1,
-        timezone: 'Europe/Brussels'
+        timezone: 'Europe/Brussels',
+        apiTimeout: 15,
+        jobInterval: 10,
     });
 
     // === Sessions State ===
@@ -68,7 +70,9 @@ export function ConfigModal({ isOpen, onClose, config, onSave }: ConfigModalProp
                 newsBlockAfter: config.news_block_after_minutes ?? 5,
                 positionAction: config.blocked_hours_position_action ?? 'NOTHING',
                 positionActionBuffer: config.position_action_buffer_minutes ?? 1,
-                timezone: config.timezone || 'Europe/Brussels'
+                timezone: config.timezone || 'Europe/Brussels',
+                apiTimeout: config.api_timeout_seconds ?? 15,
+                jobInterval: config.job_interval_seconds ?? 10,
             });
 
             fetchSessions();
@@ -182,7 +186,9 @@ export function ConfigModal({ isOpen, onClose, config, onSave }: ConfigModalProp
                 news_block_after_minutes: generalState.newsBlockAfter,
                 blocked_hours_position_action: generalState.positionAction,
                 position_action_buffer_minutes: generalState.positionActionBuffer,
-                timezone: generalState.timezone
+                timezone: generalState.timezone,
+                api_timeout_seconds: generalState.apiTimeout,
+                job_interval_seconds: generalState.jobInterval,
             });
 
             // Save Sessions if modified

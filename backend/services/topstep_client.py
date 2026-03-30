@@ -50,6 +50,7 @@ class TopStepClient:
         
         # Persistent HTTP Client
         self.client = None
+        self._api_timeout = 15.0
 
     def reload_credentials(self):
         """Reload credentials from env vars (priority) then DB settings table."""
@@ -61,10 +62,31 @@ class TopStepClient:
         self._login_failures = 0
         self._login_backoff_until = None
 
+    async def force_reconnect(self) -> bool:
+        """Reset all backoff timers and force a fresh login. Used after network outages."""
+        self._rate_limit_until = None
+        self._consecutive_errors = 0
+        self._rate_limit_alert_sent = False
+        self._login_failures = 0
+        self._login_backoff_until = None
+        self.token = None
+        return await self.login()
+
+    def reload_timeout(self):
+        """Reload API timeout from settings."""
+        from backend.services.config_service import get_config_value
+        val = get_config_value("API_TIMEOUT_SECONDS")
+        if val:
+            try:
+                self._api_timeout = float(val)
+            except ValueError:
+                pass
+
     async def startup(self):
         """Initialize persistent HTTP client."""
+        self.reload_timeout()
         if self.client is None:
-            self.client = httpx.AsyncClient(timeout=15.0)
+            self.client = httpx.AsyncClient(timeout=self._api_timeout)
             logger.info("TopStepClient: Persistent HTTP client initialized.")
 
     async def shutdown(self):
@@ -102,9 +124,9 @@ class TopStepClient:
         for attempt in range(max_retries):
             try:
                 if method.upper() == "GET":
-                    response = await self.client.get(url, headers=headers)
+                    response = await self.client.get(url, headers=headers, timeout=self._api_timeout)
                 else:
-                    response = await self.client.post(url, json=payload, headers=headers)
+                    response = await self.client.post(url, json=payload, headers=headers, timeout=self._api_timeout)
                 
                 # Handle rate limiting (429) - TRIGGER CIRCUIT BREAKER
                 if response.status_code == 429:

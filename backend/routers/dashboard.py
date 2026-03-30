@@ -53,6 +53,17 @@ def get_connection_status():
     return {"connected": bool(topstep_client.token)}
 
 
+@router.post("/reconnect")
+async def force_reconnect():
+    """Reset all backoff timers and force a fresh login. Use after network outages."""
+    from backend.services.market_hub_client import market_hub_client
+    success = await topstep_client.force_reconnect()
+    if success:
+        # Disconnect WebSocket so price_refresh_job reconnects with the new token
+        await market_hub_client.disconnect()
+    return {"success": success, "message": "Reconnected successfully" if success else "Reconnection failed — check credentials"}
+
+
 @router.get("/dashboard/market-status")
 def get_market_status(db: Session = Depends(get_db)):
     """Check if market is open and if trading is allowed."""
@@ -106,7 +117,10 @@ def get_global_config(db: Session = Depends(get_db)):
         news_block_after_minutes=settings.get("news_block_after_minutes", 5),
         # Position Action Settings
         blocked_hours_position_action=settings.get("blocked_hours_position_action", "NOTHING"),
-        position_action_buffer_minutes=settings.get("position_action_buffer_minutes", 1)
+        position_action_buffer_minutes=settings.get("position_action_buffer_minutes", 1),
+        # Network / Performance
+        api_timeout_seconds=int(settings.get("API_TIMEOUT_SECONDS", 15)),
+        job_interval_seconds=int(settings.get("JOB_INTERVAL_SECONDS", 10)),
     )
 
 
@@ -181,6 +195,18 @@ def update_global_config(req: GlobalSettingsUpdate, db: Session = Depends(get_db
     
     if req.position_action_buffer_minutes is not None:
         set_setting("position_action_buffer_minutes", str(req.position_action_buffer_minutes))
+
+    # Network / Performance
+    if req.api_timeout_seconds is not None:
+        val = max(3, min(60, req.api_timeout_seconds))
+        set_setting("API_TIMEOUT_SECONDS", str(val))
+        topstep_client.reload_timeout()
+        log_messages.append(f"API timeout set to {val}s")
+
+    if req.job_interval_seconds is not None:
+        val = max(5, min(60, req.job_interval_seconds))
+        set_setting("JOB_INTERVAL_SECONDS", str(val))
+        log_messages.append(f"Job interval set to {val}s (takes effect on next restart)")
 
     # Timezone
     if req.timezone is not None:
