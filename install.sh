@@ -38,6 +38,10 @@ source venv/bin/activate
 pip install --upgrade pip --quiet
 pip install -r backend/requirements.txt
 
+# --- Update npm to latest ---
+echo "Updating npm..."
+npm install -g npm@latest --quiet
+
 # --- Build frontend ---
 echo "Building frontend..."
 cd frontend
