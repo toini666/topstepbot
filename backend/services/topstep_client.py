@@ -170,7 +170,12 @@ class TopStepClient:
                 # Handle other errors
                 if response.status_code >= 400:
                     self._consecutive_errors += 1
-                    self._log_api_call(method, url, payload, None, response.status_code)
+                    try:
+                        error_body = response.json()
+                    except Exception:
+                        error_body = {"raw": response.text}
+                    logger.warning(f"HTTP {response.status_code} on {url}: {error_body}")
+                    self._log_api_call(method, url, payload, error_body, response.status_code)
                     return (None, response.status_code, False)
                 
                 # Success - reset error counter
