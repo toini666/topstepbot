@@ -15,6 +15,7 @@ pip install -r backend/requirements.txt --quiet
 
 echo "Rebuilding frontend..."
 cd frontend
+npm config set strict-ssl false
 npm install
 npm run build
 cd ..

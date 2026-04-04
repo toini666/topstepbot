@@ -46,6 +46,7 @@ echo "Building frontend..."
 cd frontend
 npm cache clean --force
 rm -rf node_modules package-lock.json
+npm config set strict-ssl false
 npm install
 npm run build
 cd ..
