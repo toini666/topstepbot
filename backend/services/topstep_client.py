@@ -426,6 +426,7 @@ class TopStepClient:
             backoff_seconds = min(30 * (2 ** (self._login_failures - 1)), 300)
             self._login_backoff_until = datetime.now(timezone.utc) + timedelta(seconds=backoff_seconds)
             logger.warning(f"Login failed (attempt #{self._login_failures}). Next retry in {backoff_seconds}s.")
+            logger.warning(f"Login API full response: {data}")
             print(f"Login failed: {data.get('errorMessage') if data else 'Unknown error'}")
             return False
 
