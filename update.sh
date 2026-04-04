@@ -13,9 +13,6 @@ echo "Updating Python dependencies..."
 source venv/bin/activate
 pip install -r backend/requirements.txt --quiet
 
-echo "Updating npm..."
-npm install -g npm@latest --quiet
-
 echo "Rebuilding frontend..."
 cd frontend
 npm install

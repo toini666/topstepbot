@@ -29,6 +29,9 @@ PYTHON=$(command -v python3.12)
 if ! command -v node &> /dev/null; then
     echo "Installing Node.js..."
     brew install node
+else
+    echo "Updating Node.js..."
+    brew upgrade node 2>/dev/null || true
 fi
 
 # --- Python virtual environment ---
@@ -37,10 +40,6 @@ echo "Setting up Python environment..."
 source venv/bin/activate
 pip install --upgrade pip --quiet
 pip install -r backend/requirements.txt
-
-# --- Update npm to latest ---
-echo "Updating npm..."
-npm install -g npm@latest --quiet
 
 # --- Build frontend ---
 echo "Building frontend..."
