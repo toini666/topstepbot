@@ -13,6 +13,7 @@ Automated trading system for TopStepX. Executes TradingView alerts with risk man
 
 ### Risk Management
 - **Position Sizing**: Auto-calculates quantity based on risk per trade and stop distance
+- **Force-Minimum Override**: Per-account toggle "Force 1 contract over risk" — when enabled, signals whose SL distance would normally yield qty=0 are taken with 1 contract and a WARNING is logged + sent to Telegram (off by default)
 - **Session Filters**: Block trading during specific sessions (ASIA, UK, US)
 - **Blocked Periods**: Custom time windows to prevent trading
 - **News Blocks**: Auto-generated trading blocks from economic calendar events
@@ -29,8 +30,8 @@ Automated trading system for TopStepX. Executes TradingView alerts with risk man
 
 ### Dashboard
 - **Real-Time Positions**: Open positions with current price and unrealized PnL
-- **Trade History**: Aggregated closed trades with strategy/timeframe filters
-- **Daily P&L**: Live profit tracking per account
+- **Trade History**: Aggregated closed trades with strategy/timeframe filters, displaying **Net PnL** (gross − fees − TopStep commissions) and a combined **Fees + Comm.** column
+- **Daily P&L**: Live profit tracking per account (net of fees + TopStep commissions)
 - **Order History**: Working and filled orders
 - **System Logs**: Full audit trail with expandable JSON details
 - **Economic Calendar**: Major events, weekly schedule, impact/country filters
@@ -207,7 +208,7 @@ https://your-ngrok-url.ngrok-free.app/api/webhook
 - **News Blocks**: Auto-generated from economic calendar
 - **Position Actions**: NOTHING/BREAKEVEN/FLATTEN before blocks
 - **Auto-Flatten**: Daily position closure time
-- **Account Risk**: Base risk amount and max contracts per account
+- **Account Risk**: Base risk amount, max contracts, and "Force 1 contract over risk" override per account
 - **Strategy Configs**: Risk factor, allowed sessions, partial TP, SL-to-breakeven
 
 ### Ticker Mapping

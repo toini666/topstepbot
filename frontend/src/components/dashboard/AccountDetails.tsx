@@ -83,6 +83,31 @@ export function AccountDetails({
                             prefix=""
                         />
                     </div>
+                    <div className="flex justify-between items-center">
+                        <span
+                            className="text-slate-400 text-sm"
+                            title="If enabled, take 1 contract even when the SL distance would exceed the configured risk per trade. The bot logs a warning and notifies Telegram on every override."
+                        >
+                            Force 1 contract over risk
+                        </span>
+                        <button
+                            type="button"
+                            role="switch"
+                            aria-checked={accountSettings?.allow_min_contract_over_risk ?? false}
+                            onClick={() =>
+                                onUpdateSettings({
+                                    allow_min_contract_over_risk: !(accountSettings?.allow_min_contract_over_risk ?? false),
+                                })
+                            }
+                            className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${accountSettings?.allow_min_contract_over_risk ? 'bg-amber-500/70' : 'bg-slate-700'
+                                }`}
+                        >
+                            <span
+                                className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${accountSettings?.allow_min_contract_over_risk ? 'translate-x-5' : 'translate-x-1'
+                                    }`}
+                            />
+                        </button>
+                    </div>
                     <div className="flex justify-between items-center border-t border-slate-800/60 pt-4 mt-auto">
                         <span className="text-slate-400 text-sm">Balance</span>
                         <span className="font-mono text-white text-2xl font-bold">

@@ -124,7 +124,7 @@ SQLAlchemy ORM with SQLite. All tables created on startup via `init_db()`.
 | `TradingSession` | `trading_sessions` | Session definitions (ASIA, UK, US) with time ranges |
 | `TickerMap` | `ticker_maps` | TradingView → TopStep contract mapping + tick info |
 | `Strategy` | `strategies` | Global strategy templates with default configs |
-| `AccountSettings` | `account_settings` | Per-account trading config (risk, enabled, max contracts) |
+| `AccountSettings` | `account_settings` | Per-account trading config (risk, enabled, max contracts, allow_min_contract_over_risk) |
 | `AccountStrategyConfig` | `account_strategy_configs` | Strategy overrides per account (sessions, risk factor, partial %) |
 | `DiscordNotificationSettings` | `discord_notification_settings` | Per-account Discord webhook preferences |
 | `Trade` | `trades` | Local trade records with full lifecycle metadata |
@@ -136,11 +136,32 @@ Trade:
   - id, account_id, ticker, action (BUY/SELL)
   - entry_price, signal_entry_price, exit_price, sl, tp
   - quantity, status (PENDING/OPEN/CLOSED/REJECTED)
-  - pnl, fees
+  - pnl                    # Gross PnL from TopStep API
+  - fees                   # fees + commissions rolled together (see "Fees & Commissions" below)
   - timeframe, session, strategy
   - timestamp, exit_time, duration_seconds
   - topstep_order_id, rejection_reason
 ```
+
+#### AccountSettings Model Fields
+```python
+AccountSettings:
+  - id, account_id, account_name
+  - trading_enabled               # Master per-account switch
+  - risk_per_trade                # Base risk amount ($)
+  - max_contracts                 # Max micro-equivalent contracts allowed
+  - allow_min_contract_over_risk  # If True, force qty=1 when SL would yield qty=0
+  - created_at, updated_at
+```
+
+#### Fees & Commissions
+TopStep's `/api/Trade/search` response exposes two separate cost fields per fill:
+- `fees` — legacy exchange/clearing fees
+- `commissions` — TopStep platform commission (e.g. $0.50 round-turn per micro contract, introduced May 2026)
+
+To keep the schema flat and avoid breaking existing consumers, the bot **sums both fields into the single `Trade.fees` column** at every aggregation point (`position_monitor.py`, `reconciliation_service.py`, `routers/webhook.py` partial-close path). Exports, Telegram/Discord notifications, daily summaries, and the dashboard's "Net PnL" therefore reflect the true cost.
+
+Trades closed before this rollout retain their underestimated `fees` value (no backfill performed).
 
 #### Relationships
 ```
@@ -175,7 +196,11 @@ class RiskEngine:
 
     # Position Sizing
     get_risk_amount(account_id, strategy) → float
-    calculate_position_size(entry, sl, risk, tick_size, tick_value) → int
+    calculate_position_size(entry, sl, risk, tick_size, tick_value,
+                            allow_min_contract: bool = False)
+        → Tuple[int, float]   # (qty, risk_per_contract)
+        # When allow_min_contract=True and qty would be 0, returns (1, risk_per_contract)
+        # so the caller can detect the override and log/notify the risk excess.
 
 # Standalone utility
 calculate_unrealized_pnl(entry_price, current_price, quantity, is_long, tick_size, tick_value) → float
@@ -428,6 +453,7 @@ Manual trade reconciliation between local DB and TopStep API trade history.
 
 - Preview mode (dry-run) shows proposed changes.
 - Apply mode corrects Trade records (status, PnL, fees).
+- When building round-turns from API fills, sums `fees + commissions` per fill so the comparison matches what `position_monitor.py` stores in `Trade.fees`.
 
 ---
 

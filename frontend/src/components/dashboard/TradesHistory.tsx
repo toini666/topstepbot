@@ -146,45 +146,53 @@ export function TradesHistory({
                             <th className="py-3 px-4 text-center">Qty</th>
                             <th className="py-3 px-4 text-right">Entry Price</th>
                             <th className="py-3 px-4 text-right">Exit Price</th>
-                            <th className="py-3 px-4 text-right">Fees</th>
-                            <th className="py-3 px-4 text-right">PnL</th>
+                            <th className="py-3 px-4 text-right" title="Trading fees + TopStep commissions">Fees + Comm.</th>
+                            <th className="py-3 px-4 text-right" title="Net PnL = Gross PnL - Fees - Commissions">Net PnL</th>
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-800/50">
-                        {filteredTrades.map((trade) => (
-                            <tr key={trade.id} className="hover:bg-slate-800/30 transition-colors">
-                                <td className="py-3 px-4 text-slate-500 font-mono text-xs">
-                                    {formatInUserTz(trade.entryTime, 'MM/dd HH:mm:ss')}
-                                </td>
-                                <td className="py-3 px-4 text-slate-500 font-mono text-xs">
-                                    {formatInUserTz(trade.exitTime, 'HH:mm:ss')}
-                                </td>
-                                <td className="py-3 px-4 text-violet-300 font-mono text-xs">
-                                    {(() => {
-                                        const strat = strategies.find(s => s.tv_id === trade.strategy);
-                                        const displayName = strat?.name || trade.strategy || '-';
-                                        const tf = trade.timeframe;
-                                        return tf ? `${displayName} (${tf})` : displayName;
-                                    })()}
-                                </td>
-                                <td className="py-3 px-4 font-bold text-white">{trade.symbol}</td>
-                                <td className="py-3 px-4 text-center">
-                                    <span className={trade.side === 'LONG' ? 'badge-success' : 'badge-danger'}>
-                                        {trade.side}
-                                    </span>
-                                </td>
-                                <td className="py-3 px-4 text-center font-mono">{trade.size}</td>
-                                <td className="py-3 px-4 text-right font-mono">{trade.entryPrice.toFixed(2)}</td>
-                                <td className="py-3 px-4 text-right font-mono">{trade.exitPrice.toFixed(2)}</td>
-                                <td className="py-3 px-4 text-right font-mono text-slate-400">
-                                    {trade.fees ? `$${trade.fees.toFixed(2)}` : '-'}
-                                </td>
-                                <td className={`py-3 px-4 text-right font-mono font-bold ${trade.pnl > 0 ? 'text-green-400' : trade.pnl < 0 ? 'text-red-400' : 'text-slate-500'
-                                    }`}>
-                                    {trade.pnl !== undefined && trade.pnl !== null ? `$${trade.pnl.toFixed(2)}` : '-'}
-                                </td>
-                            </tr>
-                        ))}
+                        {filteredTrades.map((trade) => {
+                            const fees = trade.fees || 0;
+                            const grossPnl = trade.pnl ?? 0;
+                            const netPnl = grossPnl - fees;
+                            return (
+                                <tr key={trade.id} className="hover:bg-slate-800/30 transition-colors">
+                                    <td className="py-3 px-4 text-slate-500 font-mono text-xs">
+                                        {formatInUserTz(trade.entryTime, 'MM/dd HH:mm:ss')}
+                                    </td>
+                                    <td className="py-3 px-4 text-slate-500 font-mono text-xs">
+                                        {formatInUserTz(trade.exitTime, 'HH:mm:ss')}
+                                    </td>
+                                    <td className="py-3 px-4 text-violet-300 font-mono text-xs">
+                                        {(() => {
+                                            const strat = strategies.find(s => s.tv_id === trade.strategy);
+                                            const displayName = strat?.name || trade.strategy || '-';
+                                            const tf = trade.timeframe;
+                                            return tf ? `${displayName} (${tf})` : displayName;
+                                        })()}
+                                    </td>
+                                    <td className="py-3 px-4 font-bold text-white">{trade.symbol}</td>
+                                    <td className="py-3 px-4 text-center">
+                                        <span className={trade.side === 'LONG' ? 'badge-success' : 'badge-danger'}>
+                                            {trade.side}
+                                        </span>
+                                    </td>
+                                    <td className="py-3 px-4 text-center font-mono">{trade.size}</td>
+                                    <td className="py-3 px-4 text-right font-mono">{trade.entryPrice.toFixed(2)}</td>
+                                    <td className="py-3 px-4 text-right font-mono">{trade.exitPrice.toFixed(2)}</td>
+                                    <td className="py-3 px-4 text-right font-mono text-slate-400">
+                                        {fees ? `$${fees.toFixed(2)}` : '-'}
+                                    </td>
+                                    <td
+                                        className={`py-3 px-4 text-right font-mono font-bold ${netPnl > 0 ? 'text-green-400' : netPnl < 0 ? 'text-red-400' : 'text-slate-500'
+                                            }`}
+                                        title={`Gross: $${grossPnl.toFixed(2)} − Fees+Comm.: $${fees.toFixed(2)}`}
+                                    >
+                                        {trade.pnl !== undefined && trade.pnl !== null ? `$${netPnl.toFixed(2)}` : '-'}
+                                    </td>
+                                </tr>
+                            );
+                        })}
                         {filteredTrades.length === 0 && (
                             <tr>
                                 <td colSpan={10} className="py-8 text-center text-slate-500 italic">No closed trades found.</td>

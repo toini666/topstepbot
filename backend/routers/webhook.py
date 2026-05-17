@@ -341,30 +341,47 @@ async def handle_signal(
                  await telegram_service.notify_trade_rejection(alert.ticker, reason)
                  continue
 
-        qty = risk_engine.calculate_position_size(
+        account_settings = db.query(AccountSettings).filter(AccountSettings.account_id == account_id).first()
+        account_name = (account_settings.account_name if account_settings and account_settings.account_name else str(account_id))
+        allow_min_contract = bool(account_settings.allow_min_contract_over_risk) if account_settings else False
+
+        qty, risk_per_contract = risk_engine.calculate_position_size(
             entry_price=alert.entry,
             sl_price=alert.stop,
             risk_amount=risk_amount,
             tick_size=tick_size,
-            tick_value=tick_value
+            tick_value=tick_value,
+            allow_min_contract=allow_min_contract,
         )
-        
+
         if qty == 0:
             # BR-4: Notify qty=0 rejection per account
-            account_settings = db.query(AccountSettings).filter(AccountSettings.account_id == account_id).first()
-            account_name = (account_settings.account_name if account_settings and account_settings.account_name else str(account_id))
             reason = f"Position size &lt; 1 contract (risk: ${risk_amount}, SL distance too wide)"
             db.add(Log(level="WARNING", message=f"Qty=0 for {account_name}: {reason}"))
             await telegram_service.notify_trade_rejection(alert.ticker, reason, account_name=account_name)
             continue
+
+        # If the 1-contract override kicked in, warn that real risk exceeds configured risk
+        if allow_min_contract and qty == 1 and risk_per_contract > risk_amount:
+            over_msg = (
+                f"Risk override: taking 1 contract on {alert.ticker} for {account_name} "
+                f"(risk/contract ${risk_per_contract:.2f} > configured ${risk_amount:.2f})"
+            )
+            db.add(Log(level="WARNING", message=over_msg))
+            await telegram_service.send_message(
+                f"⚠️ <b>Risk Override</b>\n\n"
+                f"• Account: {account_name}\n"
+                f"• Ticker: {alert.ticker}\n"
+                f"• Qty: 1 (forced minimum)\n"
+                f"• Risk/contract: ${risk_per_contract:.2f}\n"
+                f"• Configured risk: ${risk_amount:.2f}"
+            )
         
         # Check contract limit
         limit_ok, limit_reason = await risk_engine.check_contract_limit(
             account_id, alert.ticker, qty, topstep_client
         )
         if not limit_ok:
-            account_settings = db.query(AccountSettings).filter(AccountSettings.account_id == account_id).first()
-            account_name = (account_settings.account_name if account_settings and account_settings.account_name else str(account_id))
             db.add(Log(level="WARNING", message=f"Contract limit exceeded for {alert.ticker} on {account_name}: {limit_reason}"))
             db.commit()
             await telegram_service.send_message(
@@ -654,9 +671,10 @@ async def handle_partial(alert: TradingViewAlert, db: Session) -> Dict[str, Any]
                             continue
                         
                         # Aggregate
+                        # TopStep returns `fees` and `commissions` as separate fields; roll them together.
                         qty = int(t.get('size') or t.get('quantity') or t.get('qty') or 0)
                         pnl = float(t.get('pnl') or t.get('profitAndLoss') or 0.0)
-                        fee = float(t.get('fees') or 0.0)
+                        fee = float(t.get('fees') or 0.0) + float(t.get('commissions') or 0.0)
                         price = float(t.get('price') or t.get('fillPrice') or 0.0)
                         
                         # If this fill is part of our partial close

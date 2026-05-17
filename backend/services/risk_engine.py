@@ -593,29 +593,37 @@ class RiskEngine:
     # =========================================================================
     
     def calculate_position_size(
-        self, 
-        entry_price: float, 
-        sl_price: float, 
-        risk_amount: float, 
-        tick_size: float, 
-        tick_value: float
-    ) -> int:
+        self,
+        entry_price: float,
+        sl_price: float,
+        risk_amount: float,
+        tick_size: float,
+        tick_value: float,
+        allow_min_contract: bool = False,
+    ):
         """
         Calculate lot size based on risk amount and stop distance.
         Risk Per Contract = (Distance / Tick_Size) * Tick_Value
+
+        Returns (qty, risk_per_contract). When `allow_min_contract` is True and the
+        SL distance would otherwise yield qty=0 (risk per contract > risk_amount),
+        qty is forced to 1 and the caller can detect the override by comparing
+        risk_per_contract to risk_amount.
         """
         stop_distance = abs(entry_price - sl_price)
         if stop_distance == 0 or tick_size == 0:
-            return 0
-        
+            return 0, 0.0
+
         ticks_at_risk = stop_distance / tick_size
         risk_per_contract = ticks_at_risk * tick_value
-        
+
         if risk_per_contract == 0:
-            return 0
-        
+            return 0, 0.0
+
         qty = int(risk_amount // risk_per_contract)
-        return max(1, qty) if qty > 0 else 0
+        if qty <= 0:
+            qty = 1 if allow_min_contract else 0
+        return qty, risk_per_contract
     
     def get_risk_amount(self, account_id: int, strategy_tv_id: str) -> float:
         """

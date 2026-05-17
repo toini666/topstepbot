@@ -386,7 +386,11 @@ def update_account_settings(account_id: int, req: AccountSettingsUpdate, db: Ses
         old_val = settings.max_contracts or 50
         settings.max_contracts = req.max_contracts
         db.add(Log(level="INFO", message=f"Max contracts updated for account {account_id}: {old_val} -> {req.max_contracts}"))
-    
+    if req.allow_min_contract_over_risk is not None and req.allow_min_contract_over_risk != settings.allow_min_contract_over_risk:
+        old_val = bool(settings.allow_min_contract_over_risk)
+        settings.allow_min_contract_over_risk = req.allow_min_contract_over_risk
+        db.add(Log(level="INFO", message=f"Allow min contract over risk updated for account {account_id}: {old_val} -> {req.allow_min_contract_over_risk}"))
+
     db.commit()
     db.refresh(settings)
     

@@ -70,12 +70,14 @@ def _build_round_turns(api_fills: List[Dict]) -> List[Dict]:
             
         pnl = fill.get('profitAndLoss')
         
+        # TopStep splits trade costs into `fees` and `commissions`. We roll them
+        # together so reconciliation matches what position_monitor stores in DB.
         fill_data = {
             'contract_id': str(fill.get('contractId') or ''),
             'timestamp': ts,
             'price': fill.get('price', 0),
             'size': fill.get('size', 0),
-            'fees': fill.get('fees', 0),
+            'fees': (fill.get('fees') or 0) + (fill.get('commissions') or 0),
             'side': fill.get('side'),
             'pnl': pnl
         }

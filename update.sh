@@ -13,6 +13,9 @@ echo "Updating Python dependencies..."
 source venv/bin/activate
 pip install -r backend/requirements.txt --quiet
 
+echo "Applying database schema updates..."
+python backend/update_db_schema.py
+
 echo "Rebuilding frontend..."
 cd frontend
 npm config set strict-ssl false

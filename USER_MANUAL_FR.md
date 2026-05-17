@@ -36,6 +36,9 @@ Permet de basculer entre les différentes vues :
 1. **Details du Compte** :
     - Affiche les métriques détaillées : Solde, Équité, P&L Latent, Marge utilisée.
     - **Interrupteur "Trading Enabled"** : Permet d'activer ou désactiver globalement la prise de position pour ce compte.
+    - **Risk / Trade** : Montant en dollars à risquer par trade sur ce compte.
+    - **Max Contracts** : Limite de contrats (équivalent micro) ouverts simultanément sur ce compte.
+    - **Force 1 contract over risk** *(nouveau)* : Interrupteur désactivé par défaut. Lorsqu'il est activé, si la distance du Stop Loss d'un signal est telle que le calcul de la taille de position donnerait 0 contrat (car le risque par contrat dépasse le "Risk / Trade" configuré), le bot prend quand même le trade avec 1 contrat au lieu de le rejeter. Chaque déclenchement de cette dérogation est consigné en WARNING dans les logs et envoyé sur Telegram, en précisant le risque réel ($) face au risque configuré, afin que tu puisses auditer l'écart.
 
 2. **Positions En Cours** :
     - Liste les positions actuellement ouvertes.
@@ -44,7 +47,10 @@ Permet de basculer entre les différentes vues :
 
 3. **Historique des Trades** :
     - Liste des trades clôturés.
+    - Colonne **Fees + Comm.** : somme des frais de trading et des commissions TopStep ($0.50 round-turn par contrat micro depuis mai 2026).
+    - Colonne **Net PnL** : profit/perte après déduction des frais + commissions (ce que ton compte voit vraiment). Le tooltip de la cellule donne le détail brut moins frais.
     - Option pour "Réconcilier" (Reconcile) en cas de différence entre le bot et TopStep.
+    - *Note historique* : les trades clôturés **avant** la mise à jour de mai 2026 ne contiennent pas les commissions TopStep dans leur colonne `fees` (uniquement les frais historiques). Le Net PnL affiché pour ces lignes est donc légèrement trop optimiste. Seuls les trades fermés à partir de cette mise à jour sont exacts.
 
 4. **Ordres** :
     - Liste des ordres en attente ou exécutés (Limit, Stop, Market).

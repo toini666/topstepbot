@@ -101,6 +101,7 @@ class AccountSettings(Base):
     trading_enabled = Column(Boolean, default=True)  # Master switch per account
     risk_per_trade = Column(Float, default=200.0)  # Account-specific risk amount ($)
     max_contracts = Column(Integer, default=50)  # Max micro-equivalent contracts allowed
+    allow_min_contract_over_risk = Column(Boolean, default=False)  # If True, take 1 contract even when SL distance exceeds risk_per_trade
     
     created_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc))
     updated_at = Column(DateTime, onupdate=lambda: datetime.datetime.now(datetime.timezone.utc))

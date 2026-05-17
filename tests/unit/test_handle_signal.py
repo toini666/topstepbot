@@ -38,7 +38,7 @@ def mock_risk_engine():
 
     # Position sizing
     engine.get_risk_amount.return_value = 200.0
-    engine.calculate_position_size.return_value = 2
+    engine.calculate_position_size.return_value = (2, 100.0)
     engine.get_current_session.return_value = "US"
     engine.ensure_account_settings.return_value = MagicMock()
 
@@ -261,7 +261,7 @@ async def test_signal_rejected_zero_quantity(
     mock_topstep_client.get_accounts.return_value = [
         {"id": 1001, "name": "Account1", "balance": 50000}
     ]
-    mock_risk_engine.calculate_position_size.return_value = 0
+    mock_risk_engine.calculate_position_size.return_value = (0, 0.0)
 
     # Mock account settings query
     mock_account_settings = MagicMock()

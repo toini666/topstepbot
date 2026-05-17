@@ -79,6 +79,7 @@ class AccountSettingsBase(BaseModel):
     trading_enabled: bool = True
     risk_per_trade: float = 200.0
     max_contracts: int = 50  # Max micro-equivalent contracts
+    allow_min_contract_over_risk: bool = False  # If True, force qty=1 when SL would exceed risk_per_trade
 
 
 class AccountSettingsCreate(AccountSettingsBase):
@@ -90,6 +91,7 @@ class AccountSettingsUpdate(BaseModel):
     risk_per_trade: Optional[float] = None
     account_name: Optional[str] = None
     max_contracts: Optional[int] = None
+    allow_min_contract_over_risk: Optional[bool] = None
 
 
 class AccountSettingsResponse(AccountSettingsBase):

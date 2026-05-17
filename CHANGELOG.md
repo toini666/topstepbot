@@ -6,6 +6,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [2026-05-17] - Risk Override Toggle & TopStep Commissions
+
+### Added
+- **Per-Account "Force 1 Contract Over Risk" Toggle**: New `allow_min_contract_over_risk` setting on `AccountSettings` (default OFF). When enabled, signals whose stop-loss distance would normally yield qty=0 (because risk-per-contract exceeds the configured `risk_per_trade`) are taken with a forced minimum of **1 contract** instead of being rejected. Every override triggers a WARNING log entry and a Telegram notification showing the real risk vs. the configured risk, so the user can audit the deviation.
+- **Toggle Visible in Dashboard**: Account Details panel exposes the switch between "Max Contracts" and "Balance" with a tooltip explaining the behavior.
+
+### Changed
+- **Position Sizing Return**: `RiskEngine.calculate_position_size()` now returns `(qty, risk_per_contract)` instead of just `qty`, so callers can detect when the override kicked in and report the discrepancy.
+- **Fees Include TopStep Commissions**: TopStep's `/api/Trade/search` exposes a new `commissions` field separate from the legacy `fees` field ($0.50 round-turn per micro contract). The bot now sums `fees + commissions` everywhere it reads fills:
+  - `jobs/position_monitor.py` — full close, partial close, daily PnL aggregation, fallback exit fill.
+  - `services/reconciliation_service.py` — round-turn builder.
+  - `routers/webhook.py` — partial close fill aggregation.
+  The combined total is stored in the existing `Trade.fees` column, so reconciliation, exports, Telegram/Discord notifications, and Discord summaries all show correct net PnL with no schema change. **Historical trades stored before this change keep their underestimated fees** — only trades closed from this version onward reflect the new total.
+- **Trade History Table (Frontend)**: "Fees" column renamed to **"Fees + Comm."** with explanatory tooltip; "PnL" column renamed to **"Net PnL"** and now displays `gross_pnl - (fees + commissions)` instead of gross PnL. The cell tooltip shows the gross-vs-fees breakdown.
+
+### Migration
+- DB column `account_settings.allow_min_contract_over_risk BOOLEAN DEFAULT 0` added via Alembic migration `a3f7e2c91b04` and via the idempotent `backend/update_db_schema.py` (which `update.sh` / `update.ps1` now invoke automatically).
+- The update scripts also reliably target the populated DB at the project root even when `backend/topstepbot.db` exists as an empty stub.
+
+---
+
 ## [2026-02-05] - Backend Performance & Frontend Optimization
 
 ### Added

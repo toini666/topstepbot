@@ -26,6 +26,7 @@ TopStep Bot is an automated trading system that bridges TradingView alerts with 
 | **TradingView Webhooks** | Receives 4 alert types: SETUP, SIGNAL, PARTIAL, CLOSE |
 | **Market Orders with Brackets** | Places market orders with automatic SL/TP bracket orders |
 | **Position Sizing** | Auto-calculates quantity based on risk amount and stop distance |
+| **Force-Min Override** | Per-account toggle: when on, trades that would yield qty=0 (SL too wide vs. risk) are taken with 1 contract; the resulting risk-excess is logged + notified |
 | **Contract Resolution** | Maps TV tickers (MNQ1!) to TopStep contracts via TickerMap |
 | **Signal Deduplication** | 30s TTL cache prevents duplicate execution |
 
@@ -58,6 +59,7 @@ Account Settings (per account)
 ├── Trading Enabled (pause/resume)
 ├── Risk Per Trade ($)
 ├── Max Contracts (micro-equivalent)
+├── Allow Min Contract Over Risk (force qty=1 when SL exceeds risk; default OFF)
 └── Strategy Configurations
     ├── Enabled (toggle)
     ├── Risk Factor (multiplier)
@@ -114,8 +116,8 @@ Account Settings (per account)
 | **Header** | Connection status, market status, current session, daily PnL, active positions count |
 | **Account Selector** | Dropdown to switch between accounts |
 | **Open Positions** | Live positions with strategy/timeframe, current price, unrealized PnL, close button |
-| **Account Details** | Balance, editable risk per trade, max contracts, trading toggle |
-| **Trade History** | Aggregated trades (entry + partials = 1 line), strategy filter, time filter, reconciliation button |
+| **Account Details** | Balance, editable risk per trade, max contracts, "Force 1 contract over risk" toggle, trading toggle |
+| **Trade History** | Aggregated trades (entry + partials = 1 line), strategy filter, time filter, reconciliation button. Columns include "Fees + Comm." (legacy fees + TopStep commissions) and "Net PnL" (gross − fees − commissions). |
 | **Order History** | Working and filled orders with type/status |
 | **System Logs** | Timestamped logs with expandable JSON details, pagination |
 | **Orphaned Orders Warning** | Alert for orders without matching positions |
@@ -163,7 +165,7 @@ Account Settings (per account)
 |---------|-------------|
 | **Trade Recording** | Trades matched by Symbol + Timestamp (5s tolerance) for precise PnL aggregation |
 | **Manual Trades** | Automatically detects and records non-bot trades (strategy="MANUAL") |
-| **Daily PnL** | Real-time Net PnL calculation (Gross - Fees) |
+| **Daily PnL** | Real-time Net PnL calculation (Gross − Fees − TopStep Commissions, summed into `Trade.fees`) |
 | **Unrealized PnL** | Floating PnL for open positions (10s refresh) with cached market prices |
 | **Auto Reconciliation** | Detects "phantom" OPEN trades in DB missing from API, auto-corrects via history |
 | **Manual Reconciliation** | Dashboard button to preview and apply trade corrections |

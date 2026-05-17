@@ -15,95 +15,134 @@ class TestPositionSizing:
     def test_calculate_position_size_basic(self):
         """Test basic position size calculation."""
         from backend.services.risk_engine import RiskEngine
-        
+
         db = MagicMock()
         engine = RiskEngine(db)
-        
+
         # Given: Entry 4500, SL 4495, Risk $200, Tick 0.25, TickValue $1.25 (MNQ)
         # Distance: 5 points = 20 ticks @ $1.25 = $25 risk/contract
         # Expected: $200 / $25 = 8 contracts
-        qty = engine.calculate_position_size(
+        qty, risk_per_contract = engine.calculate_position_size(
             entry_price=4500.0,
             sl_price=4495.0,
             risk_amount=200.0,
             tick_size=0.25,
             tick_value=1.25
         )
-        
+
         assert qty == 8
-    
+        assert risk_per_contract == 25.0
+
     def test_calculate_position_size_fractional(self):
         """Test position size rounds down."""
         from backend.services.risk_engine import RiskEngine
-        
+
         db = MagicMock()
         engine = RiskEngine(db)
-        
+
         # Given: Risk $100, tight stop that yields 2.5 contracts
         # Distance: 10 points = 40 ticks @ $1.25 = $50 risk/contract
         # Expected: $100 / $50 = 2 contracts (floor)
-        qty = engine.calculate_position_size(
+        qty, _ = engine.calculate_position_size(
             entry_price=4500.0,
             sl_price=4490.0,
             risk_amount=100.0,
             tick_size=0.25,
             tick_value=1.25
         )
-        
+
         assert qty == 2
-    
+
     def test_calculate_position_size_zero_distance(self):
         """Test zero stop distance returns 0."""
         from backend.services.risk_engine import RiskEngine
-        
+
         db = MagicMock()
         engine = RiskEngine(db)
-        
-        qty = engine.calculate_position_size(
+
+        qty, _ = engine.calculate_position_size(
             entry_price=4500.0,
             sl_price=4500.0,  # Same as entry
             risk_amount=200.0,
             tick_size=0.25,
             tick_value=1.25
         )
-        
+
         assert qty == 0
-    
+
     def test_calculate_position_size_zero_tick_size(self):
         """Test zero tick size returns 0."""
         from backend.services.risk_engine import RiskEngine
-        
+
         db = MagicMock()
         engine = RiskEngine(db)
-        
-        qty = engine.calculate_position_size(
+
+        qty, _ = engine.calculate_position_size(
             entry_price=4500.0,
             sl_price=4495.0,
             risk_amount=200.0,
             tick_size=0.0,
             tick_value=1.25
         )
-        
+
         assert qty == 0
-    
+
     def test_calculate_position_size_wide_stop(self):
         """Test wide stop that exceeds risk returns 0."""
         from backend.services.risk_engine import RiskEngine
-        
+
         db = MagicMock()
         engine = RiskEngine(db)
-        
+
         # Given: Risk $50, stop 50 points away
         # Distance: 50 points = 200 ticks @ $1.25 = $250 risk/contract
         # Expected: $50 / $250 = 0.2 = 0 contracts
-        qty = engine.calculate_position_size(
+        qty, risk_per_contract = engine.calculate_position_size(
             entry_price=4500.0,
             sl_price=4450.0,
             risk_amount=50.0,
             tick_size=0.25,
             tick_value=1.25
         )
-        
+
+        assert qty == 0
+        assert risk_per_contract == 250.0
+
+    def test_calculate_position_size_wide_stop_with_override(self):
+        """Wide stop with allow_min_contract=True forces qty=1."""
+        from backend.services.risk_engine import RiskEngine
+
+        db = MagicMock()
+        engine = RiskEngine(db)
+
+        qty, risk_per_contract = engine.calculate_position_size(
+            entry_price=4500.0,
+            sl_price=4450.0,
+            risk_amount=50.0,
+            tick_size=0.25,
+            tick_value=1.25,
+            allow_min_contract=True,
+        )
+
+        assert qty == 1
+        assert risk_per_contract == 250.0  # Caller can see real risk exceeds configured
+
+    def test_calculate_position_size_zero_distance_with_override(self):
+        """Zero stop distance still returns 0 even with override (invalid input)."""
+        from backend.services.risk_engine import RiskEngine
+
+        db = MagicMock()
+        engine = RiskEngine(db)
+
+        qty, _ = engine.calculate_position_size(
+            entry_price=4500.0,
+            sl_price=4500.0,
+            risk_amount=200.0,
+            tick_size=0.25,
+            tick_value=1.25,
+            allow_min_contract=True,
+        )
+
         assert qty == 0
 
 

@@ -187,8 +187,10 @@ async def monitor_closed_positions_job() -> None:
                                                 matching_trade = t
 
                             # Calculate Stats
+                            # NOTE: TopStep splits trade costs into two fields: `fees` and `commissions`.
+                            # We roll commissions into our single `fees` accumulator so net PnL stays accurate.
                             pnl_val = sum((t.get('pnl') or t.get('profitAndLoss') or 0) for t in relevant_trades)
-                            total_fees = sum((t.get('fees') or 0) for t in relevant_trades)
+                            total_fees = sum(((t.get('fees') or 0) + (t.get('commissions') or 0)) for t in relevant_trades)
 
                             # Update DB
                             if open_trade:
@@ -223,11 +225,9 @@ async def monitor_closed_positions_job() -> None:
 
                                     for t in recent_trades:
                                         pnl = t.get('profitAndLoss') or t.get('pnl')
-                                        fees = t.get('fees')
                                         if pnl is not None:
                                             real_daily_pnl += float(pnl)
-                                        if fees is not None:
-                                            real_daily_fees += float(fees)
+                                        real_daily_fees += float(t.get('fees') or 0) + float(t.get('commissions') or 0)
 
                                     final_daily_pnl = real_daily_pnl - real_daily_fees
 
@@ -462,7 +462,7 @@ async def monitor_closed_positions_job() -> None:
                         if confirm_close and exit_fill:
                             exit_px = exit_fill.get('price') or exit_fill.get('fillPrice') or 0
                             pnl_val = exit_fill.get('pnl') or exit_fill.get('profitAndLoss') or 0
-                            fees_val = exit_fill.get('fees') or 0
+                            fees_val = (exit_fill.get('fees') or 0) + (exit_fill.get('commissions') or 0)
 
                             trade.status = "CLOSED"
                             trade.exit_price = exit_px

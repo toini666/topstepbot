@@ -294,7 +294,8 @@ On bot startup, existing positions are pre-loaded to avoid false "Position Opene
           - Match Contract ID or Symbol
           - Match Entry Time (within 5s tolerance) or creation time
         * IF matching history found:
-          - Extract Exit Price, PnL, Fees from API trade
+          - Extract Exit Price, PnL from API trade
+          - Sum (fill.fees + fill.commissions) across matched fills → stored in trade.fees
           - Update DB Trade: status=CLOSED, exit_time, pnl, fees
           - Calculate Daily PnL
           - Notify via Telegram & Discord
@@ -497,25 +498,43 @@ def check_session_allowed(account_id, strategy_tv_id):
 ### Formula
 
 ```python
-def calculate_position_size(entry_price, sl_price, risk_amount, tick_size, tick_value):
+def calculate_position_size(entry_price, sl_price, risk_amount,
+                            tick_size, tick_value,
+                            allow_min_contract: bool = False):
     # 1. Calculate stop distance in price
     stop_distance = abs(entry_price - sl_price)
+
+    if stop_distance == 0 or tick_size == 0:
+        return 0, 0.0  # Invalid input — reject the trade
 
     # 2. Convert to ticks
     ticks_at_risk = stop_distance / tick_size
 
     # 3. Calculate risk per contract
     risk_per_contract = ticks_at_risk * tick_value
+    if risk_per_contract == 0:
+        return 0, 0.0
 
-    # 4. Calculate quantity
-    if risk_per_contract <= 0:
-        return 1  # Minimum
+    # 4. Floor-divide to get integer contract count
+    qty = int(risk_amount // risk_per_contract)
 
-    qty = risk_amount / risk_per_contract
+    # 5. Optional override: force 1 contract even if risk would be exceeded
+    if qty <= 0:
+        qty = 1 if allow_min_contract else 0
 
-    # 5. Round down to integer
-    return max(1, int(qty))
+    return qty, risk_per_contract
 ```
+
+### Override behavior
+
+The caller (the webhook handler) reads `AccountSettings.allow_min_contract_over_risk`
+for the current account and passes it as `allow_min_contract`.
+
+- **Off (default)**: a stop-loss distance so wide that even 1 contract exceeds
+  `risk_per_trade` yields `qty=0` → trade rejected, Telegram notified.
+- **On**: the same case yields `qty=1` → trade taken. The webhook compares
+  `risk_per_contract` to `risk_amount` and, when the override actually kicked in,
+  logs a WARNING and pushes a Telegram message detailing real vs configured risk.
 
 ### Example
 

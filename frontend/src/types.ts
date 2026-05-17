@@ -172,6 +172,7 @@ export interface AccountSettings {
     trading_enabled: boolean;
     risk_per_trade: number;
     max_contracts: number;  // Max micro-equivalent contracts
+    allow_min_contract_over_risk: boolean;  // Force qty=1 when SL would exceed risk_per_trade
     created_at: string;
     updated_at?: string;
 }

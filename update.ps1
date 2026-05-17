@@ -14,6 +14,9 @@ Write-Host "Fetching latest version..." -ForegroundColor Yellow
 Write-Host "Updating Python dependencies..." -ForegroundColor Yellow
 & .\venv\Scripts\pip.exe install -r backend\requirements.txt --quiet
 
+Write-Host "Applying database schema updates..." -ForegroundColor Yellow
+& .\venv\Scripts\python.exe backend\update_db_schema.py
+
 Write-Host "Rebuilding frontend..." -ForegroundColor Yellow
 Set-Location frontend
 & npm install
