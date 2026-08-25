@@ -20,6 +20,34 @@ bouger aiohttp/starlette/uvicorn aujourd'hui polluerait ce diagnostic.
 
 ---
 
+## 0. Mode d'exploitation réel : `start_bot.sh` uniquement
+
+**Fait confirmé par l'opérateur le 25/08 : `install.sh` et `update.sh` ne sont jamais lancés ici.**
+Le démarrage quotidien, c'est `./start_bot.sh`, point.
+
+Or `start_bot.sh` **ne fait aucune opération de dépendances** (vérifié : aucun `git pull`, aucun
+`pip install`, aucun `npm install`, aucun `npm run build`). Il tue les processus, active le venv,
+lance uvicorn + `npm run preview` + ngrok. C'est tout.
+
+Trois conséquences qui pilotent tout le reste de ce document :
+
+1. **C'est l'explication complète de la dérive du §1.** Les dépendances datent littéralement de la
+   dernière exécution manuelle des scripts : `starlette` écrit le **10/02/2026**,
+   `frontend/node_modules/` le **29/03/2026**. Rien ne les a touchées depuis, et rien ne les
+   touchera jamais tout seul.
+2. **Les correctifs de l'étape 1 sur `install.sh`/`update.sh` ne s'appliqueront jamais à cette
+   machine par le flux normal.** Ils protègent les *autres* utilisateurs du bot (et cette machine
+   le jour d'une réinstallation). Le bénéfice immédiat ici se limite à la suppression du `ngrok`
+   npm racine, au manifeste `pytest-asyncio` et au lockfile réparé.
+3. **Toute mise à jour ici est manuelle, et le restera.** Les commandes de l'étape 2 doivent être
+   tapées à la main — ne pas écrire « lance `update.sh` », ça ne correspond à rien.
+   Corollaire moins visible : `npm run preview` sert `frontend/dist/`, qui n'est régénéré que par
+   un `npm run build` explicite. Toute modif de `frontend/src/` reste invisible tant que le build
+   n'est pas relancé à la main. *(État au 25/08 : `dist/` et `src/` sont tous deux au 17/05 23:24
+   — cohérents, rien à rattraper.)*
+
+---
+
 ## 1. La découverte principale : dérive locale ≠ dette du dépôt
 
 `pip-audit` remonte **38 CVE dans 11 paquets**, `npm audit` remonte **10 vulnérabilités dont 7
@@ -281,12 +309,15 @@ uvicorn/vite/ngrok intacts, `pytest` toujours à 78/4) :
      dessus en ce moment. C'est l'étape 2, bot arrêté.
 
 **Non fait volontairement à l'étape 1 :** `update.sh:14` fait toujours un `pip install -r` nu —
-le mécanisme même qui a figé starlette cinq mois (§1). Y mettre `--upgrade-strategy=eager`
-donnerait à l'updater le droit de remonter n'importe quelle transitive sans prévenir, sur un bot
-qui passe des ordres : ça se fait bot arrêté, avec les tests derrière, donc à l'étape 2.
-**La dérive n'est donc pas encore refermée côté Python.**
+le mécanisme qui fige les transitives (§1). Y mettre `--upgrade-strategy=eager` donnerait à
+l'updater le droit de remonter n'importe quelle transitive sans prévenir, sur un bot qui passe des
+ordres : ça se fait bot arrêté, avec les tests derrière, donc à l'étape 2. Sachant que ce script
+n'est de toute façon jamais lancé sur cette machine (§0), l'enjeu est pour les autres utilisateurs.
+**Côté Python, la dérive locale n'est pas refermée : elle ne le sera que par les commandes
+manuelles de l'étape 2.**
 
-**Étape 2 — après l'incident, bot arrêté, un seul lot :**
+**Étape 2 — après l'incident, bot arrêté, un seul lot.** Commandes à taper à la main : sur cette
+machine rien ne se met à jour tout seul (§0).
 
 4. `pip install -U --upgrade-strategy=eager -r requirements.txt` avec le nouveau manifeste (§5)
    — **surtout pas un `-U` nu**, cf. l'encadré du §1 — puis `pytest` → attendre 78/4
