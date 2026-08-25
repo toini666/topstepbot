@@ -18,8 +18,8 @@ python backend/update_db_schema.py
 
 echo "Rebuilding frontend..."
 cd frontend
-npm config set strict-ssl false
-npm install
+# TLS: portee limitee a cette commande (cf. install.sh) - jamais "npm config set".
+npm install --strict-ssl=false
 npm run build
 cd ..
 
