@@ -17,6 +17,8 @@ from backend.jobs.state import (
     get_handled_position_action_blocks,
     add_handled_position_action_block,
     clear_handled_position_action_blocks,
+    get_signal_silence_state,
+    update_signal_silence_state,
 )
 
 from backend.jobs.position_monitor import monitor_closed_positions_job
@@ -25,6 +27,7 @@ from backend.jobs.position_actions import position_action_job, execute_breakeven
 from backend.jobs.health_checks import (
     api_health_check_job,
     heartbeat_job,
+    signal_silence_check_job,
     format_uptime,
     send_shutdown_webhook
 )
@@ -45,6 +48,8 @@ __all__ = [
     'get_handled_position_action_blocks',
     'add_handled_position_action_block',
     'clear_handled_position_action_blocks',
+    'get_signal_silence_state',
+    'update_signal_silence_state',
     
     # Jobs
     'monitor_closed_positions_job',
@@ -54,6 +59,7 @@ __all__ = [
     'execute_breakeven_all',
     'api_health_check_job',
     'heartbeat_job',
+    'signal_silence_check_job',
     'format_uptime',
     'send_shutdown_webhook',
     'price_refresh_job',

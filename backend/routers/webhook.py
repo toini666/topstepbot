@@ -117,9 +117,9 @@ async def receive_webhook(
     """
     # Verify IP before processing
     verify_tradingview_ip(request)
-    
+
     strategy_name = alert.strat or "default"
-    
+
     # Deduplication check
     if is_duplicate_signal(alert):
         log_msg = f"Duplicate Signal Ignored: {alert.ticker} {alert.side} @ {alert.entry} [{strategy_name}]"
@@ -127,32 +127,77 @@ async def receive_webhook(
         print(log_msg)
         return {"status": "ignored", "reason": "Duplicate signal"}
 
-    risk_engine = RiskEngine(db)
-    
     # Log reception
     log_msg = f"Webhook: {alert.type} - {alert.ticker} {alert.side} @ {alert.entry} [{strategy_name}] TF={alert.timeframe}"
     db.add(Log(level="INFO", message=log_msg, details=alert.model_dump_json(exclude_none=True)))
     db.commit()
-    
-    # Route by alert type
+
+    # Hand the work off so TradingView gets its 200 well inside its 3s budget
+    background_tasks.add_task(process_alert, alert)
+
+    return {"status": "accepted", "type": alert.type.upper()}
+
+
+async def process_alert(alert: TradingViewAlert) -> None:
+    """
+    Execute the alert after the HTTP response has been sent to TradingView.
+
+    Owns its own DB session: the request-scoped session from get_db() is
+    already closed by the time this runs.
+    """
+    strategy_name = alert.strat or "default"
     alert_type = alert.type.upper()
-    
-    if alert_type == "SETUP":
-        return await handle_setup(alert, db)
-    
-    elif alert_type == "SIGNAL":
-        return await handle_signal(alert, db, background_tasks)
-    
-    elif alert_type == "PARTIAL":
-        return await handle_partial(alert, db)
-    
-    elif alert_type == "CLOSE":
-        return await handle_close(alert, db)
-    
-    elif alert_type == "MOVEBE":
-        return await handle_movebe(alert, db)
-    
-    return {"status": "ignored", "reason": f"Unknown Alert Type: {alert.type}"}
+
+    db = SessionLocal()
+    # handle_signal queues execute_trade in here. FastAPI will not run these
+    # (the response is already sent), so we await them ourselves below.
+    deferred = BackgroundTasks()
+
+    try:
+        if alert_type == "SETUP":
+            await handle_setup(alert, db)
+
+        elif alert_type == "SIGNAL":
+            await handle_signal(alert, db, deferred)
+
+        elif alert_type == "PARTIAL":
+            await handle_partial(alert, db)
+
+        elif alert_type == "CLOSE":
+            await handle_close(alert, db)
+
+        elif alert_type == "MOVEBE":
+            await handle_movebe(alert, db)
+
+        else:
+            db.add(Log(level="WARNING", message=f"Unknown Alert Type: {alert.type}"))
+            db.commit()
+            return
+
+        await deferred()
+
+    except Exception as e:
+        # TradingView already got its 200, so a failure here is invisible.
+        # On a funded account that must be loud.
+        err = f"Alert processing failed: {alert_type} {alert.ticker} [{strategy_name}] - {e}"
+        print(f"\u274c {err}")
+        try:
+            db.rollback()
+            db.add(Log(level="ERROR", message=err, details=traceback.format_exc()))
+            db.commit()
+        except Exception:
+            pass
+        try:
+            from backend.services.telegram_service import telegram_service
+            await telegram_service.send_message(
+                f"\U0001f6a8 <b>Alert processing failed</b>\n\n"
+                f"\u2022 {alert_type} {alert.ticker} [{strategy_name}]\n"
+                f"\u2022 Error: {e}"
+            )
+        except Exception:
+            pass
+    finally:
+        db.close()
 
 
 # =============================================================================

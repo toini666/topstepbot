@@ -29,6 +29,11 @@ _heartbeat_state: Dict[str, Any] = {
     "consecutive_failures": 0
 }
 
+# Signal Silence State (TradingView -> bot delivery monitoring)
+_signal_silence_state: Dict[str, Any] = {
+    "notified": False
+}
+
 # Track handled blocks to prevent duplicate actions (reset daily by calendar job)
 _handled_position_action_blocks: Set[str] = set()
 
@@ -138,3 +143,19 @@ def add_handled_position_action_block(block_id: str) -> None:
 def clear_handled_position_action_blocks() -> None:
     """Clear all handled position action blocks (called daily)."""
     _handled_position_action_blocks.clear()
+
+
+# ============================================================================
+# Signal Silence State Accessors
+# ============================================================================
+
+def get_signal_silence_state() -> Dict[str, Any]:
+    """Get the current signal silence state."""
+    return _signal_silence_state
+
+
+def update_signal_silence_state(**kwargs) -> None:
+    """Update specific fields in signal silence state."""
+    for key, value in kwargs.items():
+        if key in _signal_silence_state:
+            _signal_silence_state[key] = value

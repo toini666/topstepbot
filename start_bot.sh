@@ -101,7 +101,8 @@ else
 
     if [ "$CAN_START_NGROK" = true ]; then
         echo "   🚀 Starting new Ngrok instance..."
-        $NGROK_CMD http 8080 > /dev/null &
+        # Keep ngrok output: without it a dead tunnel leaves no trace at all
+        $NGROK_CMD http 8080 > "$DIR/ngrok.log" 2>&1 &
         # Disown so it survives script exit
         disown $!
         sleep 3

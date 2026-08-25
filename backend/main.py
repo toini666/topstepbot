@@ -31,6 +31,7 @@ from backend.jobs import (
     position_action_job,
     api_health_check_job,
     heartbeat_job,
+    signal_silence_check_job,
     send_shutdown_webhook,
     price_refresh_job,
     discord_daily_summary_job,
@@ -165,6 +166,9 @@ async def lifespan(app: FastAPI):
     
     # API Health Check (every 60 seconds)
     scheduler.add_job(api_health_check_job, 'interval', seconds=60, max_instances=1, coalesce=True)
+
+    # Signal Silence Check (every 15 min) - detects a broken TradingView -> bot path
+    scheduler.add_job(signal_silence_check_job, 'interval', minutes=15, max_instances=1, coalesce=True)
     
     # Discord Daily Summary (every minute, checks configured times per account)
     scheduler.add_job(discord_daily_summary_job, 'interval', minutes=1, max_instances=1, coalesce=True)
