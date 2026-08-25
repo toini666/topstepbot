@@ -5,9 +5,32 @@ Provides shared fixtures for database mocking, client mocking,
 and other test utilities.
 """
 
+# =============================================================================
+# DATABASE ISOLATION - must run before any backend import
+# =============================================================================
+# backend/database.py resolves DATABASE_URL at import time and falls back to the
+# live bot database. Several tests reach the real SessionLocal (test_webhook_async,
+# test_position_monitor, test_handle_signal), so a plain `pytest` from the repo root
+# used to write into topstepbot.db: a single afternoon of runs left 116 rows of fake
+# API traffic at the top of the operator's log panel, during an incident.
+#
+# Setting the variable here is enough: conftest is imported before the test modules,
+# and load_dotenv() does not override variables that already exist.
+import os
+import shutil
+import tempfile
+
+_TEST_DB_DIR = tempfile.mkdtemp(prefix="topstepbot-tests-")
+os.environ["DATABASE_URL"] = f"sqlite:///{os.path.join(_TEST_DB_DIR, 'test.db')}"
+
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 from datetime import datetime, timezone
+
+
+def pytest_sessionfinish(session, exitstatus):
+    """Drop the throwaway database created for this run."""
+    shutil.rmtree(_TEST_DB_DIR, ignore_errors=True)
 
 # =============================================================================
 # DATABASE FIXTURES
