@@ -37,7 +37,11 @@ from backend.jobs import (
     discord_daily_summary_job,
 )
 from backend.jobs.news_alert import news_alert_job
-from backend.jobs.state import update_account_positions, init_heartbeat_start_time
+from backend.jobs.state import (
+    update_account_positions,
+    init_heartbeat_start_time,
+    update_signal_silence_state,
+)
 
 import asyncio
 import os
@@ -186,6 +190,10 @@ async def lifespan(app: FastAPI):
 
     # Initialize heartbeat start time
     init_heartbeat_start_time(now_user_tz())
+
+    # Anchor the signal silence monitor on this process start. Kept separate from the
+    # heartbeat start time above, which is deliberately reset on a sleep/wake gap.
+    update_signal_silence_state(monitor_started_at=now_user_tz())
 
     # Calendar Job (7:00 AM Brussels)
     scheduler.add_job(calendar_service.check_calendar_job, 'cron', hour=7, minute=0, timezone=get_user_tz_name(), max_instances=1, coalesce=True)

@@ -30,8 +30,14 @@ _heartbeat_state: Dict[str, Any] = {
 }
 
 # Signal Silence State (TradingView -> bot delivery monitoring)
+# monitor_started_at is this monitor's OWN anchor, set once at startup and never
+# rewritten afterwards. It must not be confused with _heartbeat_state["start_time"],
+# which heartbeat_job legitimately resets on a sleep/wake gap: reusing that field
+# made a heartbeat hiccup look like a recovery and announced "signals are arriving
+# again" while no alert had arrived for 15h (26/08/2026).
 _signal_silence_state: Dict[str, Any] = {
-    "notified": False
+    "notified": False,
+    "monitor_started_at": None
 }
 
 # Track handled blocks to prevent duplicate actions (reset daily by calendar job)

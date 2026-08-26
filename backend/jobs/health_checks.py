@@ -305,7 +305,10 @@ async def signal_silence_check_job() -> None:
         last_webhook_at = _as_naive_utc(last_log.timestamp) if last_log else None
 
         # Anchor on bot start too: a restart must never be reported as silence.
-        started_at = _as_naive_utc(get_heartbeat_state().get("start_time"))
+        # This monitor owns its anchor - heartbeat_job resets its own start_time
+        # whenever a heartbeat gap looks like a sleep/wake, and borrowing that field
+        # turned a failing heartbeat endpoint into a false "reception recovered".
+        started_at = _as_naive_utc(get_signal_silence_state().get("monitor_started_at"))
 
         candidates = [t for t in (last_webhook_at, started_at) if t is not None]
         if not candidates:
