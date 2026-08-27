@@ -37,7 +37,12 @@ _heartbeat_state: Dict[str, Any] = {
 # again" while no alert had arrived for 15h (26/08/2026).
 _signal_silence_state: Dict[str, Any] = {
     "notified": False,
-    "monitor_started_at": None
+    "monitor_started_at": None,
+    # Last alert known when the warning was sent. Recovery is announced only when a
+    # strictly newer one arrives: on 27/08/2026 raising the threshold from 12h to 18h
+    # made the computed silence drop below it and the bot announced "a TradingView
+    # alert reached the bot" while none had, for the second time in two days.
+    "webhook_at_warning": None
 }
 
 # Track handled blocks to prevent duplicate actions (reset daily by calendar job)

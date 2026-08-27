@@ -320,19 +320,28 @@ async def signal_silence_check_job() -> None:
 
         if silent_hours < threshold_hours:
             if state["notified"]:
-                update_signal_silence_state(notified=False)
-                db.add(Log(level="INFO", message="Signal reception recovered"))
-                db.commit()
-                await telegram_service.send_message(
-                    "\u2705 <b>Signals are arriving again</b>\n\n"
-                    "A TradingView alert reached the bot."
+                # silent_hours dropping below the threshold does NOT mean an alert
+                # arrived: the threshold itself can be lowered from the dashboard, and
+                # the anchor can move. Only a strictly newer webhook proves reception,
+                # so announce recovery on that alone - otherwise clear the flag quietly.
+                warned_at = state["webhook_at_warning"]
+                resumed = last_webhook_at is not None and (
+                    warned_at is None or last_webhook_at > warned_at
                 )
+                update_signal_silence_state(notified=False, webhook_at_warning=None)
+                if resumed:
+                    db.add(Log(level="INFO", message="Signal reception recovered"))
+                    db.commit()
+                    await telegram_service.send_message(
+                        "\u2705 <b>Signals are arriving again</b>\n\n"
+                        "A TradingView alert reached the bot."
+                    )
             return
 
         if state["notified"]:
             return  # Already warned for this episode
 
-        update_signal_silence_state(notified=True)
+        update_signal_silence_state(notified=True, webhook_at_warning=last_webhook_at)
         db.add(Log(
             level="WARNING",
             message=f"No TradingView alert received for {silent_hours:.1f}h (last: {last_txt})"

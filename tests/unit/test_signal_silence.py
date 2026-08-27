@@ -125,6 +125,80 @@ class TestSignalSilenceAnchor:
         assert "No signal received" in telegram.send_message.await_args.args[0]
         assert state.get_signal_silence_state()["notified"] is True
 
+    async def test_raising_the_threshold_does_not_fake_a_recovery(self, silent_for_15h):
+        """
+        The second door onto the same lie: the operator raises signal_silence_hours
+        from the dashboard, the computed silence drops under it, and nothing arrived.
+        """
+        from backend.jobs import health_checks, state
+
+        now, last_webhook = silent_for_15h
+        state.update_signal_silence_state(
+            notified=True,
+            webhook_at_warning=last_webhook,  # what we saw when we warned
+            monitor_started_at=last_webhook - timedelta(hours=2),
+        )
+
+        db = _db_returning(last_webhook)  # unchanged: still no new alert
+        telegram = AsyncMock()
+
+        with patch.object(health_checks, "SessionLocal", return_value=db), \
+             patch.object(health_checks, "now_utc", return_value=now), \
+             patch.object(health_checks, "telegram_service", telegram), \
+             patch.object(health_checks, "DEFAULT_SIGNAL_SILENCE_HOURS", 18), \
+             patch("backend.services.risk_engine.RiskEngine") as risk_engine:
+            risk_engine.return_value.check_market_hours.return_value = (True, "open")
+            await health_checks.signal_silence_check_job()
+
+        telegram.send_message.assert_not_awaited()
+        # the episode flag still clears, so a later crossing can warn again
+        assert state.get_signal_silence_state()["notified"] is False
+
+    async def test_recovery_needs_an_alert_newer_than_the_warning(self, silent_for_15h):
+        """A newer alert than the one seen at warning time is what proves reception."""
+        from backend.jobs import health_checks, state
+
+        now, last_webhook = silent_for_15h
+        state.update_signal_silence_state(
+            notified=True,
+            webhook_at_warning=last_webhook,
+            monitor_started_at=last_webhook - timedelta(hours=2),
+        )
+
+        db = _db_returning(now - timedelta(minutes=2))  # a genuinely newer alert
+        telegram = AsyncMock()
+
+        with patch.object(health_checks, "SessionLocal", return_value=db), \
+             patch.object(health_checks, "now_utc", return_value=now), \
+             patch.object(health_checks, "telegram_service", telegram), \
+             patch("backend.services.risk_engine.RiskEngine") as risk_engine:
+            risk_engine.return_value.check_market_hours.return_value = (True, "open")
+            await health_checks.signal_silence_check_job()
+
+        telegram.send_message.assert_awaited_once()
+        assert "arriving again" in telegram.send_message.await_args.args[0]
+
+    async def test_warning_records_the_alert_it_saw(self, silent_for_15h):
+        """Without this bookkeeping the recovery check has nothing to compare against."""
+        from backend.jobs import health_checks, state
+
+        now, last_webhook = silent_for_15h
+        state.update_signal_silence_state(
+            notified=False, webhook_at_warning=None,
+            monitor_started_at=last_webhook - timedelta(hours=2),
+        )
+
+        db = _db_returning(last_webhook)
+
+        with patch.object(health_checks, "SessionLocal", return_value=db), \
+             patch.object(health_checks, "now_utc", return_value=now), \
+             patch.object(health_checks, "telegram_service", AsyncMock()), \
+             patch("backend.services.risk_engine.RiskEngine") as risk_engine:
+            risk_engine.return_value.check_market_hours.return_value = (True, "open")
+            await health_checks.signal_silence_check_job()
+
+        assert state.get_signal_silence_state()["webhook_at_warning"] == last_webhook
+
     async def test_a_fresh_restart_is_never_reported_as_silence(self):
         """Anchoring on process start is the behaviour we keep - just on our own field."""
         from backend.jobs import health_checks, state
