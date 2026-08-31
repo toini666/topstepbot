@@ -172,7 +172,7 @@ Every hue in the system carries meaning, not decoration: one command color, a pa
 **Character:** a plain, high-legibility sans for everything a human reads as language, handed off hard to mono the instant a value becomes a number worth comparing at a glance. The pairing has no personality flourishes — it's built to disappear so the color and motion system can carry the weight.
 
 ### Hierarchy
-- **Display** (700, 1.875rem/30px desktop → 1.5rem/24px mobile, tight tracking `-0.025em`): the app H1 ("TopStep Bot Toini666" in the header, "TopStepBot" in the setup wizard brand moment). Used exactly twice in the whole app — it is not a section-heading weight.
+- **Display** (700, 1.875rem/30px desktop → 1.5rem/24px mobile, tight tracking `-0.025em`): the app H1 (the configurable bot name in the header — Setting key `BOT_NAME`, default "TopStep Bot" — and "TopStepBot" in the setup wizard brand moment). Used exactly twice in the whole app — it is not a section-heading weight.
 - **Title** (700, 1.125rem/18px, tight tracking `-0.025em`): `.section-title` — every `CardHeader` title and wizard step heading. This is the workhorse heading; there is no separate "headline" tier between Display and Title in this system.
 - **Body** (400, 0.875rem/14px, relaxed leading 1.625): paragraph copy in modals, wizard explainer text, empty-state hints.
 - **Label** (600, uppercase, two sizes): form labels (`.label`, 0.75rem/12px, tracking `0.05em`, slate-400) and console module captions (`.micro-label`, 0.65rem/10.4px, tracking `0.14em`, slate-500) — the second is tighter and quieter, used for the small all-caps tag above a `Stat` value or a table's own column headers.
@@ -187,7 +187,7 @@ The page is a single `max-w-7xl`, centered column: header → orphaned-orders wa
 
 Density inside panels is tight and consistent: table cells use `py-3 px-4` (12px/16px), `Stat`/`status-pill` modules use `px-4 py-3`/`px-3 py-1`, and card internal padding is a flat `p-6` (24px) regardless of panel size. There is no separate "compact" density mode — the whole app reads at one density.
 
-Responsive behavior is breakpoint-driven at Tailwind's standard `sm/md/lg` steps: the tab rail wraps and hides label text behind `hidden sm:inline` before it ever shrinks touch targets; the header stacks to a column below `lg`; tables scroll horizontally (`overflow-x-auto`) rather than reflow. Coarse-pointer devices get larger targets (see Do's and Don'ts) instead of a different layout.
+Responsive behavior is breakpoint-driven at Tailwind's standard `sm/md/lg` steps: the tab rail keeps its labels visible at every width and wraps onto extra rows before it ever shrinks touch targets; the header stacks to a column below `lg`; tables scroll horizontally inside a `.scroll-x` container (edge shadows + thin scrollbar as the affordance) rather than reflow. Coarse-pointer devices get larger targets (see Do's and Don'ts) instead of a different layout.
 
 ### Named Rules
 **The 32px Grid Rule.** The ground's etched grid tile is 32px. Outer page padding on desktop (`md:p-8`), the vertical rhythm between major sections (`space-y-8`), and the gutter of the main content grid (`gap-8`) all resolve to that same 32px unit — panels visually snap to the grid that's lit into the floor beneath them.

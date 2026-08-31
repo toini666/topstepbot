@@ -31,6 +31,7 @@ SETUP_KEYS = [
     "HEARTBEAT_INTERVAL_SECONDS",
     "HEARTBEAT_AUTH_TOKEN",
     "USER_TIMEZONE",
+    "BOT_NAME",
 ]
 
 
@@ -43,6 +44,7 @@ class SetupConfig(BaseModel):
     HEARTBEAT_INTERVAL_SECONDS: Optional[str] = None
     HEARTBEAT_AUTH_TOKEN: Optional[str] = None
     USER_TIMEZONE: Optional[str] = None
+    BOT_NAME: Optional[str] = None
 
 
 @router.get("/setup/status")

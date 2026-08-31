@@ -39,6 +39,7 @@ from backend.schemas import (
 from backend.services.topstep_client import topstep_client
 from backend.services.risk_engine import RiskEngine
 from backend.services.reconciliation_service import preview_reconciliation, apply_reconciliation
+from backend.services.config_service import get_config_value
 
 router = APIRouter()
 
@@ -100,6 +101,7 @@ def get_global_config(db: Session = Depends(get_db)):
     
     from backend.services.timezone_service import get_user_tz_name
     return GlobalSettingsResponse(
+        bot_name=get_config_value("BOT_NAME") or "TopStep Bot",
         timezone=get_user_tz_name(),
         blocked_periods_enabled=settings.get("blocked_periods_enabled", True),
         blocked_periods=[TimeBlock(**b) for b in settings.get("blocked_periods", [])],
@@ -137,7 +139,10 @@ def update_global_config(req: GlobalSettingsUpdate, db: Session = Depends(get_db
             db.add(Setting(key=key, value=value))
     
     log_messages = []
-    
+
+    if req.bot_name is not None:
+        set_setting("BOT_NAME", req.bot_name.strip())
+
     if req.blocked_periods_enabled is not None:
         set_setting("blocked_periods_enabled", "true" if req.blocked_periods_enabled else "false")
     

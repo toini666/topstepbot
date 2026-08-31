@@ -500,7 +500,7 @@ export function Calendar() {
                         hint="Try widening your timeframe, impact, or country filters."
                     />
                 ) : (
-                <div className="overflow-x-auto custom-scrollbar">
+                <div className="scroll-x">
                     <table className="w-full min-w-[600px] md:min-w-0 text-sm text-left">
                         <thead>
                             <tr className="table-header">

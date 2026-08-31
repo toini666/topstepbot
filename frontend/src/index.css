@@ -64,27 +64,58 @@
 
 @layer utilities {
   /* ===== SCROLLBAR ===== */
-  .custom-scrollbar::-webkit-scrollbar {
+  .custom-scrollbar::-webkit-scrollbar,
+  .scroll-x::-webkit-scrollbar {
     width: 6px;
     height: 6px;
   }
 
-  .custom-scrollbar::-webkit-scrollbar-track {
+  .custom-scrollbar::-webkit-scrollbar-track,
+  .scroll-x::-webkit-scrollbar-track {
     @apply bg-transparent;
   }
 
-  .custom-scrollbar::-webkit-scrollbar-thumb {
+  .custom-scrollbar::-webkit-scrollbar-thumb,
+  .scroll-x::-webkit-scrollbar-thumb {
     @apply bg-slate-700/60 rounded-full;
   }
 
-  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover,
+  .scroll-x::-webkit-scrollbar-thumb:hover {
     @apply bg-slate-600/70;
   }
 
   /* Firefox */
-  .custom-scrollbar {
+  .custom-scrollbar,
+  .scroll-x {
     scrollbar-width: thin;
     scrollbar-color: rgb(51 65 85 / 0.6) transparent;
+  }
+
+  /* ===== SCROLL-X (horizontal scroll affordance) =====
+     Wraps a horizontally-scrolling table: thin scrollbar (above) plus a pure-CSS
+     scroll-edge shadow using Lea Verou's "scrolling shadows" technique. Two
+     solid-to-transparent cover gradients are pinned to the *content*
+     (background-attachment: local); two dark radial shadows are pinned to the
+     *viewport* (background-attachment: scroll). At rest — or once scrolled fully
+     to an edge — the cover sits directly over its matching shadow and hides it;
+     the instant there's more content in that direction, the cover scrolls away
+     with the content and the shadow reads through, cueing "more columns this
+     way." The #0d1526 cover color approximates the translucent .card gradient
+     over the slate-950 ground so the hidden state reads as a blend rather than
+     a visible box — on desktop, where nothing overflows, cover and shadow fully
+     overlap and the whole effect disappears. */
+  .scroll-x {
+    overflow-x: auto;
+    background-image:
+      linear-gradient(to right, #0d1526 30%, rgba(13, 21, 38, 0)),
+      linear-gradient(to left, #0d1526 30%, rgba(13, 21, 38, 0)),
+      radial-gradient(farthest-side at 0 50%, rgba(148, 163, 184, 0.18), transparent),
+      radial-gradient(farthest-side at 100% 50%, rgba(148, 163, 184, 0.18), transparent);
+    background-repeat: no-repeat;
+    background-size: 24px 100%, 24px 100%, 18px 100%, 18px 100%;
+    background-position: 0 0, 100% 0, 0 0, 100% 0;
+    background-attachment: local, local, scroll, scroll;
   }
 
   /* ===== ANIMATIONS ===== */
@@ -479,7 +510,7 @@
 
   /* ===== TAB NAVIGATION (console rail) ===== */
   .tab-btn-active {
-    @apply px-5 py-2.5 rounded-xl font-semibold text-sm flex items-center gap-2 text-indigo-200 select-none relative;
+    @apply px-5 py-2.5 rounded-xl font-semibold text-sm flex items-center gap-2 text-indigo-200 select-none relative whitespace-nowrap;
     background: linear-gradient(180deg, rgba(99, 102, 241, 0.18), rgba(79, 70, 229, 0.1));
     border: 1px solid rgba(129, 140, 248, 0.35);
     box-shadow:
@@ -489,7 +520,7 @@
   }
 
   .tab-btn-inactive {
-    @apply px-5 py-2.5 rounded-xl font-semibold text-sm flex items-center gap-2 text-slate-400 select-none relative;
+    @apply px-5 py-2.5 rounded-xl font-semibold text-sm flex items-center gap-2 text-slate-400 select-none relative whitespace-nowrap;
     border: 1px solid transparent;
     transition: all 0.2s ease;
   }

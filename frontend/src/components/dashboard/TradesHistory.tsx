@@ -140,7 +140,7 @@ export function TradesHistory({
                     hint="Trades closed by the bot will show up here."
                 />
             ) : (
-            <div className="overflow-x-auto">
+            <div className="scroll-x">
                 <table className="w-full text-sm text-left">
                     <thead>
                         <tr className="table-header">

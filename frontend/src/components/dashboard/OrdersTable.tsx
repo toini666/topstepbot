@@ -63,7 +63,7 @@ export function OrdersTable({
                     hint="Orders placed by the bot will appear here."
                 />
             ) : (
-            <div className="overflow-x-auto">
+            <div className="scroll-x">
                 <table className="w-full text-sm text-left">
                     <thead>
                         <tr className="table-header">

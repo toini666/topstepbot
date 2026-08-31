@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="ground" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1a2440"/>
+      <stop offset="1" stop-color="#0a1020"/>
+    </linearGradient>
+    <linearGradient id="ring" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#818cf8"/>
+      <stop offset="0.55" stop-color="#4f46e5"/>
+      <stop offset="1" stop-color="#312e81"/>
+    </linearGradient>
+    <linearGradient id="pulse" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#6366f1"/>
+      <stop offset="0.62" stop-color="#818cf8"/>
+      <stop offset="1" stop-color="#34d399"/>
+    </linearGradient>
+    <filter id="softGlow" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="14"/>
+    </filter>
+    <filter id="dotGlow" x="-200%" y="-200%" width="500%" height="500%">
+      <feGaussianBlur stdDeviation="10"/>
+    </filter>
+    <clipPath id="tile">
+      <rect x="16" y="16" width="480" height="480" rx="112"/>
+    </clipPath>
+  </defs>
+
+  <!-- Console tile -->
+  <rect x="16" y="16" width="480" height="480" rx="112" fill="url(#ground)"/>
+
+  <g clip-path="url(#tile)">
+    <!-- Etched grid (the desk's graticule) -->
+    <g stroke="#94a3b8" stroke-opacity="0.08" stroke-width="2">
+      <path d="M144 16 V496 M256 16 V496 M368 16 V496"/>
+      <path d="M16 144 H496 M16 256 H496 M16 368 H496"/>
+    </g>
+    <!-- Indigo aura bleeding from the top, like the app ground -->
+    <ellipse cx="256" cy="-40" rx="330" ry="200" fill="#4f46e5" opacity="0.28" filter="url(#softGlow)"/>
+  </g>
+
+  <!-- Ring -->
+  <rect x="16" y="16" width="480" height="480" rx="112" fill="none" stroke="url(#ring)" stroke-width="14"/>
+  <rect x="30" y="30" width="452" height="452" rx="99" fill="none" stroke="#ffffff" stroke-opacity="0.06" stroke-width="3"/>
+
+  <!-- Market pulse: flatline, heartbeat, breakout up -->
+  <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M84 312 H150 L186 258 L228 366 L266 312 H310 L376 186"
+          stroke="url(#pulse)" stroke-width="30" opacity="0.35" filter="url(#softGlow)"/>
+    <path d="M84 312 H150 L186 258 L228 366 L266 312 H310 L376 186"
+          stroke="url(#pulse)" stroke-width="26"/>
+  </g>
+
+  <!-- Status lamp at the breakout tip -->
+  <circle cx="396" cy="152" r="26" fill="#34d399" opacity="0.45" filter="url(#dotGlow)"/>
+  <circle cx="396" cy="152" r="17" fill="#34d399"/>
+  <circle cx="396" cy="152" r="17" fill="none" stroke="#d1fae5" stroke-opacity="0.55" stroke-width="3"/>
+</svg>

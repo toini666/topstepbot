@@ -14,6 +14,9 @@ import { API_BASE } from '../../config';
 import { StatusLamp, Stat } from '../ui';
 
 interface HeaderProps {
+    // Identity
+    botName?: string;
+
     // Connection
     isConnected: boolean;
     loading: boolean;
@@ -39,6 +42,7 @@ interface HeaderProps {
 }
 
 export function Header({
+    botName,
     isConnected,
     loading,
     connect,
@@ -89,13 +93,13 @@ export function Header({
         <header className="max-w-7xl mx-auto mb-6 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-5 bg-slate-900/50 p-4 sm:p-6 rounded-2xl border border-slate-800/60 shadow-lg shadow-black/20">
             <div className="flex items-center gap-4">
                 <img
-                    src="/robot_favicon.png"
-                    alt="Bot Logo"
+                    src="/logo.svg"
+                    alt="TopStepBot logo"
                     className="w-12 h-12 rounded-xl ring-1 ring-indigo-400/30 shadow-[0_0_20px_-4px_rgba(99,102,241,0.45)]"
                 />
                 <div>
                     <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-white">
-                        TopStep Bot Toini666
+                        {botName?.trim() || 'TopStep Bot'}
                     </h1>
                     <div className="flex items-center gap-2 mt-2 flex-wrap">
                         {/* Connection Status */}
@@ -151,17 +155,20 @@ export function Header({
 
                 {/* Account Selector */}
                 {isConnected && (
-                    <div className="relative group-account-selector flex flex-col justify-center min-w-[200px] bg-slate-900 border border-slate-800/60 p-2 rounded-xl">
+                    <div className="relative group-account-selector flex flex-col justify-center min-w-[200px] max-w-[240px] xl:max-w-[300px] bg-slate-900 border border-slate-800/60 p-2 rounded-xl">
                         <p className="micro-label mb-1 ml-1">Connected Account</p>
                         <button
                             onClick={() => accounts.length > 0 && setAccountDropdownOpen(!accountDropdownOpen)}
                             className="w-full flex items-center justify-between text-left px-1"
                             disabled={accounts.length === 0}
                         >
-                            <span className="text-white font-mono text-sm truncate mr-2">
+                            <span
+                                className="text-white font-mono text-sm truncate mr-2"
+                                title={currentAccount ? `${currentAccount.name} (${currentAccount.id})` : 'Select Account'}
+                            >
                                 {currentAccount ? `${currentAccount.name} (${currentAccount.id})` : 'Select Account'}
                             </span>
-                            <ChevronDown className={`w-4 h-4 text-slate-500 transition-transform duration-200 ${accountDropdownOpen ? 'rotate-180' : ''}`} />
+                            <ChevronDown className={`w-4 h-4 text-slate-500 transition-transform duration-200 flex-shrink-0 ${accountDropdownOpen ? 'rotate-180' : ''}`} />
                         </button>
 
                         {/* Dropdown */}
@@ -184,7 +191,7 @@ export function Header({
                                                 >
                                                     <Power className="w-3 h-3" />
                                                 </div>
-                                                <span className="font-mono text-xs truncate">{acc.name} ({acc.id})</span>
+                                                <span className="font-mono text-xs truncate" title={`${acc.name} (${acc.id})`}>{acc.name} ({acc.id})</span>
                                             </div>
                                             {acc.id === selectedAccountId && <CheckCircle className="w-3 h-3 flex-shrink-0" />}
                                         </button>

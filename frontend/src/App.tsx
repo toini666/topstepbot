@@ -84,6 +84,11 @@ function Dashboard() {
 
   const [activeTab, setActiveTab] = useState<'trading' | 'logs' | 'strategies' | 'calendar'>('trading');
 
+  // Reflect the configured bot name in the browser tab title
+  useEffect(() => {
+    document.title = (config?.bot_name && config.bot_name.trim()) || 'TopStep Bot';
+  }, [config?.bot_name]);
+
   // Reconciliation Modal State
   const [reconcileModalOpen, setReconcileModalOpen] = useState(false);
   const [reconcileLoading, setReconcileLoading] = useState(false);
@@ -274,6 +279,7 @@ function Dashboard() {
 
       {/* HEADER */}
       <Header
+        botName={config?.bot_name}
         isConnected={isConnected}
         loading={loading}
         connect={connect}
@@ -322,7 +328,7 @@ function Dashboard() {
             aria-label="Mock API"
           >
             <Terminal className="w-4 h-4" />
-            <span className="hidden sm:inline">Mock API</span>
+            <span>Mock API</span>
           </button>
 
           <button
@@ -333,7 +339,7 @@ function Dashboard() {
             aria-label="Calendar"
           >
             <CalendarIcon className="w-4 h-4" />
-            <span className="hidden sm:inline">Calendar</span>
+            <span>Calendar</span>
           </button>
 
           <button
@@ -342,7 +348,7 @@ function Dashboard() {
             aria-label="Open settings"
           >
             <Settings className="w-4 h-4" />
-            <span className="hidden sm:inline">Settings</span>
+            <span>Settings</span>
           </button>
         </div>
       </nav>

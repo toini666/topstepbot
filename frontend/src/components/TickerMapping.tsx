@@ -130,7 +130,7 @@ export function TickerMapping({ mappings, onAdd, onDelete, onUpdate }: TickerMap
 
             {/* List */}
             {mappings.length > 0 ? (
-                <div className="overflow-x-auto custom-scrollbar">
+                <div className="scroll-x">
                     <table className="w-full text-sm text-left">
                         <thead>
                             <tr className="table-header">

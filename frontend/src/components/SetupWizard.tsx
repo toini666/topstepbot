@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ChevronRight, ChevronLeft, Check, AlertCircle, Key, MessageCircle, Activity, Rocket, Globe, Copy, ExternalLink, Clock } from 'lucide-react';
+import { ChevronRight, ChevronLeft, Check, AlertCircle, Key, MessageCircle, Activity, Rocket, Globe, Copy, ExternalLink, Clock, Bot } from 'lucide-react';
 import axios from 'axios';
 import { API_BASE } from '../config';
 import type { SetupConfig } from '../types';
@@ -10,7 +10,7 @@ interface SetupWizardProps {
   onComplete: () => void;
 }
 
-const STEPS = ['Welcome', 'TopStep', 'Webhook', 'Timezone', 'Telegram', 'Heartbeat', 'Launch'] as const;
+const STEPS = ['Welcome', 'TopStep', 'Webhook', 'Preferences', 'Telegram', 'Heartbeat', 'Launch'] as const;
 
 const COMMON_TIMEZONES = [
   'America/New_York', 'America/Chicago', 'America/Denver', 'America/Los_Angeles',
@@ -38,6 +38,7 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
     HEARTBEAT_INTERVAL_SECONDS: '60',
     HEARTBEAT_AUTH_TOKEN: '',
     USER_TIMEZONE: detectedTz,
+    BOT_NAME: '',
   });
 
   const updateField = (key: keyof SetupConfig, value: string) => {
@@ -91,7 +92,7 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
           <div className="relative w-16 h-16 mb-4">
             <div className="absolute inset-0 rounded-2xl bg-indigo-500/30 blur-xl" aria-hidden="true" />
             <div className="relative w-16 h-16 rounded-2xl overflow-hidden bg-slate-900/80 ring-4 ring-indigo-500/15 border border-indigo-400/30 shadow-[0_0_40px_-8px_rgba(99,102,241,0.55)] flex items-center justify-center">
-              <img src="/robot_favicon.png" alt="TopStepBot logo" className="w-full h-full object-cover" />
+              <img src="/logo.svg" alt="TopStepBot logo" className="w-full h-full object-cover" />
             </div>
           </div>
           <h1 className="text-2xl font-bold text-white tracking-tight">TopStepBot</h1>
@@ -271,7 +272,7 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
               </div>
             )}
 
-            {/* Step: Timezone */}
+            {/* Step: Preferences (Bot Name + Timezone) */}
             {step === 3 && (
               <div className="space-y-6">
                 <div className="flex items-center gap-3">
@@ -279,12 +280,23 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
                     <Clock className="w-5 h-5 text-violet-400" />
                   </div>
                   <div>
-                    <h2 className="text-lg font-bold text-white">Timezone</h2>
-                    <p className="text-slate-500 text-xs">All times (market hours, schedules, logs) use this timezone</p>
+                    <h2 className="text-lg font-bold text-white">Preferences</h2>
+                    <p className="text-slate-500 text-xs">Name your bot and set the timezone it operates in</p>
                   </div>
                 </div>
 
                 <div className="space-y-4">
+                  <div>
+                    <label className="label">Bot Name</label>
+                    <input
+                      type="text"
+                      className="input"
+                      placeholder="TopStep Bot"
+                      value={config.BOT_NAME || ''}
+                      onChange={e => updateField('BOT_NAME', e.target.value)}
+                    />
+                    <p className="help-text">How your dashboard greets you. You can change it later in Settings.</p>
+                  </div>
                   <div>
                     <label className="label">Your Timezone</label>
                     <select
@@ -438,6 +450,14 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
                       <span className="text-sm text-slate-300">Webhook (ngrok)</span>
                     </div>
                     <Badge variant="info">Setup externally</Badge>
+                  </div>
+
+                  <div className="flex items-center justify-between bg-slate-800/50 rounded-xl px-4 py-3">
+                    <div className="flex items-center gap-3">
+                      <Bot className="w-4 h-4 text-violet-400" />
+                      <span className="text-sm text-slate-300">Bot Name</span>
+                    </div>
+                    <span className="text-xs text-slate-400 font-mono">{config.BOT_NAME?.trim() || 'TopStep Bot'}</span>
                   </div>
 
                   <div className="flex items-center justify-between bg-slate-800/50 rounded-xl px-4 py-3">

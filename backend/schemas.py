@@ -205,6 +205,7 @@ class TimeBlock(BaseModel):
 
 class GlobalSettingsResponse(BaseModel):
     """All global settings combined."""
+    bot_name: str = "TopStep Bot"
     timezone: str = "Europe/Brussels"
     blocked_periods_enabled: bool = True
     blocked_periods: List[TimeBlock] = []
@@ -235,6 +236,7 @@ class GlobalSettingsResponse(BaseModel):
 
 
 class GlobalSettingsUpdate(BaseModel):
+    bot_name: Optional[str] = None
     timezone: Optional[str] = None
     blocked_periods_enabled: Optional[bool] = None
     blocked_periods: Optional[List[TimeBlock]] = None

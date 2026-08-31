@@ -8,7 +8,7 @@
 import { useState, useEffect } from 'react';
 import type { ReactNode } from 'react';
 import axios from 'axios';
-import { Clock, Calendar, Plus, Trash2, ChevronDown, CheckCircle, Newspaper, AlertTriangle, Globe, Radio } from 'lucide-react';
+import { Clock, Calendar, Plus, Trash2, ChevronDown, CheckCircle, Newspaper, AlertTriangle, Globe, Radio, Bot } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { TimeBlock, NewsBlock } from '../../types';
 import { TimePicker } from '../TimePicker';
@@ -17,6 +17,7 @@ import { getUserTimezone, setUserTimezone } from '../../utils/timezone';
 import { Toggle } from '../ui';
 
 export interface GeneralSettingsState {
+    botName: string;
     blockedPeriodsEnabled: boolean;
     blockedPeriods: TimeBlock[];
     autoFlattenEnabled: boolean;
@@ -139,6 +140,23 @@ export function GeneralSettingsTab({ state, onChange }: GeneralSettingsTabProps)
 
     return (
         <div className="space-y-6">
+            {/* Bot Name */}
+            <div className="space-y-3">
+                <FieldLabel icon={Bot}>Bot Name</FieldLabel>
+                <input
+                    type="text"
+                    value={state.botName}
+                    onChange={e => onChange('botName', e.target.value)}
+                    className="input"
+                    placeholder="TopStep Bot"
+                />
+                <p className="help-text">
+                    Shown in the dashboard header and browser tab.
+                </p>
+            </div>
+
+            <div className="divider-h" />
+
             {/* Timezone */}
             <div className="space-y-3">
                 <FieldLabel icon={Globe}>Timezone</FieldLabel>

@@ -39,6 +39,7 @@ export const useTopStep = () => {
 
     // Settings
     const [globalConfig, setGlobalConfig] = useState<GlobalConfig>({
+        bot_name: 'TopStep Bot',
         timezone: 'Europe/Brussels',
         blocked_periods_enabled: true,
         blocked_periods: [],

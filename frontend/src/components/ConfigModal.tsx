@@ -22,6 +22,7 @@ export function ConfigModal({ isOpen, onClose, config, onSave }: ConfigModalProp
 
     // === General Settings State ===
     const [generalState, setGeneralState] = useState<GeneralSettingsState>({
+        botName: '',
         blockedPeriodsEnabled: true,
         blockedPeriods: [],
         autoFlattenEnabled: false,
@@ -57,6 +58,7 @@ export function ConfigModal({ isOpen, onClose, config, onSave }: ConfigModalProp
     useEffect(() => {
         if (isOpen && !initializedRef.current) {
             setGeneralState({
+                botName: config.bot_name || '',
                 blockedPeriodsEnabled: config.blocked_periods_enabled,
                 blockedPeriods: [...config.blocked_periods],
                 autoFlattenEnabled: config.auto_flatten_enabled ?? false,
@@ -174,6 +176,7 @@ export function ConfigModal({ isOpen, onClose, config, onSave }: ConfigModalProp
         try {
             // Save Global Config
             await onSave({
+                bot_name: generalState.botName,
                 blocked_periods_enabled: generalState.blockedPeriodsEnabled,
                 blocked_periods: generalState.blockedPeriods,
                 auto_flatten_enabled: generalState.autoFlattenEnabled,

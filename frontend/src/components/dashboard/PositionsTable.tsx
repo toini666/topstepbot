@@ -50,7 +50,7 @@ export function PositionsTable({
                     className="flex-1"
                 />
             ) : (
-            <div className="overflow-x-auto flex-1">
+            <div className="scroll-x flex-1">
                 <table className="w-full text-sm text-left">
                     <thead>
                         <tr className="table-header">

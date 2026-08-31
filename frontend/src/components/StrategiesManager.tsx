@@ -319,7 +319,7 @@ export function StrategiesManager({ selectedAccountId, selectedAccountName }: St
                     />
 
                     {accountConfigs.length > 0 ? (
-                        <div className="overflow-x-auto custom-scrollbar">
+                        <div className="scroll-x">
                             <table className="w-full min-w-[640px] md:min-w-0 text-sm text-left">
                                 <thead>
                                     <tr className="table-header">
@@ -625,7 +625,7 @@ export function StrategiesManager({ selectedAccountId, selectedAccountName }: St
                         />
 
                         {strategies.length > 0 ? (
-                            <div className="overflow-x-auto custom-scrollbar">
+                            <div className="scroll-x">
                                 <table className="w-full min-w-[640px] md:min-w-0 text-sm text-left">
                                     <thead>
                                         <tr className="table-header">

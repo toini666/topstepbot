@@ -122,6 +122,7 @@ export interface NewsBlock {
 }
 
 export interface GlobalConfig {
+    bot_name: string;
     timezone: string;
     blocked_periods_enabled: boolean;
     blocked_periods: TimeBlock[];
@@ -274,6 +275,7 @@ export interface SetupConfig {
   HEARTBEAT_INTERVAL_SECONDS?: string;
   HEARTBEAT_AUTH_TOKEN?: string;
   USER_TIMEZONE?: string;
+  BOT_NAME?: string;
 }
 
 // =============================================================================
