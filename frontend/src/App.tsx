@@ -13,6 +13,7 @@ import { aggregateTrades } from './utils/tradeAggregator';
 import { API_BASE } from './config';
 import { SetupWizard } from './components/SetupWizard';
 import { formatInUserTz } from './utils/timezone';
+import { FullScreenLoader } from './components/ui';
 
 // Dashboard Components
 import {
@@ -38,14 +39,7 @@ function App() {
 
   // Loading state — checking configuration
   if (isConfigured === null) {
-    return (
-      <div className="h-screen flex items-center justify-center bg-slate-950 text-white">
-        <div className="flex flex-col items-center gap-4">
-          <div className="w-8 h-8 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
-          <span className="text-slate-400 text-sm">Checking configuration...</span>
-        </div>
-      </div>
-    );
+    return <FullScreenLoader message="Checking configuration…" />;
   }
 
   // Setup wizard — credentials not configured
@@ -266,14 +260,7 @@ function Dashboard() {
 
   // Loading state
   if (loading && trades.length === 0 && accounts.length === 0) {
-    return (
-      <div className="h-screen flex items-center justify-center bg-slate-950 text-white" role="status" aria-busy="true">
-        <div className="flex flex-col items-center gap-4">
-          <div className="w-8 h-8 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
-          <span className="text-slate-400 text-sm">Loading...</span>
-        </div>
-      </div>
-    );
+    return <FullScreenLoader message="Loading your desk…" />;
   }
 
   const tabs = [
@@ -283,7 +270,7 @@ function Dashboard() {
   ];
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 p-4 md:p-8 font-sans">
+    <div className="min-h-screen text-slate-100 p-4 md:p-8 font-sans">
 
       {/* HEADER */}
       <Header
@@ -309,8 +296,12 @@ function Dashboard() {
         positionsByAccount={positionsByAccount}
       />
 
-      {/* MENU BAR */}
-      <nav className="max-w-7xl mx-auto mb-6 flex gap-2 md:gap-4 flex-wrap" role="tablist" aria-label="Main navigation">
+      {/* MENU BAR — console rail */}
+      <nav
+        className="max-w-7xl mx-auto mb-6 flex gap-1.5 md:gap-2 flex-wrap items-center rounded-2xl p-1.5 bg-slate-900/40 border border-slate-800/50"
+        role="tablist"
+        aria-label="Main navigation"
+      >
         {tabs.map(tab => (
           <button
             key={tab.key}
@@ -324,10 +315,11 @@ function Dashboard() {
           </button>
         ))}
 
-        <div className="ml-auto flex gap-2 md:gap-4">
+        <div className="ml-auto flex gap-1.5 md:gap-2">
           <button
             onClick={() => setMockModalOpen(true)}
             className="tab-btn-inactive"
+            aria-label="Mock API"
           >
             <Terminal className="w-4 h-4" />
             <span className="hidden sm:inline">Mock API</span>
@@ -338,6 +330,7 @@ function Dashboard() {
             aria-selected={activeTab === 'calendar'}
             onClick={() => setActiveTab('calendar')}
             className={activeTab === 'calendar' ? 'tab-btn-active' : 'tab-btn-inactive'}
+            aria-label="Calendar"
           >
             <CalendarIcon className="w-4 h-4" />
             <span className="hidden sm:inline">Calendar</span>
@@ -358,7 +351,7 @@ function Dashboard() {
 
         {/* TRADING TAB */}
         {activeTab === 'trading' && (
-          <div className="space-y-8 animate-fade-in">
+          <div className="space-y-8 animate-rise">
             {/* Top Row: Positions & Account Details */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
               <PositionsTable
@@ -400,19 +393,27 @@ function Dashboard() {
 
         {/* LOGS TAB */}
         {activeTab === 'logs' && (
-          <LogsPanel logs={logs} loadMoreLogs={loadMoreLogs} />
+          <div className="animate-rise">
+            <LogsPanel logs={logs} loadMoreLogs={loadMoreLogs} />
+          </div>
         )}
 
         {/* STRATEGIES TAB */}
         {activeTab === 'strategies' && (
-          <StrategiesManager
-            selectedAccountId={selectedAccountId}
-            selectedAccountName={currentAccount?.name}
-          />
+          <div className="animate-rise">
+            <StrategiesManager
+              selectedAccountId={selectedAccountId}
+              selectedAccountName={currentAccount?.name}
+            />
+          </div>
         )}
 
         {/* CALENDAR TAB */}
-        {activeTab === 'calendar' && <Calendar />}
+        {activeTab === 'calendar' && (
+          <div className="animate-rise">
+            <Calendar />
+          </div>
+        )}
 
         {/* Modals */}
         <ConfirmationModal
@@ -452,8 +453,11 @@ function Dashboard() {
         <Toaster theme="dark" position="top-right" richColors />
       </main>
 
-      <footer className="max-w-7xl mx-auto mt-12 mb-8 text-center text-slate-500 text-sm font-mono opacity-50 hover:opacity-100 transition-opacity">
-        top step trading bot made with love by toini666
+      <footer className="max-w-7xl mx-auto mt-14 mb-8">
+        <div className="divider-h mb-6" />
+        <p className="text-center text-slate-600 text-xs font-mono tracking-wide opacity-70 hover:opacity-100 hover:text-slate-400 transition-all">
+          top step trading bot made with love by toini666
+        </p>
       </footer>
     </div>
   );

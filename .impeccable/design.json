@@ -1,0 +1,165 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-08-31T00:00:00Z",
+  "title": "Design System: TopStepBot",
+  "extensions": {
+    "colorMeta": {
+      "command-indigo-bright": { "role": "primary", "displayName": "Command Indigo Bright", "canonical": "#818cf8", "tonalRamp": ["#1e1b4b", "#312e81", "#3730a3", "#4338ca", "#4f46e5", "#6366f1", "#818cf8", "#a5b4fc"] },
+      "command-indigo": { "role": "primary", "displayName": "Command Indigo", "canonical": "#6366f1", "tonalRamp": ["#1e1b4b", "#312e81", "#3730a3", "#4338ca", "#4f46e5", "#6366f1", "#818cf8", "#a5b4fc"] },
+      "command-indigo-deep": { "role": "primary", "displayName": "Command Indigo Deep", "canonical": "#4f46e5", "tonalRamp": ["#1e1b4b", "#312e81", "#3730a3", "#4338ca", "#4f46e5", "#6366f1", "#818cf8", "#a5b4fc"] },
+      "pnl-up-emerald": { "role": "secondary", "displayName": "P&L Up Emerald", "canonical": "#34d399", "tonalRamp": ["#022c22", "#064e3b", "#065f46", "#047857", "#059669", "#10b981", "#34d399", "#6ee7b7"] },
+      "armed-emerald": { "role": "secondary", "displayName": "Armed Emerald", "canonical": "rgba(16, 185, 129, 0.9)", "tonalRamp": ["#022c22", "#064e3b", "#065f46", "#047857", "#059669", "#10b981", "#34d399", "#6ee7b7"] },
+      "pnl-down-red": { "role": "secondary", "displayName": "P&L Down Red", "canonical": "#f87171", "tonalRamp": ["#450a0a", "#7f1d1d", "#991b1b", "#b91c1c", "#dc2626", "#ef4444", "#f87171", "#fca5a5"] },
+      "danger-red": { "role": "secondary", "displayName": "Danger Red", "canonical": "#ef4444", "tonalRamp": ["#450a0a", "#7f1d1d", "#991b1b", "#b91c1c", "#dc2626", "#ef4444", "#f87171", "#fca5a5"] },
+      "danger-red-deep": { "role": "secondary", "displayName": "Danger Red Deep", "canonical": "#dc2626", "tonalRamp": ["#450a0a", "#7f1d1d", "#991b1b", "#b91c1c", "#dc2626", "#ef4444", "#f87171", "#fca5a5"] },
+      "caution-amber": { "role": "tertiary", "displayName": "Caution Amber", "canonical": "#fbbf24", "tonalRamp": ["#451a03", "#78350f", "#92400e", "#b45309", "#d97706", "#f59e0b", "#fbbf24", "#fcd34d"] },
+      "session-sky": { "role": "tertiary", "displayName": "Session Sky", "canonical": "#38bdf8", "tonalRamp": ["#082f49", "#0c4a6e", "#075985", "#0369a1", "#0284c7", "#0ea5e9", "#38bdf8", "#7dd3fc"] },
+      "strategy-violet": { "role": "tertiary", "displayName": "Strategy Violet", "canonical": "#a78bfa", "tonalRamp": ["#2e1065", "#4c1d95", "#5b21b6", "#6d28d9", "#7c3aed", "#8b5cf6", "#a78bfa", "#c4b5fd"] },
+      "ground-slate-950": { "role": "neutral", "displayName": "Ground Slate", "canonical": "#020617", "tonalRamp": ["#020617", "#0f172a", "#1e293b", "#334155", "#475569", "#64748b", "#94a3b8", "#cbd5e1"] },
+      "panel-slate-900": { "role": "neutral", "displayName": "Panel Slate", "canonical": "#0f172a", "tonalRamp": ["#020617", "#0f172a", "#1e293b", "#334155", "#475569", "#64748b", "#94a3b8", "#cbd5e1"] },
+      "surface-hairline": { "role": "neutral", "displayName": "Surface Hairline", "canonical": "rgba(148, 163, 184, 0.1)" },
+      "surface-hairline-strong": { "role": "neutral", "displayName": "Surface Hairline Strong", "canonical": "rgba(148, 163, 184, 0.18)" },
+      "surface-panel-top": { "role": "neutral", "displayName": "Surface Panel Top", "canonical": "rgba(30, 41, 59, 0.5)" },
+      "surface-panel-bottom": { "role": "neutral", "displayName": "Surface Panel Bottom", "canonical": "rgba(15, 23, 42, 0.38)" },
+      "surface-well": { "role": "neutral", "displayName": "Surface Well", "canonical": "rgba(2, 6, 23, 0.6)" },
+      "ink-white": { "role": "neutral", "displayName": "Ink White", "canonical": "#ffffff" },
+      "ink-muted-slate-400": { "role": "neutral", "displayName": "Ink Muted", "canonical": "#94a3b8", "tonalRamp": ["#020617", "#0f172a", "#1e293b", "#334155", "#475569", "#64748b", "#94a3b8", "#cbd5e1"] }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Display", "purpose": "The app H1 only — header brand title and setup-wizard brand moment. Used exactly twice in the app." },
+      "title": { "displayName": "Title", "purpose": "Every CardHeader title and wizard step heading — the workhorse heading tier; no separate headline tier exists." },
+      "body": { "displayName": "Body", "purpose": "Prose copy in modals, wizard explainer text, empty-state hints." },
+      "label": { "displayName": "Label", "purpose": "Uppercase captions: form labels (12px) and console module micro-captions (10.4px, wider tracking)." },
+      "mono": { "displayName": "Mono", "purpose": "Every numeral in the app — price, size, P&L, balance, timestamps. Global tabular-nums applies even outside this class." }
+    },
+    "shadows": [
+      { "name": "panel-ambient", "value": "0 16px 40px -24px rgba(0,0,0,0.7)", "purpose": "Resting .card separation from the ground." },
+      { "name": "panel-ambient-hover", "value": "0 20px 48px -24px rgba(0,0,0,0.8)", "purpose": ".card-hover on interaction." },
+      { "name": "overlay-ambient", "value": "0 32px 64px -16px rgba(0,0,0,0.7)", "purpose": ".modal-container depth above everything." },
+      { "name": "menu-ambient", "value": "0 20px 40px -12px rgba(0,0,0,0.7)", "purpose": ".dropdown-menu depth." },
+      { "name": "well-recessed", "value": "inset 0 2px 8px rgba(0,0,0,0.35)", "purpose": "Sunken data wells: log stream, JSON, code." },
+      { "name": "command-glow-indigo", "value": "0 8px 20px -8px rgba(79,70,229,0.55)", "purpose": ".btn-primary and other indigo command surfaces." },
+      { "name": "command-glow-red", "value": "0 8px 20px -8px rgba(220,38,38,0.55)", "purpose": ".btn-danger and .btn-kill:hover." },
+      { "name": "top-edge-highlight", "value": "inset 0 1px 0 rgba(255,255,255,0.045-0.18)", "purpose": "Shared beveled top-edge light catch on every panel, button, and overlay." }
+    ],
+    "motion": [
+      { "name": "lamp-pulse", "value": "lampPulse 2.4s cubic-bezier(0.4,0,0.6,1) infinite", "purpose": "Status lamp 'live' breathing ring, used for connection-online and market-open." },
+      { "name": "rise", "value": "rise 0.4s cubic-bezier(0.16,1,0.3,1) both", "purpose": "Tab-panel and section entrance." },
+      { "name": "stagger", "value": "rise 0.35s cubic-bezier(0.16,1,0.3,1) both; delay: min(i*28ms, 280ms)", "purpose": "Table/list row entrance, capped at 280ms total regardless of row count." },
+      { "name": "flash-up", "value": "flashUp 0.9s ease-out (emerald bg fade)", "purpose": "A cell's value just increased." },
+      { "name": "flash-down", "value": "flashDown 0.9s ease-out (red bg fade)", "purpose": "A cell's value just decreased." },
+      { "name": "scale-in", "value": "scaleIn 0.22s cubic-bezier(0.16,1,0.3,1) forwards", "purpose": "Modal container entrance." },
+      { "name": "fade-in-down", "value": "fadeInDown 0.25s cubic-bezier(0.16,1,0.3,1) forwards", "purpose": "Dropdown menu entrance." },
+      { "name": "shimmer", "value": "shimmer 1.8s linear infinite", "purpose": "Loading skeleton sweep." }
+    ],
+    "breakpoints": [
+      { "name": "sm", "value": "640px" },
+      { "name": "md", "value": "768px" },
+      { "name": "lg", "value": "1024px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The main-action command surface — indigo gradient with a top-edge highlight and matching command glow.",
+      "html": "<button class=\"ds-btn-primary\">Connect TopStep</button>",
+      "css": ".ds-btn-primary { display: inline-flex; align-items: center; justify-content: center; gap: 8px; font-weight: 600; font-size: 0.875rem; border-radius: 12px; padding: 8px 24px; color: #ffffff; background: linear-gradient(180deg, #6366f1, #4f46e5); border: 1px solid rgba(129,140,248,0.45); box-shadow: inset 0 1px 0 rgba(255,255,255,0.18), 0 8px 20px -8px rgba(79,70,229,0.55); transition: transform 0.15s ease, box-shadow 0.2s ease, filter 0.2s ease; cursor: pointer; } .ds-btn-primary:hover { filter: brightness(1.08); transform: translateY(-1px); box-shadow: inset 0 1px 0 rgba(255,255,255,0.2), 0 12px 28px -8px rgba(79,70,229,0.65); } .ds-btn-primary:focus-visible { outline: 2px solid #818cf8; outline-offset: 2px; } .ds-btn-primary:active { transform: translateY(0); filter: brightness(0.97); }"
+    },
+    {
+      "name": "Kill Switch",
+      "kind": "button",
+      "refersTo": "button-kill",
+      "description": "The guarded panic-action button (Flatten & Cancel All). Nearly invisible at rest; commits to a solid red fill only on hover.",
+      "html": "<button class=\"ds-btn-kill\">Flatten &amp; Cancel All</button>",
+      "css": ".ds-btn-kill { display: inline-flex; align-items: center; justify-content: center; gap: 8px; font-weight: 700; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; border-radius: 12px; padding: 8px 16px; color: #fca5a5; background: rgba(239,68,68,0.08); border: 1px solid rgba(239,68,68,0.4); transition: all 0.2s ease; cursor: pointer; } .ds-btn-kill:hover { color: #ffffff; background: linear-gradient(180deg, #ef4444, #dc2626); border-color: rgba(248,113,113,0.6); box-shadow: 0 8px 24px -8px rgba(220,38,38,0.6); } .ds-btn-kill:focus-visible { outline: 2px solid #818cf8; outline-offset: 2px; }"
+    },
+    {
+      "name": "Console Panel",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "The base console panel: translucent gradient over the lit ground, hairline border, top-edge highlight, ambient shadow.",
+      "html": "<div class=\"ds-card\"><div class=\"ds-card-header\"><span class=\"ds-card-title\">Open Positions</span></div><p style=\"color:#94a3b8;font-size:0.875rem;margin:0;\">Panel content sits here.</p></div>",
+      "css": ".ds-card { border-radius: 16px; padding: 24px; background: linear-gradient(180deg, rgba(30,41,59,0.5), rgba(15,23,42,0.38)); border: 1px solid rgba(148,163,184,0.1); box-shadow: inset 0 1px 0 rgba(255,255,255,0.045), 0 16px 40px -24px rgba(0,0,0,0.7); } .ds-card-header { margin-bottom: 16px; } .ds-card-title { font-weight: 700; font-size: 1.125rem; letter-spacing: -0.025em; color: #f1f5f9; }"
+    },
+    {
+      "name": "Status Badge",
+      "kind": "chip",
+      "refersTo": "badge-success",
+      "description": "Static status readout pill — six semantic variants; success shown here.",
+      "html": "<span class=\"ds-badge\"><span class=\"ds-badge-dot\"></span>TRADING ON</span>",
+      "css": ".ds-badge { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 6px; font-size: 0.75rem; font-weight: 600; background: rgba(16,185,129,0.1); color: #6ee7b7; box-shadow: inset 0 0 0 1px rgba(52,211,153,0.2); } .ds-badge-dot { width: 6px; height: 6px; border-radius: 9999px; background: currentColor; opacity: 0.8; }"
+    },
+    {
+      "name": "Console Input",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Recessed text field — well background, hairline border, indigo focus glow.",
+      "html": "<input class=\"ds-input\" type=\"text\" placeholder=\"Your TopStep username\" />",
+      "css": ".ds-input { width: 100%; border-radius: 8px; padding: 8px 12px; color: #ffffff; background: rgba(2,6,23,0.6); border: 1px solid rgba(148,163,184,0.1); transition: border-color 0.15s ease, box-shadow 0.15s ease; } .ds-input::placeholder { color: #64748b; } .ds-input:hover { border-color: rgba(148,163,184,0.18); } .ds-input:focus { outline: none; border-color: rgba(129,140,248,0.6); box-shadow: 0 0 0 3px rgba(99,102,241,0.18); }"
+    },
+    {
+      "name": "Status Lamp",
+      "kind": "custom",
+      "refersTo": "status-lamp",
+      "description": "Console status readout: a breathing colored dot, an uppercase caption, and a mono value. Signature component of the Risk Desk.",
+      "html": "<div class=\"ds-status-pill\"><span class=\"ds-lamp ds-lamp-live\"></span><span class=\"ds-lamp-label\">STATUS</span><span class=\"ds-lamp-value\">ONLINE</span></div>",
+      "css": ".ds-status-pill { display: flex; align-items: center; gap: 8px; padding: 4px 12px; border-radius: 9999px; background: rgba(30,41,59,0.55); border: 1px solid rgba(148,163,184,0.1); } .ds-lamp { display: inline-block; width: 8px; height: 8px; border-radius: 9999px; flex-shrink: 0; background: #34d399; } .ds-lamp-live { animation: ds-lamp-pulse 2.4s cubic-bezier(0.4,0,0.6,1) infinite; } @keyframes ds-lamp-pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(52,211,153,0.45); } 50% { box-shadow: 0 0 0 5px transparent; } } .ds-lamp-label { font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.14em; font-weight: 600; color: #64748b; } .ds-lamp-value { font-family: ui-monospace, \"SF Mono\", \"Cascadia Mono\", \"Roboto Mono\", Menlo, Consolas, monospace; font-size: 0.75rem; font-weight: 700; color: #6ee7b7; }"
+    },
+    {
+      "name": "Armed Toggle",
+      "kind": "custom",
+      "refersTo": "toggle-armed",
+      "description": "Trading-armed switch — the highest-stakes control in the app. Emerald fill with matching glow when on.",
+      "html": "<button class=\"ds-toggle ds-toggle-on\" role=\"switch\" aria-checked=\"true\"><span class=\"ds-toggle-dot\"></span></button>",
+      "css": ".ds-toggle { position: relative; display: inline-flex; align-items: center; width: 44px; height: 24px; border-radius: 9999px; border: 1px solid rgba(148,163,184,0.15); background: rgba(51,65,85,0.8); transition: background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease; cursor: pointer; padding: 0; } .ds-toggle-on { background: rgba(16,185,129,0.9); border-color: rgba(52,211,153,0.5); box-shadow: 0 0 12px -2px rgba(16,185,129,0.5); } .ds-toggle-dot { display: inline-block; width: 16px; height: 16px; border-radius: 9999px; background: #ffffff; box-shadow: 0 1px 3px rgba(0,0,0,0.4); transform: translateX(22px); transition: transform 0.2s cubic-bezier(0.16,1,0.3,1); } .ds-toggle:not(.ds-toggle-on) .ds-toggle-dot { transform: translateX(4px); }"
+    },
+    {
+      "name": "Stat Readout",
+      "kind": "custom",
+      "refersTo": "stat-readout",
+      "description": "Compound KPI module — micro-label caption, icon, large tabular-mono value with directional P&L color and glow.",
+      "html": "<div class=\"ds-stat\"><p class=\"ds-stat-label\">Daily P&amp;L (Realized)</p><div class=\"ds-stat-value-row\"><span class=\"ds-stat-value\">+$248.50</span></div></div>",
+      "css": ".ds-stat { display: flex; flex-direction: column; justify-content: space-between; border-radius: 12px; padding: 12px 16px; min-width: 152px; background: rgba(15,23,42,0.6); border: 1px solid rgba(30,41,59,0.6); } .ds-stat-label { font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.14em; font-weight: 600; color: #64748b; margin: 0 0 6px 0; } .ds-stat-value-row { display: flex; align-items: center; gap: 8px; } .ds-stat-value { font-family: ui-monospace, \"SF Mono\", \"Cascadia Mono\", \"Roboto Mono\", Menlo, Consolas, monospace; font-weight: 700; font-size: 1.25rem; color: #6ee7b7; text-shadow: 0 0 16px rgba(16,185,129,0.35); }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Risk Desk",
+    "overview": "TopStepBot is not a fintech dashboard — it's a prop-firm risk-desk console, glanced at from across a dark room rather than studied up close. Every surface sits on one continuous slate-950 ground, etched with a 32px grid and lit by an indigo aura bleeding from the top edge; console panels float on that ground as translucent, hairline-bordered layers, never as opaque blocks. Numbers are the product — P&L, size, entry, balance — so they are set in tabular mono and read with their own semantic weight (green up, red down) instead of being flattened into uniform stat cards. Indigo is the one color that means \"you can act here\"; it never leaks into a status reading. Motion exists to report state — a lamp breathes because a connection is live, a cell flashes because a number just moved, a list rises in a capped stagger because it just populated — never to decorate. This is a deliberate rejection of the generic glassy fintech-dashboard arrangement of same-size, same-weight stat tiles. Danger looks dangerous (the flatten switch is outlined and inert until you reach for it, then floods red); configuration and setup feel calm (soft indigo brand moments, unhurried step progress). The system is dense — traders want data, not whitespace theater — but every panel keeps a consistent physical grammar: a 1px hairline border, a top-edge light catch, and a soft ambient shadow, like sheet-metal console modules bolted to the same rack.",
+    "keyCharacteristics": [
+      "One continuous ground (slate-950 + etched grid + indigo aura) that every panel floats above, never covers",
+      "Indigo is the only interactive/command color; status is read through emerald/red/amber/sky/violet, which never respond to hover",
+      "Numerics are always tabular mono, most are right-aligned, P&L numbers carry a matching text-shadow glow",
+      "A five-step radius ladder (6/8/12/16/full) and a five-step spacing scale (4/8/16/24/32) tied to the 32px etched grid unit",
+      "Motion is a state vocabulary (breathing lamps, flash-up/down, capped stagger), not embellishment",
+      "Danger is guarded: the kill switch is nearly invisible until you approach it, then commits fully on hover"
+    ],
+    "rules": [
+      { "name": "The Ground Ownership Rule", "body": "<body> alone paints the slate-950 ground, the 32px etched grid, and the indigo aura. No container between body and a panel should ever apply an opaque bg-slate-* fill — doing so blocks the ground from showing through and defeats the entire \"console modules floating on a lit rack\" premise. Panels stay translucent so the ground is always faintly present underneath.", "section": "colors" },
+      { "name": "The One Command Color Rule", "body": "Indigo is used exclusively for things the user can act on: buttons, active tab/filter state, focus rings, input focus, dropdown hover, the indigo toggle variant. Emerald/red/amber/sky/violet exist to be read, not clicked — none of them carry a hover or active interaction state anywhere in the system.", "section": "colors" },
+      { "name": "The Numerics-Are-Mono Rule", "body": "Any value a trader compares at a glance — price, size, P&L, balance, contract count, timestamp — is set in the mono role via .num or .readout-up/-down/-flat. Prose never borrows the mono font, and numerics never sit in the sans font.", "section": "typography" },
+      { "name": "The 32px Grid Rule", "body": "The ground's etched grid tile is 32px. Outer page padding on desktop, the vertical rhythm between major sections, and the gutter of the main content grid all resolve to that same 32px unit — panels visually snap to the grid that's lit into the floor beneath them.", "section": "layout" },
+      { "name": "The Glow-as-Elevation Rule", "body": "Command surfaces don't get taller drop-shadows to signal importance — they get a colored glow matched to their semantic hue. Depth communicates hierarchy (panel vs. overlay); glow communicates meaning (this is indigo/red/emerald and it's interactive or armed).", "section": "elevation" },
+      { "name": "The Guarded Kill Rule", "body": ".btn-kill starts nearly invisible — an 8%-alpha red tint on transparent, outlined, red-300 text — and only becomes a solid red block with white text and full command glow on hover. Danger reveals itself as the operator's pointer approaches it; it never announces itself passively the way .btn-danger (already-solid) does.", "section": "components" }
+    ],
+    "dos": [
+      "Do let <body> own the ground (slate-950 + etched 32px grid + indigo aura). Panels stay translucent so it's always faintly visible underneath.",
+      "Do use indigo exclusively for things the user can act on — buttons, active tab/filter state, focus rings, input focus, dropdown hover. Never give a semantic status color (emerald/red/amber/sky/violet) a hover or active interaction state.",
+      "Do render every glanceable number through the mono role, right-aligned via .num where it's tabular, with directional color + glow via .readout-up/-down/-flat where it's P&L.",
+      "Do reserve .btn-kill for panic-class actions only (flatten, cancel-all) — everything else destructive-but-routine uses .btn-danger behind a confirmation modal.",
+      "Do snap major spacing to the 32px grid unit (desktop page padding, section rhythm, grid gutters) so panels align with the ground's etched grid.",
+      "Do animate to report state, not to decorate: lamp pulse = live, flash-up/down = a value just changed, capped stagger = a list just populated. Cap list-entrance stagger at 280ms total (28ms/row via min(i*28ms, 280ms)) so long tables never feel slow.",
+      "Do give coarse-pointer users 44px-minimum targets on every full-size button variant and tab button; keep dropdown items at their expanded py-3 under pointer: coarse.",
+      "Do render EmptyState as the sibling that replaces a panel's data region (table, list, or content column), sized with flex-1 to fill the remaining panel height — this is the pattern PositionsTable and AccountDetails follow."
+    ],
+    "donts": [
+      "Don't paint an opaque bg-slate-* fill on a full-viewport or full-panel container. It blocks the ground's grid and aura from showing through and breaks the \"console modules on a lit rack\" premise — panels are gradients and translucent wells, never flat opaque color.",
+      "Don't nest EmptyState inside a scrolling data well or a table body (<td> inside overflow-x-auto, or a message list inside overflow-y-auto). It gets clipped or partially hidden by the scroll region instead of quietly replacing it.",
+      "Don't introduce a radius value outside the five-step ladder (6px / 8px / 12px / 16px / full).",
+      "Don't skip the hairline border + top-edge inset highlight on a new panel-level surface — that pairing is what reads as \"console panel\" instead of a flat rectangle.",
+      "Don't give a button a neutral black/gray shadow. Command surfaces glow in their own semantic hue (indigo for primary/command, red for danger/kill-hover, emerald for armed) — see the Glow-as-Elevation Rule.",
+      "Don't assume prefers-reduced-motion silences everything: it disables exactly twelve named keyframe animations (entrance fades/scale/rise, row stagger, flash-up/down, skeleton shimmer, lamp pulse, modal/dropdown entrances) but does not touch transition:-based hover/focus effects, and it deliberately leaves animate-spin (Spinner, Button loading state) running."
+    ]
+  }
+}

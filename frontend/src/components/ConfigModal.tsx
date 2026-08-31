@@ -1,11 +1,12 @@
 import { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
-import { X, Save, Settings, Bell, Key } from 'lucide-react';
+import { X, Save, Settings } from 'lucide-react';
 import { toast } from 'sonner';
 import type { GlobalConfig, TickerMap, TradingSession, Account } from '../types';
 import { TickerMapping } from './TickerMapping';
 import { API_BASE } from '../config';
 import { GeneralSettingsTab, SessionsTab, NotificationsTab, CredentialsTab, type GeneralSettingsState } from './config-tabs';
+import { Button } from './ui';
 
 interface ConfigModalProps {
     isOpen: boolean;
@@ -218,8 +219,8 @@ export function ConfigModal({ isOpen, onClose, config, onSave }: ConfigModalProp
         { key: 'general' as const, label: 'General' },
         { key: 'sessions' as const, label: 'Sessions' },
         { key: 'mappings' as const, label: 'Mappings' },
-        { key: 'notifications' as const, label: 'Notifications', icon: Bell },
-        { key: 'credentials' as const, label: 'Credentials', icon: Key },
+        { key: 'notifications' as const, label: 'Notifications' },
+        { key: 'credentials' as const, label: 'Credentials' },
     ];
 
     return (
@@ -229,36 +230,29 @@ export function ConfigModal({ isOpen, onClose, config, onSave }: ConfigModalProp
                 onClick={(e) => e.stopPropagation()}
             >
                 {/* Header */}
-                <div className="flex justify-between items-center p-6 border-b border-slate-800 bg-slate-900/50 shrink-0">
-                    <h3 id="config-title" className="text-xl font-bold text-white flex items-center gap-2">
+                <div className="flex justify-between items-center p-6 border-b border-slate-800/60 shrink-0">
+                    <h3 id="config-title" className="text-xl font-bold text-white tracking-tight flex items-center gap-2">
                         <Settings className="w-5 h-5 text-indigo-400" />
                         Global Settings
                     </h3>
-                    <button onClick={onClose} className="text-slate-400 hover:text-white transition-colors" aria-label="Close settings">
-                        <X size={20} />
-                    </button>
+                    <Button variant="ghost" size="sm" icon={X} onClick={onClose} aria-label="Close settings" className="!p-2" />
                 </div>
 
                 {/* Tabs */}
-                <div className="flex border-b border-slate-800 bg-slate-950/30 px-4 shrink-0 overflow-x-auto custom-scrollbar" role="tablist" aria-label="Settings sections">
-                    {configTabs.map(tab => (
-                        <button
-                            key={tab.key}
-                            role="tab"
-                            aria-selected={activeTab === tab.key}
-                            onClick={() => setActiveTab(tab.key)}
-                            className={`py-3 px-3 text-xs font-medium border-b-2 transition-colors capitalize whitespace-nowrap ${activeTab === tab.key
-                                ? 'border-indigo-500 text-white'
-                                : 'border-transparent text-slate-400 hover:text-white'
-                                }`}
-                        >
-                            {tab.icon ? (
-                                <span className="flex items-center gap-1">
-                                    <tab.icon size={14} /> {tab.label}
-                                </span>
-                            ) : tab.label}
-                        </button>
-                    ))}
+                <div className="px-4 py-3 border-b border-slate-800/60 shrink-0">
+                    <div className="filter-group overflow-x-auto custom-scrollbar" role="tablist" aria-label="Settings sections">
+                        {configTabs.map(tab => (
+                            <button
+                                key={tab.key}
+                                role="tab"
+                                aria-selected={activeTab === tab.key}
+                                onClick={() => setActiveTab(tab.key)}
+                                className={activeTab === tab.key ? 'filter-btn-active whitespace-nowrap' : 'filter-btn-inactive whitespace-nowrap'}
+                            >
+                                {tab.label}
+                            </button>
+                        ))}
+                    </div>
                 </div>
 
                 {/* Content */}
@@ -290,18 +284,14 @@ export function ConfigModal({ isOpen, onClose, config, onSave }: ConfigModalProp
                 </div>
 
                 {/* Footer */}
-                <div className="p-6 border-t border-slate-800 bg-slate-900/50 flex justify-end gap-3 shrink-0">
+                <div className="p-6 border-t border-slate-800/60 flex justify-end gap-3 shrink-0">
                     <button onClick={onClose} className="btn-ghost">
                         Cancel
                     </button>
                     {(activeTab === 'general' || activeTab === 'sessions') && (
-                        <button
-                            onClick={handleSave}
-                            disabled={saving}
-                            className="btn-primary"
-                        >
-                            <Save size={16} /> {saving ? 'Saving...' : 'Save Changes'}
-                        </button>
+                        <Button variant="primary" icon={Save} loading={saving} onClick={handleSave}>
+                            {saving ? 'Saving...' : 'Save Changes'}
+                        </Button>
                     )}
                     {(activeTab === 'mappings' || activeTab === 'credentials') && (
                         <button onClick={onClose} className="btn-primary">

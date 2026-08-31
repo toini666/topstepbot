@@ -8,9 +8,10 @@
 
 import { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Key, MessageCircle, Activity, Save, Loader2, AlertCircle } from 'lucide-react';
+import { Key, MessageCircle, Activity, Save, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { API_BASE } from '../../config';
+import { Spinner, Button } from '../ui';
 
 interface FieldInfo {
   value: string;
@@ -107,7 +108,7 @@ export function CredentialsTab() {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12 text-slate-500">
-        <Loader2 className="w-5 h-5 animate-spin" />
+        <Spinner size="md" />
       </div>
     );
   }
@@ -157,12 +158,12 @@ export function CredentialsTab() {
         </div>
       </div>
 
-      <div className="border-t border-slate-800/60" />
+      <div className="divider-h" />
 
       {/* Telegram */}
       <div className="space-y-3">
         <div className="flex items-center gap-2 text-sm font-bold text-white">
-          <MessageCircle className="w-4 h-4 text-blue-400" />
+          <MessageCircle className="w-4 h-4 text-sky-400" />
           Telegram
           <span className="text-slate-500 font-normal text-xs">optional</span>
         </div>
@@ -197,7 +198,7 @@ export function CredentialsTab() {
         </div>
       </div>
 
-      <div className="border-t border-slate-800/60" />
+      <div className="divider-h" />
 
       {/* Heartbeat */}
       <div className="space-y-3">
@@ -253,22 +254,18 @@ export function CredentialsTab() {
       </div>
 
       {/* Info */}
-      <div className="flex items-start gap-2 bg-slate-800/30 rounded-xl p-3">
+      <div className="flex items-start gap-2 well p-3">
         <AlertCircle className="w-4 h-4 text-slate-500 flex-shrink-0 mt-0.5" />
-        <p className="text-xs text-slate-500">
+        <p className="help-text mt-0">
           Type a new value in any field to update it. Empty fields are left unchanged.
-          Fields marked <span className="badge-info text-[10px] py-0">ENV</span> are set via docker-compose.yml and will be overridden by the environment variable on restart.
+          Fields marked <span className="badge-info text-[10px] py-0">ENV</span> come from environment variables; the environment value overrides anything saved here on restart.
         </p>
       </div>
 
       {/* Save */}
-      <button onClick={handleSave} disabled={saving} className="btn-primary w-full">
-        {saving ? (
-          <><Loader2 className="w-4 h-4 animate-spin" /> Saving...</>
-        ) : (
-          <><Save className="w-4 h-4" /> Save Changes</>
-        )}
-      </button>
+      <Button variant="primary" icon={Save} loading={saving} onClick={handleSave} className="w-full">
+        {saving ? 'Saving...' : 'Save Changes'}
+      </Button>
     </div>
   );
 }

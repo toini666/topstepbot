@@ -1,14 +1,15 @@
 /**
  * Logs Panel Component
- * 
+ *
  * Displays system logs with expandable details.
  */
 
 import { useState, memo } from 'react';
-import { Terminal, ChevronDown, ChevronRight, Copy } from 'lucide-react';
+import { Terminal, ChevronDown, ChevronRight, Copy, ScrollText } from 'lucide-react';
 import { toast } from 'sonner';
 import { formatInUserTz } from '../../utils/timezone';
 import type { Log } from '../../types';
+import { Card, CardHeader, Badge, EmptyState } from '../ui';
 
 interface LogsPanelProps {
     logs: Log[];
@@ -30,22 +31,20 @@ export const LogsPanel = memo(function LogsPanel({ logs, loadMoreLogs }: LogsPan
 
     return (
         <div className="animate-fade-in h-[calc(100vh-250px)] min-h-[500px]">
-            <section className="bg-black/40 border border-slate-800 rounded-2xl overflow-hidden flex flex-col h-full">
-                <div className="bg-slate-900/80 p-4 border-b border-slate-800 flex justify-between items-center">
-                    <h3 className="text-sm font-semibold text-slate-300 flex items-center gap-2">
-                        <Terminal className="w-4 h-4" />
-                        System Logs
-                    </h3>
-                    <div className="flex gap-2 items-center">
-                        <div className="flex gap-2">
-                            <span className="w-2.5 h-2.5 rounded-full bg-red-500 opacity-80"></span>
-                            <span className="w-2.5 h-2.5 rounded-full bg-yellow-500 opacity-80"></span>
-                            <span className="w-2.5 h-2.5 rounded-full bg-green-500 opacity-80"></span>
+            <Card className="flex flex-col h-full overflow-hidden">
+                <CardHeader
+                    icon={Terminal}
+                    title="System Logs"
+                    actions={
+                        <div className="flex gap-1.5" aria-hidden="true">
+                            <span className="lamp lamp-red" />
+                            <span className="lamp lamp-amber" />
+                            <span className="lamp lamp-emerald" />
                         </div>
-                    </div>
-                </div>
+                    }
+                />
 
-                <div className="flex-1 overflow-y-auto p-4 font-mono text-xs space-y-2 custom-scrollbar font-medium">
+                <div className="well custom-scrollbar flex-1 overflow-y-auto p-4 font-mono text-xs space-y-2 font-medium">
                     {logs.map((log) => {
                         const isExpanded = expandedLogs.has(log.id);
                         const hasDetails = !!log.details;
@@ -58,7 +57,7 @@ export const LogsPanel = memo(function LogsPanel({ logs, loadMoreLogs }: LogsPan
                                 className={`flex flex-col hover:bg-slate-800/30 rounded px-2 -mx-2 transition-colors ${canExpand ? 'cursor-pointer' : ''}`}
                                 onClick={() => canExpand && toggleLog(log.id)}
                             >
-                                <div className="flex gap-3 p-0.5">
+                                <div className="flex flex-wrap sm:flex-nowrap gap-x-3 gap-y-0.5 p-0.5 items-center">
                                     <span className="text-slate-500 shrink-0 flex items-center gap-1 w-32">
                                         {canExpand && (
                                             isExpanded ? <ChevronDown className="w-3 h-3 text-slate-400" /> : <ChevronRight className="w-3 h-3 text-slate-400" />
@@ -66,13 +65,16 @@ export const LogsPanel = memo(function LogsPanel({ logs, loadMoreLogs }: LogsPan
                                         {!canExpand && <div className="w-3" />}
                                         {formatInUserTz(log.timestamp, 'dd/MM HH:mm:ss')}
                                     </span>
-                                    <span className={`shrink-0 w-16 ${log.level === 'ERROR' ? 'text-red-400' :
-                                        log.level === 'WARNING' ? 'text-yellow-400' :
-                                            'text-blue-300'
-                                        }`}>
-                                        [{log.level}]
+                                    <span className="shrink-0 w-20">
+                                        {log.level === 'ERROR' ? (
+                                            <Badge variant="danger">{log.level}</Badge>
+                                        ) : log.level === 'WARNING' ? (
+                                            <Badge variant="warning">{log.level}</Badge>
+                                        ) : (
+                                            <Badge variant="info">{log.level}</Badge>
+                                        )}
                                     </span>
-                                    <span className="text-slate-300 break-words flex-1">
+                                    <span className="text-slate-300 break-words w-full sm:w-auto sm:flex-1 pl-4 sm:pl-0">
                                         {isExpanded || !isLongMessage ? log.message : log.message.substring(0, 150) + '...'}
                                     </span>
                                 </div>
@@ -117,18 +119,25 @@ export const LogsPanel = memo(function LogsPanel({ logs, loadMoreLogs }: LogsPan
                             </div>
                         );
                     })}
-                    {logs.length === 0 && <span className="text-slate-600">Waiting for logs...</span>}
+                    {logs.length === 0 && (
+                        <EmptyState
+                            icon={ScrollText}
+                            title="Waiting for logs"
+                            hint="System activity will stream here once the bot starts running."
+                        />
+                    )}
 
                     <div className="pt-2 flex justify-center">
                         <button
                             className="btn-ghost text-xs"
                             onClick={loadMoreLogs}
                         >
+                            <ChevronDown className="w-3.5 h-3.5" aria-hidden="true" />
                             Load More Logs
                         </button>
                     </div>
                 </div>
-            </section>
+            </Card>
         </div>
     );
 });

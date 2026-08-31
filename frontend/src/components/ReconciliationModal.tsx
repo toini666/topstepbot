@@ -1,5 +1,7 @@
 import { useState } from 'react';
-import { X, RefreshCw, Check, AlertTriangle } from 'lucide-react';
+import type { CSSProperties } from 'react';
+import { RefreshCw, Check, AlertTriangle, X } from 'lucide-react';
+import { Stat, Badge, EmptyState, Spinner, Button } from './ui';
 
 interface ReconciliationChange {
     trade_id?: number;
@@ -32,6 +34,15 @@ interface ReconciliationModalProps {
     isLoading: boolean;
 }
 
+type BadgeVariant = 'success' | 'danger' | 'warning' | 'info' | 'neutral' | 'violet';
+
+const typeBadgeVariant = (type: ReconciliationChange['type']): BadgeVariant => {
+    if (type === 'create') return 'success';
+    if (type === 'delete') return 'danger';
+    if (type === 'close') return 'warning';
+    return 'info';
+};
+
 export default function ReconciliationModal({
     isOpen,
     onClose,
@@ -55,107 +66,93 @@ export default function ReconciliationModal({
 
     const hasChanges = changes.length > 0;
     const totalPnlChange = summary?.total_pnl_change ?? 0;
-    const pnlChangeClass = totalPnlChange >= 0 ? 'text-green-400' : 'text-red-400';
 
     return (
-        <div className="fixed inset-0 z-50 h-screen w-screen flex items-center justify-center">
-            {/* Backdrop */}
+        <div className="modal-backdrop" onClick={onClose} role="dialog" aria-modal="true" aria-labelledby="reconciliation-title">
             <div
-                className="absolute inset-0 bg-black/70 backdrop-blur-sm"
-                onClick={onClose}
-            />
-
-            {/* Modal */}
-            <div className="relative bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl w-full max-w-2xl max-h-[80vh] overflow-hidden animate-fade-in">
+                className="modal-container w-full max-w-2xl max-h-[80vh] flex flex-col"
+                onClick={(e) => e.stopPropagation()}
+            >
                 {/* Header */}
-                <div className="flex items-center justify-between p-6 border-b border-slate-800">
+                <div className="flex items-center justify-between p-6 border-b border-slate-800/60 shrink-0">
                     <div className="flex items-center gap-3">
-                        <div className="p-2 bg-indigo-500/20 rounded-lg">
+                        <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-indigo-500/10 ring-1 ring-indigo-400/30">
                             <RefreshCw className="w-5 h-5 text-indigo-400" />
                         </div>
                         <div>
-                            <h2 className="text-xl font-bold text-white">Trade Reconciliation</h2>
+                            <h2 id="reconciliation-title" className="text-xl font-bold text-white tracking-tight">Trade Reconciliation</h2>
                             <p className="text-sm text-slate-400">Review proposed changes before applying</p>
                         </div>
                     </div>
-                    <button
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        icon={X}
                         onClick={onClose}
-                        className="p-2 hover:bg-slate-800 rounded-lg transition-colors"
                         disabled={applying || isLoading}
-                    >
-                        <X className="w-5 h-5 text-slate-400" />
-                    </button>
+                        aria-label="Close dialog"
+                        className="!p-2"
+                    />
                 </div>
 
                 {/* Content */}
-                <div className="p-6 overflow-y-auto max-h-[50vh]">
+                <div className="p-6 overflow-y-auto custom-scrollbar">
                     {isLoading ? (
-                        <div className="flex flex-col items-center justify-center py-12">
-                            <RefreshCw className="w-8 h-8 text-indigo-400 animate-spin mb-4" />
+                        <div className="flex flex-col items-center justify-center py-12 gap-4">
+                            <Spinner size="lg" />
                             <p className="text-slate-400">Analyzing trades...</p>
                         </div>
                     ) : !hasChanges ? (
-                        <div className="flex flex-col items-center justify-center py-12">
-                            <Check className="w-12 h-12 text-green-400 mb-4" />
-                            <p className="text-lg font-semibold text-white mb-2">All trades are synchronized</p>
-                            <p className="text-slate-400 text-sm">No discrepancies found between dashboard and TopStep</p>
-                        </div>
+                        <EmptyState
+                            icon={Check}
+                            title="All trades are synchronized"
+                            hint="No discrepancies found between dashboard and TopStep"
+                        />
                     ) : (
                         <>
                             {/* Summary */}
-                            <div className="grid grid-cols-4 gap-4 mb-6">
-                                <div className="bg-slate-800/50 rounded-xl p-4 text-center">
-                                    <p className="text-2xl font-bold text-green-400">{summary?.trades_to_create || 0}</p>
-                                    <p className="text-xs text-slate-400 mt-1">Found Missing</p>
-                                </div>
-                                <div className="bg-slate-800/50 rounded-xl p-4 text-center">
-                                    <p className="text-2xl font-bold text-orange-400">{summary?.trades_to_close || 0}</p>
-                                    <p className="text-xs text-slate-400 mt-1">To Close</p>
-                                </div>
-                                <div className="bg-slate-800/50 rounded-xl p-4 text-center">
-                                    <p className="text-2xl font-bold text-blue-400">{summary?.pnl_updates || 0}</p>
-                                    <p className="text-xs text-slate-400 mt-1">PnL Updates</p>
-                                </div>
-                                <div className="bg-slate-800/50 rounded-xl p-4 text-center">
-                                    <p className={`text-2xl font-bold ${pnlChangeClass}`}>
-                                        {totalPnlChange >= 0 ? '+' : ''}${totalPnlChange.toFixed(2)}
-                                    </p>
-                                    <p className="text-xs text-slate-400 mt-1">Net PnL Change</p>
-                                </div>
+                            <div className="grid grid-cols-2 gap-3 mb-6">
+                                <Stat label="Found Missing" value={summary?.trades_to_create || 0} tone="neutral" />
+                                <Stat label="To Close" value={summary?.trades_to_close || 0} tone="neutral" />
+                                <Stat label="PnL Updates" value={summary?.pnl_updates || 0} tone="neutral" />
+                                <Stat
+                                    label="Net PnL Change"
+                                    value={`${totalPnlChange >= 0 ? '+' : ''}$${totalPnlChange.toFixed(2)}`}
+                                    tone={totalPnlChange >= 0 ? 'up' : 'down'}
+                                />
                             </div>
 
                             {/* Changes Table */}
-                            <div className="border border-slate-700 rounded-xl overflow-hidden">
+                            <div className="border border-slate-800/60 rounded-xl overflow-hidden">
                                 <table className="w-full text-sm">
-                                    <thead className="bg-slate-800/50">
-                                        <tr>
-                                            <th className="text-left text-slate-400 text-xs uppercase py-3 px-4">Trade</th>
-                                            <th className="text-left text-slate-400 text-xs uppercase py-3 px-4">Type</th>
-                                            <th className="text-right text-slate-400 text-xs uppercase py-3 px-4">Old PnL</th>
-                                            <th className="text-right text-slate-400 text-xs uppercase py-3 px-4">New PnL</th>
+                                    <thead>
+                                        <tr className="table-header">
+                                            <th className="table-cell text-left">Trade</th>
+                                            <th className="table-cell text-left">Type</th>
+                                            <th className="table-cell num">Old PnL</th>
+                                            <th className="table-cell num">New PnL</th>
                                         </tr>
                                     </thead>
-                                    <tbody className="divide-y divide-slate-800">
+                                    <tbody>
                                         {changes.map((change, idx) => (
-                                            <tr key={change.trade_id || idx} className="hover:bg-slate-800/30">
-                                                <td className="py-3 px-4">
+                                            <tr
+                                                key={change.trade_id || idx}
+                                                className="table-row animate-stagger"
+                                                style={{ '--i': idx } as CSSProperties}
+                                            >
+                                                <td className="table-cell">
                                                     <span className="font-mono text-white">#{change.trade_id || 'NEW'}</span>
                                                     <span className="text-slate-400 ml-2">{change.ticker}</span>
                                                 </td>
-                                                <td className="py-3 px-4">
-                                                    <span className={`px-2 py-1 rounded text-xs font-bold ${change.type === 'create' ? 'bg-green-500/20 text-green-400' :
-                                                            change.type === 'delete' ? 'bg-red-500/20 text-red-500' :
-                                                                change.type === 'close' ? 'bg-orange-500/20 text-orange-400' :
-                                                                    'bg-blue-500/20 text-blue-400'
-                                                        }`}>
+                                                <td className="table-cell">
+                                                    <Badge variant={typeBadgeVariant(change.type)}>
                                                         {change.type.toUpperCase().replace('_', ' ')}
-                                                    </span>
+                                                    </Badge>
                                                 </td>
-                                                <td className="py-3 px-4 text-right font-mono text-slate-400">
+                                                <td className="table-cell num text-slate-400">
                                                     {change.old_pnl != null ? `$${Number(change.old_pnl).toFixed(2)}` : '-'}
                                                 </td>
-                                                <td className={`py-3 px-4 text-right font-mono font-bold ${(change.new_pnl || 0) >= 0 ? 'text-green-400' : 'text-red-400'
-                                                    }`}>
+                                                <td className={`table-cell num font-bold ${(change.new_pnl || 0) >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
                                                     {change.new_pnl != null ? `$${Number(change.new_pnl).toFixed(2)}` : '-'}
                                                 </td>
                                             </tr>
@@ -165,9 +162,9 @@ export default function ReconciliationModal({
                             </div>
 
                             {/* Warning */}
-                            <div className="mt-4 flex items-start gap-3 bg-yellow-500/10 border border-yellow-500/20 rounded-xl p-4">
-                                <AlertTriangle className="w-5 h-5 text-yellow-500 shrink-0 mt-0.5" />
-                                <p className="text-sm text-yellow-200/80">
+                            <div className="mt-4 flex items-start gap-3 bg-amber-500/10 ring-1 ring-inset ring-amber-400/20 rounded-xl p-4">
+                                <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+                                <p className="text-sm text-amber-200/80 leading-relaxed">
                                     These changes will update your local trade records to match TopStep data.
                                     This action cannot be undone.
                                 </p>
@@ -177,32 +174,24 @@ export default function ReconciliationModal({
                 </div>
 
                 {/* Footer */}
-                <div className="flex justify-end gap-3 p-6 border-t border-slate-800 bg-slate-900/50">
+                <div className="flex justify-end gap-3 p-6 border-t border-slate-800/60 shrink-0">
                     <button
                         onClick={onClose}
-                        className="px-5 py-2.5 rounded-xl font-semibold text-slate-300 hover:bg-slate-800 transition-colors"
+                        className="btn-ghost"
                         disabled={applying}
                     >
                         {hasChanges ? 'Cancel' : 'Close'}
                     </button>
                     {hasChanges && (
-                        <button
+                        <Button
+                            variant="primary"
+                            icon={Check}
+                            loading={applying}
+                            disabled={isLoading}
                             onClick={handleApply}
-                            disabled={applying || isLoading}
-                            className="px-5 py-2.5 rounded-xl font-semibold bg-indigo-600 hover:bg-indigo-700 text-white transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                         >
-                            {applying ? (
-                                <>
-                                    <RefreshCw className="w-4 h-4 animate-spin" />
-                                    Applying...
-                                </>
-                            ) : (
-                                <>
-                                    <Check className="w-4 h-4" />
-                                    Apply Changes
-                                </>
-                            )}
-                        </button>
+                            {applying ? 'Applying...' : 'Apply Changes'}
+                        </Button>
                     )}
                 </div>
             </div>

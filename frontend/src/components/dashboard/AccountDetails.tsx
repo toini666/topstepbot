@@ -1,12 +1,13 @@
 /**
  * Account Details Panel Component
- * 
+ *
  * Displays account information, trading status, and risk settings.
  */
 
-import { CheckCircle } from 'lucide-react';
+import { CheckCircle, ShieldOff } from 'lucide-react';
 import type { Account, AccountSettings as AccountSettingsType } from '../../types';
 import { RiskInput } from '../RiskInput';
+import { Card, CardHeader, Badge, Toggle, EmptyState } from '../ui';
 
 interface AccountDetailsProps {
     currentAccount: Account | undefined;
@@ -23,101 +24,114 @@ export function AccountDetails({
     onToggleTrading,
     onUpdateSettings,
 }: AccountDetailsProps) {
+    const tradingEnabled = accountSettings?.trading_enabled ?? false;
+    const overrideEnabled = accountSettings?.allow_min_contract_over_risk ?? false;
+
     return (
-        <section className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6 flex flex-col h-full lg:col-span-1">
-            <div className="flex justify-between items-center mb-6">
-                <h3 className="text-xl font-semibold text-slate-300 flex items-center gap-2">
-                    <CheckCircle className="w-5 h-5 text-green-400" />
-                    Account Details
-                </h3>
-                <div className="flex gap-2">
-                    <button
-                        onClick={onToggleTrading}
-                        disabled={!isConnected}
-                        className={`text-xs font-bold px-3 py-1.5 rounded-xl transition-all ${!isConnected
-                            ? 'bg-slate-800 text-slate-500 cursor-not-allowed'
-                            : accountSettings?.trading_enabled
-                                ? 'bg-green-500/15 text-green-300 hover:bg-green-500/25'
-                                : 'bg-red-500/15 text-red-300 hover:bg-red-500/25'
-                            }`}
-                    >
-                        {accountSettings?.trading_enabled ? 'TRADING ON' : 'TRADING PAUSED'}
-                    </button>
-                </div>
-            </div>
+        <Card className="flex flex-col h-full lg:col-span-1">
+            <CardHeader icon={CheckCircle} title="Account Details" />
 
             {currentAccount ? (
-                <div className="space-y-4 flex-1">
-                    <div className="flex justify-between items-center">
-                        <span className="text-slate-400 text-sm">Name</span>
-                        <span className="font-mono text-white text-right">{currentAccount.name}</span>
-                    </div>
-                    <div className="flex justify-between items-center">
-                        <span className="text-slate-400 text-sm">ID</span>
-                        <span className="font-mono text-slate-500">{currentAccount.id}</span>
-                    </div>
-                    <div className="flex justify-between items-center">
-                        <span className="text-slate-400 text-sm">Status</span>
-                        <span className={currentAccount.simulated ? 'badge-warning' : 'badge-info'}>
-                            {currentAccount.simulated ? 'SIMULATED' : 'LIVE'}
-                        </span>
-                    </div>
-                    <div className="flex justify-between items-center">
-                        <span className="text-slate-400 text-sm">Trading</span>
-                        <span className={currentAccount.canTrade ? 'badge-success' : 'badge-danger'}>
-                            {currentAccount.canTrade ? 'ENABLED' : 'DISABLED'}
-                        </span>
-                    </div>
-                    <div className="flex justify-between items-center">
-                        <span className="text-slate-400 text-sm">Risk / Trade</span>
-                        <RiskInput
-                            currentValue={accountSettings?.risk_per_trade ?? 200}
-                            onSave={(val) => onUpdateSettings({ risk_per_trade: val })}
+                <div className="flex flex-col flex-1">
+                    {/* Trading-enabled hero control */}
+                    <div className="flex items-center justify-between rounded-xl px-4 py-3 mb-5 bg-slate-900/60 border border-slate-800/60">
+                        <div>
+                            <p className="micro-label mb-1.5">Bot Trading</p>
+                            <Badge variant={!isConnected ? 'neutral' : tradingEnabled ? 'success' : 'danger'}>
+                                {tradingEnabled ? 'TRADING ON' : 'TRADING PAUSED'}
+                            </Badge>
+                        </div>
+                        <Toggle
+                            checked={tradingEnabled}
+                            onChange={onToggleTrading}
+                            disabled={!isConnected}
+                            activeColor="emerald"
+                            label="Toggle bot trading"
                         />
                     </div>
-                    <div className="flex justify-between items-center">
-                        <span className="text-slate-400 text-sm">Max Contracts</span>
-                        <RiskInput
-                            currentValue={accountSettings?.max_contracts ?? 50}
-                            onSave={(val) => onUpdateSettings({ max_contracts: Math.round(val) })}
-                            prefix=""
-                        />
-                    </div>
-                    <div className="flex justify-between items-center">
-                        <span
-                            className="text-slate-400 text-sm"
-                            title="If enabled, take 1 contract even when the SL distance would exceed the configured risk per trade. The bot logs a warning and notifies Telegram on every override."
-                        >
-                            Force 1 contract over risk
-                        </span>
-                        <button
-                            type="button"
-                            role="switch"
-                            aria-checked={accountSettings?.allow_min_contract_over_risk ?? false}
-                            onClick={() =>
-                                onUpdateSettings({
-                                    allow_min_contract_over_risk: !(accountSettings?.allow_min_contract_over_risk ?? false),
-                                })
-                            }
-                            className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${accountSettings?.allow_min_contract_over_risk ? 'bg-amber-500/70' : 'bg-slate-700'
-                                }`}
-                        >
-                            <span
-                                className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${accountSettings?.allow_min_contract_over_risk ? 'translate-x-5' : 'translate-x-1'
-                                    }`}
+
+                    <div className="space-y-4 flex-1">
+                        <div className="flex justify-between items-center">
+                            <span className="micro-label">Name</span>
+                            <span className="font-mono text-white text-sm text-right">{currentAccount.name}</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                            <span className="micro-label">ID</span>
+                            <span className="font-mono text-slate-500 text-sm">{currentAccount.id}</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                            <span className="micro-label">Status</span>
+                            <Badge variant={currentAccount.simulated ? 'warning' : 'info'}>
+                                {currentAccount.simulated ? 'SIMULATED' : 'LIVE'}
+                            </Badge>
+                        </div>
+                        <div className="flex justify-between items-center">
+                            <span className="micro-label">Trading</span>
+                            <Badge variant={currentAccount.canTrade ? 'success' : 'danger'}>
+                                {currentAccount.canTrade ? 'ENABLED' : 'DISABLED'}
+                            </Badge>
+                        </div>
+                        <div className="flex justify-between items-center">
+                            <span className="micro-label">Risk / Trade</span>
+                            <RiskInput
+                                currentValue={accountSettings?.risk_per_trade ?? 200}
+                                onSave={(val) => onUpdateSettings({ risk_per_trade: val })}
                             />
-                        </button>
+                        </div>
+                        <div className="flex justify-between items-center">
+                            <span className="micro-label">Max Contracts</span>
+                            <RiskInput
+                                currentValue={accountSettings?.max_contracts ?? 50}
+                                onSave={(val) => onUpdateSettings({ max_contracts: Math.round(val) })}
+                                prefix=""
+                            />
+                        </div>
+                        <div>
+                            <div className="flex justify-between items-center">
+                                <span
+                                    className="micro-label"
+                                    title="If enabled, take 1 contract even when the SL distance would exceed the configured risk per trade. The bot logs a warning and notifies Telegram on every override."
+                                >
+                                    Force 1 contract over risk
+                                </span>
+                                <button
+                                    type="button"
+                                    role="switch"
+                                    aria-checked={overrideEnabled}
+                                    onClick={() =>
+                                        onUpdateSettings({ allow_min_contract_over_risk: !overrideEnabled })
+                                    }
+                                    className={`toggle-sm ${overrideEnabled
+                                        ? 'bg-amber-500/80 border-amber-400/50 shadow-[0_0_12px_-2px_rgba(251,191,36,0.5)]'
+                                        : 'bg-slate-700/80'
+                                        }`}
+                                >
+                                    <span
+                                        className={`toggle-dot-sm ${overrideEnabled ? 'translate-x-[1.15rem]' : 'translate-x-0.5'}`}
+                                    />
+                                </button>
+                            </div>
+                            <p className="help-text">
+                                Takes 1 contract even if the stop-loss distance exceeds risk/trade. Logs a warning and notifies Telegram on every override.
+                            </p>
+                        </div>
                     </div>
-                    <div className="flex justify-between items-center border-t border-slate-800/60 pt-4 mt-auto">
-                        <span className="text-slate-400 text-sm">Balance</span>
+
+                    <div className="flex justify-between items-center border-t border-slate-800/60 pt-4 mt-4">
+                        <span className="micro-label">Balance</span>
                         <span className="font-mono text-white text-2xl font-bold">
                             ${currentAccount.balance?.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) ?? "0.00"}
                         </span>
                     </div>
                 </div>
             ) : (
-                <div className="text-slate-500 italic text-center py-10">No account selected</div>
+                <EmptyState
+                    icon={ShieldOff}
+                    title="No account selected"
+                    hint="Choose an account from the header to see its details."
+                    className="flex-1"
+                />
             )}
-        </section>
+        </Card>
     );
 }

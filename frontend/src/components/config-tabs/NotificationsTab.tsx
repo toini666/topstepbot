@@ -1,6 +1,6 @@
 /**
  * Notifications Settings Tab Component
- * 
+ *
  * Configure Discord webhook notifications per account.
  */
 
@@ -11,6 +11,7 @@ import { toast } from 'sonner';
 import type { Account } from '../../types';
 import { TimePicker } from '../TimePicker';
 import { API_BASE } from '../../config';
+import { Toggle, Button } from '../ui';
 
 interface NotificationsTabProps {
     accounts: Account[];
@@ -125,21 +126,21 @@ export function NotificationsTab({ accounts }: NotificationsTabProps) {
 
             {/* Account Selector */}
             <div className="space-y-2">
-                <label className="text-sm font-semibold text-slate-300">Select Account</label>
-                <div className="bg-slate-950 border border-slate-700 p-2 rounded-xl w-full flex flex-col justify-center relative group-account-selector">
+                <label className="label">Select Account</label>
+                <div className="relative group-account-selector">
                     <button
                         onClick={() => accounts.length > 0 && setAccountDropdownOpen(!accountDropdownOpen)}
-                        className="w-full flex items-center justify-between text-left px-2 py-1 focus:outline-none"
+                        className="input flex items-center justify-between text-left"
                         disabled={accounts.length === 0}
                     >
                         <span className="text-white font-mono text-sm truncate mr-2">
                             {selectedAccount ? `${selectedAccount.name} (${selectedAccount.id})` : 'Select Account'}
                         </span>
-                        <ChevronDown className={`w-4 h-4 text-slate-500 transition-transform duration-200 ${accountDropdownOpen ? 'rotate-180' : ''}`} />
+                        <ChevronDown className={`w-4 h-4 text-slate-500 transition-transform duration-200 flex-shrink-0 ${accountDropdownOpen ? 'rotate-180' : ''}`} />
                     </button>
 
                     {accountDropdownOpen && accounts.length > 0 && (
-                        <div className="absolute top-full left-0 mt-2 w-full bg-slate-900 border border-slate-700 rounded-xl shadow-xl overflow-hidden z-20">
+                        <div className="dropdown-menu top-full left-0 mt-2 w-full">
                             <div className="max-h-60 overflow-y-auto custom-scrollbar">
                                 {accounts.map((acc) => (
                                     <button
@@ -148,13 +149,10 @@ export function NotificationsTab({ accounts }: NotificationsTabProps) {
                                             setSelectedAccountId(acc.id);
                                             setAccountDropdownOpen(false);
                                         }}
-                                        className={`w-full text-left px-4 py-2 flex items-center justify-between transition-colors hover:bg-slate-800/50 ${acc.id === selectedAccountId
-                                            ? 'bg-indigo-500/10 text-indigo-400'
-                                            : 'text-slate-300'
-                                            }`}
+                                        className={acc.id === selectedAccountId ? 'dropdown-item-active' : 'dropdown-item'}
                                     >
                                         <div className="flex items-center gap-2 truncate">
-                                            <div className={`p-0.5 rounded-full ${acc.canTrade ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-500'}`} title={acc.canTrade ? "Trading Enabled" : "Trading Disabled"}>
+                                            <div className={`p-0.5 rounded-full ${acc.canTrade ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'}`} title={acc.canTrade ? "Trading Enabled" : "Trading Disabled"}>
                                                 <Power className="w-3 h-3" />
                                             </div>
                                             <span className="font-mono text-xs truncate">{acc.name} ({acc.id})</span>
@@ -171,96 +169,101 @@ export function NotificationsTab({ accounts }: NotificationsTabProps) {
             {selectedAccountId && (
                 <div className="space-y-4">
                     {/* Discord Enabled Toggle */}
-                    <div className="flex items-center justify-between bg-slate-950 p-4 rounded-xl border border-slate-800">
+                    <div className="flex items-center justify-between bg-slate-900/60 border border-slate-800/60 p-4 rounded-xl">
                         <div>
                             <span className="text-sm font-semibold text-white flex items-center gap-2">
                                 <Bell size={16} className="text-indigo-400" />
                                 Discord Notifications
                             </span>
-                            <p className="text-[10px] text-slate-500 mt-1">Enable Discord webhook notifications for this account</p>
+                            <p className="help-text">Enable Discord webhook notifications for this account</p>
                         </div>
-                        <button
-                            onClick={() => setDiscordEnabled(!discordEnabled)}
-                            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${discordEnabled ? 'bg-indigo-500' : 'bg-slate-700'}`}
-                        >
-                            <span className={`${discordEnabled ? 'translate-x-6' : 'translate-x-1'} inline-block h-4 w-4 transform rounded-full bg-white transition-transform`} />
-                        </button>
+                        <Toggle
+                            checked={discordEnabled}
+                            onChange={() => setDiscordEnabled(!discordEnabled)}
+                            size="md"
+                            activeColor="indigo"
+                            label="Discord notifications enabled"
+                        />
                     </div>
 
                     {/* Webhook URL */}
                     <div className={`space-y-2 transition-opacity ${!discordEnabled ? 'opacity-50' : ''}`}>
-                        <label className="text-sm font-semibold text-slate-300">Webhook URL</label>
+                        <label className="label">Webhook URL</label>
                         <input
                             type="text"
                             value={webhookUrl}
                             onChange={(e) => setWebhookUrl(e.target.value)}
                             disabled={!discordEnabled}
                             placeholder="https://discord.com/api/webhooks/..."
-                            className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2 text-white placeholder-slate-500 focus:border-indigo-500 focus:outline-none disabled:opacity-50"
+                            className="input-mono disabled:opacity-50"
                         />
-                        <p className="text-[10px] text-slate-500">
+                        <p className="help-text">
                             Create a webhook in Discord: Server Settings → Integrations → Webhooks
                         </p>
                     </div>
 
                     {/* Notification Types */}
                     <div className={`space-y-3 transition-opacity ${!discordEnabled ? 'opacity-50' : ''}`}>
-                        <label className="text-sm font-semibold text-slate-300">Notification Types</label>
+                        <label className="label">Notification Types</label>
 
                         {/* Position Opened */}
-                        <div className="flex items-center justify-between bg-slate-950 p-3 rounded-xl border border-slate-800">
+                        <div className="flex items-center justify-between bg-slate-900/60 border border-slate-800/60 p-3 rounded-xl">
                             <span className="text-sm text-slate-300">Position Opened</span>
-                            <button
-                                onClick={() => setNotifyPositionOpen(!notifyPositionOpen)}
+                            <Toggle
+                                checked={notifyPositionOpen}
+                                onChange={() => setNotifyPositionOpen(!notifyPositionOpen)}
                                 disabled={!discordEnabled}
-                                className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${notifyPositionOpen ? 'bg-indigo-500' : 'bg-slate-700'} disabled:opacity-50`}
-                            >
-                                <span className={`${notifyPositionOpen ? 'translate-x-5' : 'translate-x-1'} inline-block h-3 w-3 transform rounded-full bg-white transition-transform`} />
-                            </button>
+                                size="sm"
+                                activeColor="indigo"
+                                label="Notify on position opened"
+                            />
                         </div>
 
                         {/* Position Closed */}
-                        <div className="flex items-center justify-between bg-slate-950 p-3 rounded-xl border border-slate-800">
+                        <div className="flex items-center justify-between bg-slate-900/60 border border-slate-800/60 p-3 rounded-xl">
                             <span className="text-sm text-slate-300">Position Closed</span>
-                            <button
-                                onClick={() => setNotifyPositionClose(!notifyPositionClose)}
+                            <Toggle
+                                checked={notifyPositionClose}
+                                onChange={() => setNotifyPositionClose(!notifyPositionClose)}
                                 disabled={!discordEnabled}
-                                className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${notifyPositionClose ? 'bg-indigo-500' : 'bg-slate-700'} disabled:opacity-50`}
-                            >
-                                <span className={`${notifyPositionClose ? 'translate-x-5' : 'translate-x-1'} inline-block h-3 w-3 transform rounded-full bg-white transition-transform`} />
-                            </button>
+                                size="sm"
+                                activeColor="indigo"
+                                label="Notify on position closed"
+                            />
                         </div>
 
                         {/* Partial Close */}
-                        <div className="flex items-center justify-between bg-slate-950 p-3 rounded-xl border border-slate-800">
+                        <div className="flex items-center justify-between bg-slate-900/60 border border-slate-800/60 p-3 rounded-xl">
                             <span className="text-sm text-slate-300">Partial Close</span>
-                            <button
-                                onClick={() => setNotifyPartialClose(!notifyPartialClose)}
+                            <Toggle
+                                checked={notifyPartialClose}
+                                onChange={() => setNotifyPartialClose(!notifyPartialClose)}
                                 disabled={!discordEnabled}
-                                className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${notifyPartialClose ? 'bg-indigo-500' : 'bg-slate-700'} disabled:opacity-50`}
-                            >
-                                <span className={`${notifyPartialClose ? 'translate-x-5' : 'translate-x-1'} inline-block h-3 w-3 transform rounded-full bg-white transition-transform`} />
-                            </button>
+                                size="sm"
+                                activeColor="indigo"
+                                label="Notify on partial close"
+                            />
                         </div>
 
                         {/* Daily Summary */}
-                        <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 space-y-3">
+                        <div className="bg-slate-900/60 border border-slate-800/60 p-3 rounded-xl space-y-3">
                             <div className="flex items-center justify-between">
                                 <div>
                                     <span className="text-sm text-slate-300">Daily Summary</span>
-                                    <p className="text-[10px] text-slate-500">P&L, trades count, balance</p>
+                                    <p className="help-text">P&L, trades count, balance</p>
                                 </div>
-                                <button
-                                    onClick={() => setNotifyDailySummary(!notifyDailySummary)}
+                                <Toggle
+                                    checked={notifyDailySummary}
+                                    onChange={() => setNotifyDailySummary(!notifyDailySummary)}
                                     disabled={!discordEnabled}
-                                    className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${notifyDailySummary ? 'bg-indigo-500' : 'bg-slate-700'} disabled:opacity-50`}
-                                >
-                                    <span className={`${notifyDailySummary ? 'translate-x-5' : 'translate-x-1'} inline-block h-3 w-3 transform rounded-full bg-white transition-transform`} />
-                                </button>
+                                    size="sm"
+                                    activeColor="indigo"
+                                    label="Notify daily summary"
+                                />
                             </div>
 
                             {notifyDailySummary && discordEnabled && (
-                                <div className="flex items-center gap-3 pt-2 border-t border-slate-800">
+                                <div className="flex items-center gap-3 pt-2 border-t border-slate-800/60">
                                     <span className="text-xs text-slate-400">Send at:</span>
                                     <TimePicker
                                         value={dailySummaryTime}
@@ -276,14 +279,10 @@ export function NotificationsTab({ accounts }: NotificationsTabProps) {
 
             {/* Save Button for this tab - handled internally */}
             {selectedAccountId && (
-                <div className="pt-4 border-t border-slate-800">
-                    <button
-                        onClick={saveDiscordSettings}
-                        disabled={saving}
-                        className="w-full px-6 py-2.5 rounded-xl font-bold text-sm bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg flex items-center justify-center gap-2 disabled:opacity-50"
-                    >
-                        <Bell size={16} /> {saving ? 'Saving...' : 'Save Discord Settings'}
-                    </button>
+                <div className="pt-4 border-t border-slate-800/60">
+                    <Button variant="primary" icon={Bell} loading={saving} onClick={saveDiscordSettings} className="w-full">
+                        {saving ? 'Saving...' : 'Save Discord Settings'}
+                    </Button>
                 </div>
             )}
         </div>

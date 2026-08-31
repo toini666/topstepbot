@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Trash2, Plus, Layers, Pencil, X, Save, Clock, User, Settings } from 'lucide-react';
+import { Trash2, Plus, Layers, Pencil, X, Save, Clock, User } from 'lucide-react';
 import { toast } from 'sonner';
 import { API_BASE } from '../config';
+import { Card, CardHeader, Button, Toggle, EmptyState, SegmentedControl, Spinner } from './ui';
 
 import type { Strategy, AccountStrategyConfig } from '../types';
 
@@ -10,6 +11,25 @@ interface StrategiesManagerProps {
     selectedAccountId: number | null;
     selectedAccountName?: string;
 }
+
+const SESSION_KEYS = ['ASIA', 'UK', 'US', 'OUTSIDE'] as const;
+
+const VIEW_OPTIONS: readonly { value: 'account' | 'global'; label: string }[] = [
+    { value: 'account', label: 'Account Strategies' },
+    { value: 'global', label: 'Global Templates' },
+];
+
+/** Session/outside chip styling for both display and interactive toggle contexts. */
+function sessionChipClass(active: boolean, isOutside: boolean) {
+    if (!active) {
+        return 'badge-neutral cursor-pointer select-none hover:text-slate-300 transition-colors';
+    }
+    return isOutside
+        ? 'badge-warning cursor-pointer select-none transition-colors'
+        : 'badge-info cursor-pointer select-none transition-colors';
+}
+
+const iconBtn = 'inline-flex items-center justify-center p-2 rounded-lg text-slate-400 transition-colors';
 
 /**
  * Strategies Manager Component
@@ -281,260 +301,233 @@ export function StrategiesManager({ selectedAccountId, selectedAccountName }: St
         <div className="space-y-8 animate-fade-in">
             {/* View Mode Toggle (when account selected) */}
             {selectedAccountId && (
-                <div className="flex gap-2 mb-4">
-                    <button
-                        onClick={() => setViewMode('account')}
-                        className={`px-4 py-2 rounded-lg font-semibold text-sm flex items-center gap-2 transition-all ${viewMode === 'account'
-                            ? 'bg-emerald-600 text-white'
-                            : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
-                            }`}
-                    >
-                        <User className="w-4 h-4" />
-                        Account Strategies
-                    </button>
-                    <button
-                        onClick={() => setViewMode('global')}
-                        className={`px-4 py-2 rounded-lg font-semibold text-sm flex items-center gap-2 transition-all ${viewMode === 'global'
-                            ? 'bg-indigo-600 text-white'
-                            : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
-                            }`}
-                    >
-                        <Settings className="w-4 h-4" />
-                        Global Templates
-                    </button>
-                </div>
+                <SegmentedControl
+                    options={VIEW_OPTIONS}
+                    value={viewMode}
+                    onChange={setViewMode}
+                    aria-label="Strategy view"
+                />
             )}
 
             {/* ACCOUNT VIEW: Show per-account strategy configs */}
             {showAccountView && (
-                <section className="bg-emerald-900/20 border border-emerald-500/30 rounded-2xl p-6">
-                    <div className="flex justify-between items-center mb-6">
-                        <h2 className="text-xl font-semibold flex items-center gap-2">
-                            <User className="w-5 h-5 text-emerald-400" />
-                            Strategies for {selectedAccountName || `Account ${selectedAccountId}`}
-                        </h2>
-                        <span className="text-xs bg-emerald-500/20 text-emerald-400 px-3 py-1 rounded-lg">
-                            {accountConfigs.length} stratégie(s) active(s)
-                        </span>
-                    </div>
+                <Card className="animate-rise">
+                    <CardHeader
+                        icon={User}
+                        title={`Strategies for ${selectedAccountName || `Account ${selectedAccountId}`}`}
+                        annotation={`${accountConfigs.length} active`}
+                    />
 
-                    <div className="overflow-x-auto">
-                        <table className="w-full text-sm text-left">
-                            <thead className="text-slate-500 border-b border-emerald-500/20 uppercase text-xs">
-                                <tr>
-                                    <th className="py-4 px-4 font-bold">Status</th>
-                                    <th className="py-4 px-4 font-bold">Strategy</th>
-                                    <th className="py-4 px-4 font-bold">Sessions</th>
-                                    <th className="py-4 px-4 text-center font-bold">Risk Factor</th>
-                                    <th className="py-4 px-4 text-center font-bold">Partial %</th>
-                                    <th className="py-4 px-4 text-center font-bold">SL → BE</th>
-                                    <th className="py-4 px-4 text-right font-bold">Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-800/50">
-                                {accountConfigs.map((config) => (
-                                    <tr
-                                        key={config.id}
-                                        className={`transition-colors ${editingConfigId === config.id
-                                            ? 'bg-emerald-500/10'
-                                            : 'hover:bg-slate-800/30'
-                                            }`}
-                                    >
-                                        {/* Enabled Toggle */}
-                                        <td className="py-4 px-4">
-                                            <button
-                                                onClick={() => toggleStrategyEnabled(config)}
-                                                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${config.enabled ? 'bg-emerald-600' : 'bg-slate-700'
-                                                    }`}
-                                            >
-                                                <span className={`${config.enabled ? 'translate-x-6' : 'translate-x-1'
-                                                    } inline-block h-4 w-4 transform rounded-full bg-white transition-transform`} />
-                                            </button>
-                                        </td>
+                    {accountConfigs.length > 0 ? (
+                        <div className="overflow-x-auto custom-scrollbar">
+                            <table className="w-full min-w-[640px] md:min-w-0 text-sm text-left">
+                                <thead>
+                                    <tr className="table-header">
+                                        <th className="table-cell font-semibold">Status</th>
+                                        <th className="table-cell font-semibold">Strategy</th>
+                                        <th className="table-cell font-semibold">Sessions</th>
+                                        <th className="table-cell font-semibold text-right">Risk Factor</th>
+                                        <th className="table-cell font-semibold text-right">Partial %</th>
+                                        <th className="table-cell font-semibold text-center">SL → BE</th>
+                                        <th className="table-cell font-semibold text-right">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {accountConfigs.map((config, i) => (
+                                        <tr
+                                            key={config.id}
+                                            className={`table-row animate-stagger ${editingConfigId === config.id ? 'bg-indigo-500/10 hover:bg-indigo-500/15' : ''}`}
+                                            style={{ '--i': i } as React.CSSProperties}
+                                        >
+                                            {/* Enabled Toggle */}
+                                            <td className="table-cell">
+                                                <Toggle
+                                                    checked={config.enabled}
+                                                    onChange={() => toggleStrategyEnabled(config)}
+                                                    activeColor="emerald"
+                                                    label={`Toggle ${config.strategy_name || 'strategy'} enabled`}
+                                                />
+                                            </td>
 
-                                        {/* Strategy Name */}
-                                        <td className="py-4 px-4">
-                                            <div className="flex flex-col">
-                                                <span className="font-bold text-white">{config.strategy_name}</span>
-                                                <span className="font-mono text-xs text-violet-300 bg-violet-500/10 px-2 py-0.5 rounded-md w-fit mt-1">
-                                                    {config.strategy_tv_id}
-                                                </span>
-                                            </div>
-                                        </td>
-
-                                        {/* Sessions */}
-                                        <td className="py-4 px-4">
-                                            {editingConfigId === config.id ? (
-                                                <div className="flex gap-1">
-                                                    {['ASIA', 'UK', 'US', 'OUTSIDE'].map(session => (
-                                                        <button
-                                                            key={session}
-                                                            type="button"
-                                                            onClick={() => toggleConfigSession(session)}
-                                                            className={`px-2 py-1 rounded text-xs font-bold transition-all ${configSessions.includes(session)
-                                                                ? session === 'OUTSIDE' ? 'bg-amber-600 text-white' : 'bg-emerald-600 text-white'
-                                                                : 'bg-slate-800 text-slate-500'
-                                                                }`}
-                                                        >
-                                                            {session}
-                                                        </button>
-                                                    ))}
+                                            {/* Strategy Name */}
+                                            <td className="table-cell">
+                                                <div className="flex flex-col gap-0.5">
+                                                    <span className="font-semibold text-slate-100">{config.strategy_name}</span>
+                                                    <span className="font-mono text-xs text-slate-500">{config.strategy_tv_id}</span>
                                                 </div>
-                                            ) : (
-                                                <div className="flex gap-1 flex-wrap">
-                                                    {config.allowed_sessions.split(',').map(s => (
-                                                        <span key={s} className="text-xs bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded">
-                                                            {s.trim()}
-                                                        </span>
-                                                    ))}
-                                                    {config.allow_outside_sessions && (
-                                                        <span className="text-xs bg-amber-500/20 text-amber-500 px-2 py-0.5 rounded">
-                                                            OUTSIDE
-                                                        </span>
+                                            </td>
+
+                                            {/* Sessions */}
+                                            <td className="table-cell">
+                                                {editingConfigId === config.id ? (
+                                                    <div className="flex gap-1.5 flex-wrap">
+                                                        {SESSION_KEYS.map(session => (
+                                                            <button
+                                                                key={session}
+                                                                type="button"
+                                                                onClick={() => toggleConfigSession(session)}
+                                                                className={sessionChipClass(configSessions.includes(session), session === 'OUTSIDE')}
+                                                            >
+                                                                {session}
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                ) : (
+                                                    <div className="flex gap-1.5 flex-wrap">
+                                                        {config.allowed_sessions.split(',').map(s => (
+                                                            <span key={s} className="badge-info">
+                                                                {s.trim()}
+                                                            </span>
+                                                        ))}
+                                                        {config.allow_outside_sessions && (
+                                                            <span className="badge-warning">OUTSIDE</span>
+                                                        )}
+                                                    </div>
+                                                )}
+                                            </td>
+
+                                            {/* Risk Factor */}
+                                            <td className="table-cell num">
+                                                {editingConfigId === config.id ? (
+                                                    <div className="w-20 ml-auto">
+                                                        <input
+                                                            type="number"
+                                                            min="0.1"
+                                                            step="0.1"
+                                                            className="input-mono text-right px-2 py-1 text-sm"
+                                                            value={configRiskFactor}
+                                                            onChange={e => setConfigRiskFactor(parseFloat(e.target.value))}
+                                                        />
+                                                    </div>
+                                                ) : (
+                                                    <span className="text-slate-200 font-semibold">{config.risk_factor.toFixed(1)}x</span>
+                                                )}
+                                            </td>
+
+                                            {/* Partial % */}
+                                            <td className="table-cell num">
+                                                {editingConfigId === config.id ? (
+                                                    <div className="w-16 ml-auto">
+                                                        <input
+                                                            type="number"
+                                                            min="10"
+                                                            max="90"
+                                                            className="input-mono text-right px-2 py-1 text-sm"
+                                                            value={configPartialPercent}
+                                                            onChange={e => setConfigPartialPercent(parseInt(e.target.value))}
+                                                        />
+                                                    </div>
+                                                ) : (
+                                                    <span className="text-slate-300">{config.partial_tp_percent}%</span>
+                                                )}
+                                            </td>
+
+                                            {/* Move SL to BE */}
+                                            <td className="table-cell text-center">
+                                                {editingConfigId === config.id ? (
+                                                    <Toggle
+                                                        checked={configMoveSlToEntry}
+                                                        onChange={() => setConfigMoveSlToEntry(!configMoveSlToEntry)}
+                                                        activeColor="emerald"
+                                                        size="sm"
+                                                        label="Move SL to entry"
+                                                        className="mx-auto"
+                                                    />
+                                                ) : (
+                                                    <span className={config.move_sl_to_entry ? 'badge-success' : 'badge-neutral'}>
+                                                        {config.move_sl_to_entry ? 'ON' : 'OFF'}
+                                                    </span>
+                                                )}
+                                            </td>
+
+                                            {/* Actions */}
+                                            <td className="table-cell text-right">
+                                                <div className="flex justify-end gap-1.5">
+                                                    {editingConfigId === config.id ? (
+                                                        <>
+                                                            <button
+                                                                onClick={() => saveConfigChanges(config)}
+                                                                className={`${iconBtn} hover:bg-emerald-500/15 hover:text-emerald-300`}
+                                                                title="Save"
+                                                                aria-label="Save"
+                                                            >
+                                                                <Save className="w-4 h-4" />
+                                                            </button>
+                                                            <button
+                                                                onClick={cancelEditingConfig}
+                                                                className={`${iconBtn} hover:bg-slate-700/60 hover:text-slate-200`}
+                                                                title="Cancel"
+                                                                aria-label="Cancel"
+                                                            >
+                                                                <X className="w-4 h-4" />
+                                                            </button>
+                                                        </>
+                                                    ) : (
+                                                        <>
+                                                            <button
+                                                                onClick={() => startEditingConfig(config)}
+                                                                className={`${iconBtn} hover:bg-indigo-500/15 hover:text-indigo-300`}
+                                                                title="Edit"
+                                                                aria-label="Edit"
+                                                            >
+                                                                <Pencil className="w-4 h-4" />
+                                                            </button>
+                                                            <button
+                                                                onClick={() => removeStrategyFromAccount(config.strategy_id)}
+                                                                className={`${iconBtn} hover:bg-red-500/15 hover:text-red-300`}
+                                                                title="Remove"
+                                                                aria-label="Remove"
+                                                            >
+                                                                <Trash2 className="w-4 h-4" />
+                                                            </button>
+                                                        </>
                                                     )}
                                                 </div>
-                                            )}
-                                        </td>
-
-                                        {/* Risk Factor */}
-                                        <td className="py-4 px-4 text-center font-mono">
-                                            {editingConfigId === config.id ? (
-                                                <input
-                                                    type="number"
-                                                    min="0.1"
-                                                    step="0.1"
-                                                    className="w-20 bg-slate-950 border border-slate-700 rounded px-2 py-1 text-white text-center"
-                                                    value={configRiskFactor}
-                                                    onChange={e => setConfigRiskFactor(parseFloat(e.target.value))}
-                                                />
-                                            ) : (
-                                                <span className="text-emerald-400 font-bold">{config.risk_factor.toFixed(1)}x</span>
-                                            )}
-                                        </td>
-
-                                        {/* Partial % */}
-                                        <td className="py-4 px-4 text-center font-mono">
-                                            {editingConfigId === config.id ? (
-                                                <input
-                                                    type="number"
-                                                    min="10"
-                                                    max="90"
-                                                    className="w-16 bg-slate-950 border border-slate-700 rounded px-2 py-1 text-white text-center"
-                                                    value={configPartialPercent}
-                                                    onChange={e => setConfigPartialPercent(parseInt(e.target.value))}
-                                                />
-                                            ) : (
-                                                <span className="text-amber-400">{config.partial_tp_percent}%</span>
-                                            )}
-                                        </td>
-
-                                        {/* Move SL to BE */}
-                                        <td className="py-4 px-4 text-center">
-                                            {editingConfigId === config.id ? (
-                                                <button
-                                                    type="button"
-                                                    onClick={() => setConfigMoveSlToEntry(!configMoveSlToEntry)}
-                                                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${configMoveSlToEntry ? 'bg-emerald-600' : 'bg-slate-700'}`}
-                                                >
-                                                    <span className={`${configMoveSlToEntry ? 'translate-x-6' : 'translate-x-1'} inline-block h-4 w-4 transform rounded-full bg-white transition-transform`} />
-                                                </button>
-                                            ) : (
-                                                <span className={`px-2 py-1 rounded text-xs font-bold ${config.move_sl_to_entry ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-700 text-slate-400'}`}>
-                                                    {config.move_sl_to_entry ? 'ON' : 'OFF'}
-                                                </span>
-                                            )}
-                                        </td>
-
-
-
-                                        {/* Actions */}
-                                        <td className="py-4 px-4 text-right">
-                                            <div className="flex justify-end gap-2">
-                                                {editingConfigId === config.id ? (
-                                                    <>
-                                                        <button
-                                                            onClick={() => saveConfigChanges(config)}
-                                                            className="p-2 bg-emerald-500/20 text-emerald-400 rounded-lg hover:bg-emerald-500/30"
-                                                            title="Save"
-                                                        >
-                                                            <Save className="w-4 h-4" />
-                                                        </button>
-                                                        <button
-                                                            onClick={cancelEditingConfig}
-                                                            className="p-2 bg-slate-800 text-slate-400 rounded-lg hover:bg-slate-700"
-                                                            title="Cancel"
-                                                        >
-                                                            <X className="w-4 h-4" />
-                                                        </button>
-                                                    </>
-                                                ) : (
-                                                    <>
-                                                        <button
-                                                            onClick={() => startEditingConfig(config)}
-                                                            className="p-2 bg-slate-800 hover:bg-emerald-500/20 text-slate-400 hover:text-emerald-400 rounded-lg"
-                                                            title="Edit"
-                                                        >
-                                                            <Pencil className="w-4 h-4" />
-                                                        </button>
-                                                        <button
-                                                            onClick={() => removeStrategyFromAccount(config.strategy_id)}
-                                                            className="p-2 bg-slate-800 hover:bg-red-500/20 text-slate-400 hover:text-red-400 rounded-lg"
-                                                            title="Remove"
-                                                        >
-                                                            <Trash2 className="w-4 h-4" />
-                                                        </button>
-                                                    </>
-                                                )}
-                                            </div>
-                                        </td>
-                                    </tr>
-                                ))}
-                                {accountConfigs.length === 0 && (
-                                    <tr>
-                                        <td colSpan={8} className="py-12 text-center text-slate-500 italic">
-                                            Aucune stratégie activée sur ce compte.
-                                            <br />
-                                            <button
-                                                onClick={() => setViewMode('global')}
-                                                className="text-indigo-400 underline mt-2"
-                                            >
-                                                Ajouter depuis les templates
-                                            </button>
-                                        </td>
-                                    </tr>
-                                )}
-                            </tbody>
-                        </table>
-                    </div>
-                </section>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    ) : (
+                        <EmptyState
+                            icon={Layers}
+                            title="No strategies enabled on this account"
+                            hint="Add one from Global Templates to enable it here."
+                            action={
+                                <Button variant="outline" onClick={() => setViewMode('global')}>
+                                    Add from templates
+                                </Button>
+                            }
+                        />
+                    )}
+                </Card>
             )}
 
             {/* GLOBAL VIEW: Create/Edit Strategy Template + List */}
             {(!selectedAccountId || viewMode === 'global') && (
                 <>
                     {/* Create/Edit Strategy Template */}
-                    <section className={`border rounded-2xl p-6 transition-all ${editingId ? 'bg-indigo-500/5 border-indigo-500/30' : 'bg-slate-900/50 border-slate-800'}`}>
-                        <div className="flex justify-between items-center mb-6">
-                            <h2 className="text-xl font-semibold flex items-center gap-2">
-                                {editingId ? <Pencil className="w-5 h-5 text-indigo-400" /> : <Plus className="w-5 h-5 text-indigo-400" />}
-                                {editingId ? 'Edit Strategy Template' : 'New Strategy Template'}
-                            </h2>
-                            {editingId && (
-                                <button onClick={resetForm} className="text-slate-400 hover:text-white text-xs flex items-center gap-1 bg-slate-800 px-3 py-1 rounded-lg">
-                                    <X className="w-3 h-3" /> Cancel
-                                </button>
+                    <Card className={`animate-rise ${editingId ? 'ring-1 ring-indigo-500/30' : ''}`}>
+                        <CardHeader
+                            icon={editingId ? Pencil : Plus}
+                            title={editingId ? 'Edit Strategy Template' : 'New Strategy Template'}
+                            actions={editingId && (
+                                <Button variant="ghost" icon={X} onClick={resetForm}>
+                                    Cancel
+                                </Button>
                             )}
-                        </div>
+                        />
 
                         <form onSubmit={handleSubmit} className="space-y-4">
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                 {/* Name */}
                                 <div>
-                                    <label className="block text-slate-400 text-xs uppercase mb-2 font-bold">Display Name</label>
+                                    <label className="label">Display Name</label>
                                     <input
                                         type="text"
                                         required
-                                        className="w-full bg-slate-950 border border-slate-800 rounded-xl py-2.5 px-4 text-white focus:outline-none focus:border-indigo-500"
+                                        className="input"
                                         placeholder="Scalp Alpha"
                                         value={name}
                                         onChange={e => setName(e.target.value)}
@@ -543,25 +536,26 @@ export function StrategiesManager({ selectedAccountId, selectedAccountName }: St
 
                                 {/* TV ID */}
                                 <div>
-                                    <label className="block text-slate-400 text-xs uppercase mb-2 font-bold">Webhook ID (tv_id)</label>
+                                    <label className="label">Webhook ID (tv_id)</label>
                                     <input
                                         type="text"
                                         required
-                                        className="w-full bg-slate-950 border border-slate-800 rounded-xl py-2.5 px-4 text-white font-mono text-sm focus:outline-none focus:border-violet-500"
+                                        className="input-mono"
                                         placeholder="scalp_v1"
                                         value={tvId}
                                         onChange={e => setTvId(e.target.value)}
                                     />
+                                    <p className="help-text">Must match the identifier sent from the TradingView alert.</p>
                                 </div>
 
                                 {/* Risk Factor */}
                                 <div>
-                                    <label className="block text-slate-400 text-xs uppercase mb-2 font-bold">Default Risk Factor</label>
+                                    <label className="label">Default Risk Factor</label>
                                     <input
                                         type="number"
                                         min="0.1"
                                         step="0.1"
-                                        className="w-full bg-slate-950 border border-slate-800 rounded-xl py-2.5 px-4 text-white font-mono focus:outline-none focus:border-emerald-500"
+                                        className="input-mono"
                                         value={defaultFactor}
                                         onChange={e => setDefaultFactor(parseFloat(e.target.value))}
                                     />
@@ -570,19 +564,16 @@ export function StrategiesManager({ selectedAccountId, selectedAccountName }: St
 
                             {/* Sessions */}
                             <div>
-                                <label className="block text-slate-400 text-xs uppercase mb-2 font-bold flex items-center gap-2">
-                                    <Clock className="w-4 h-4" /> Allowed Sessions (Default)
+                                <label className="label !flex items-center gap-1.5">
+                                    <Clock className="w-3.5 h-3.5" /> Allowed Sessions (Default)
                                 </label>
-                                <div className="flex gap-2">
-                                    {['ASIA', 'UK', 'US', 'OUTSIDE'].map(session => (
+                                <div className="flex gap-1.5 flex-wrap">
+                                    {SESSION_KEYS.map(session => (
                                         <button
                                             key={session}
                                             type="button"
                                             onClick={() => toggleSession(session)}
-                                            className={`px-4 py-2 rounded-lg font-bold text-sm transition-all ${defaultSessions.includes(session)
-                                                ? session === 'OUTSIDE' ? 'bg-amber-600 text-white' : 'bg-indigo-600 text-white'
-                                                : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
-                                                }`}
+                                            className={sessionChipClass(defaultSessions.includes(session), session === 'OUTSIDE')}
                                         >
                                             {session}
                                         </button>
@@ -593,158 +584,159 @@ export function StrategiesManager({ selectedAccountId, selectedAccountName }: St
                             {/* Partial TP Settings */}
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div>
-                                    <label className="block text-slate-400 text-xs uppercase mb-2 font-bold">Partial TP % (Default)</label>
+                                    <label className="label">Partial TP % (Default)</label>
                                     <input
                                         type="number"
                                         min="10"
                                         max="90"
-                                        className="w-full bg-slate-950 border border-slate-800 rounded-xl py-2.5 px-4 text-white font-mono focus:outline-none focus:border-amber-500"
+                                        className="input-mono"
                                         value={defaultPartialPercent}
                                         onChange={e => setDefaultPartialPercent(parseInt(e.target.value))}
                                     />
                                 </div>
 
                                 {/* Move SL Logic */}
-                                <div className="flex items-center gap-3 bg-slate-950/50 p-3 rounded-xl border border-slate-800">
-                                    <button
-                                        type="button"
-                                        onClick={() => setDefaultMoveSlToEntry(!defaultMoveSlToEntry)}
-                                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${defaultMoveSlToEntry ? 'bg-indigo-600' : 'bg-slate-700'
-                                            }`}
-                                    >
-                                        <span className={`${defaultMoveSlToEntry ? 'translate-x-6' : 'translate-x-1'} inline-block h-4 w-4 transform rounded-full bg-white transition-transform`} />
-                                    </button>
-                                    <span className="text-slate-300 text-sm font-bold">Move SL to Entry</span>
+                                <div className="flex items-center gap-3 well px-3 py-2.5">
+                                    <Toggle
+                                        checked={defaultMoveSlToEntry}
+                                        onChange={() => setDefaultMoveSlToEntry(!defaultMoveSlToEntry)}
+                                        activeColor="emerald"
+                                        label="Move SL to entry"
+                                    />
+                                    <span className="text-slate-300 text-sm font-medium">Move SL to Entry</span>
                                 </div>
                             </div>
 
-                            <button
-                                type="submit"
-                                className={`w-full font-bold py-2.5 px-8 rounded-xl transition-all flex items-center justify-center gap-2 shadow-lg ${editingId ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-blue-600 hover:bg-blue-700'
-                                    } text-white`}
-                            >
-                                {editingId ? <Save className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
+                            <Button type="submit" variant="primary" icon={editingId ? Save : Plus} className="w-full">
                                 {editingId ? 'Save Changes' : 'Create Strategy'}
-                            </button>
+                            </Button>
                         </form>
-                    </section>
+                    </Card>
 
                     {/* Strategy List */}
-                    <section className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6">
-                        <h2 className="text-xl font-semibold mb-6 flex items-center gap-2">
-                            <Layers className="w-5 h-5 text-indigo-400" />
-                            Strategy Templates
-                            {selectedAccountId && (
-                                <span className="text-xs bg-emerald-500/20 text-emerald-400 px-2 py-1 rounded-lg ml-2">
-                                    Click + to add to selected account
-                                </span>
+                    <Card className="animate-rise">
+                        <CardHeader
+                            icon={Layers}
+                            title="Strategy Templates"
+                            annotation={loading ? <Spinner size="sm" /> : `${strategies.length}`}
+                            actions={selectedAccountId && (
+                                <span className="micro-label">Click + to add to selected account</span>
                             )}
-                        </h2>
+                        />
 
-                        <div className="overflow-x-auto">
-                            <table className="w-full text-sm text-left">
-                                <thead className="text-slate-500 border-b border-slate-800 uppercase text-xs">
-                                    <tr>
-                                        <th className="py-4 px-4 font-bold">Strategy</th>
-                                        <th className="py-4 px-4 font-bold">Sessions</th>
-                                        <th className="py-4 px-4 text-center font-bold">Risk Factor</th>
-                                        <th className="py-4 px-4 text-center font-bold">Partial %</th>
-                                        <th className="py-4 px-4 text-center font-bold">SL → BE</th>
-                                        <th className="py-4 px-4 text-right font-bold">Actions</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-slate-800/50">
-                                    {strategies.map((strat) => (
-                                        <tr key={strat.id} className={`transition-colors ${editingId === strat.id ? 'bg-indigo-500/10' : 'hover:bg-slate-800/30'}`}>
-                                            {/* Strategy Name + TV ID */}
-                                            <td className="py-4 px-4">
-                                                <div className="flex flex-col">
-                                                    <span className="font-bold text-white">{strat.name}</span>
-                                                    <span className="font-mono text-xs text-violet-300 bg-violet-500/10 px-2 py-0.5 rounded-md w-fit mt-1">
-                                                        {strat.tv_id}
+                        {strategies.length > 0 ? (
+                            <div className="overflow-x-auto custom-scrollbar">
+                                <table className="w-full min-w-[640px] md:min-w-0 text-sm text-left">
+                                    <thead>
+                                        <tr className="table-header">
+                                            <th className="table-cell font-semibold">Strategy</th>
+                                            <th className="table-cell font-semibold">Sessions</th>
+                                            <th className="table-cell font-semibold text-right">Risk Factor</th>
+                                            <th className="table-cell font-semibold text-right">Partial %</th>
+                                            <th className="table-cell font-semibold text-center">SL → BE</th>
+                                            <th className="table-cell font-semibold text-right">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {strategies.map((strat, i) => (
+                                            <tr
+                                                key={strat.id}
+                                                className={`table-row animate-stagger ${editingId === strat.id ? 'bg-indigo-500/10 hover:bg-indigo-500/15' : ''}`}
+                                                style={{ '--i': i } as React.CSSProperties}
+                                            >
+                                                {/* Strategy Name + TV ID */}
+                                                <td className="table-cell">
+                                                    <div className="flex flex-col gap-0.5">
+                                                        <span className="font-semibold text-slate-100">{strat.name}</span>
+                                                        <span className="font-mono text-xs text-slate-500">{strat.tv_id}</span>
+                                                    </div>
+                                                </td>
+                                                {/* Sessions */}
+                                                <td className="table-cell">
+                                                    <div className="flex gap-1.5 flex-wrap">
+                                                        {strat.default_allowed_sessions.split(',').map(s => (
+                                                            <span key={s} className="badge-neutral">
+                                                                {s.trim()}
+                                                            </span>
+                                                        ))}
+                                                        {strat.default_allow_outside_sessions && (
+                                                            <span className="badge-warning">OUTSIDE</span>
+                                                        )}
+                                                    </div>
+                                                </td>
+                                                {/* Risk Factor */}
+                                                <td className="table-cell num">
+                                                    <span className="text-slate-200 font-semibold">{strat.default_risk_factor.toFixed(1)}x</span>
+                                                </td>
+                                                {/* Partial % */}
+                                                <td className="table-cell num">
+                                                    <span className="text-slate-300">{strat.default_partial_tp_percent}%</span>
+                                                </td>
+
+                                                {/* Move SL to BE */}
+                                                <td className="table-cell text-center">
+                                                    <span className={strat.default_move_sl_to_entry ? 'badge-success' : 'badge-neutral'}>
+                                                        {strat.default_move_sl_to_entry ? 'ON' : 'OFF'}
                                                     </span>
-                                                </div>
-                                            </td>
-                                            {/* Sessions */}
-                                            <td className="py-4 px-4">
-                                                <div className="flex gap-1 flex-wrap">
-                                                    {strat.default_allowed_sessions.split(',').map(s => (
-                                                        <span key={s} className="text-xs bg-slate-800 px-2 py-0.5 rounded text-slate-300">
-                                                            {s.trim()}
-                                                        </span>
-                                                    ))}
-                                                    {strat.default_allow_outside_sessions && (
-                                                        <span className="text-xs bg-amber-500/20 text-amber-500 px-2 py-0.5 rounded">
-                                                            OUTSIDE
-                                                        </span>
-                                                    )}
-                                                </div>
-                                            </td>
-                                            {/* Risk Factor */}
-                                            <td className="py-4 px-4 text-center font-mono">
-                                                <span className="text-emerald-400 font-bold">{strat.default_risk_factor.toFixed(1)}x</span>
-                                            </td>
-                                            {/* Partial % */}
-                                            <td className="py-4 px-4 text-center font-mono">
-                                                <span className="text-amber-400">{strat.default_partial_tp_percent}%</span>
-                                            </td>
+                                                </td>
 
-                                            {/* Move SL to BE */}
-                                            <td className="py-4 px-4 text-center">
-                                                <span className={`px-2 py-1 rounded text-xs font-bold ${strat.default_move_sl_to_entry ? 'bg-indigo-500/20 text-indigo-400' : 'bg-slate-700 text-slate-400'}`}>
-                                                    {strat.default_move_sl_to_entry ? 'ON' : 'OFF'}
-                                                </span>
-                                            </td>
-
-                                            {/* Actions */}
-                                            <td className="py-4 px-4 text-right">
-                                                <div className="flex justify-end gap-2">
-                                                    {selectedAccountId && (
-                                                        isStrategyOnAccount(strat.id) ? (
-                                                            <button
-                                                                onClick={() => removeStrategyFromAccount(strat.id)}
-                                                                className="p-2 bg-red-500/20 text-red-400 rounded-lg"
-                                                                title="Remove from account"
-                                                            >
-                                                                <X className="w-4 h-4" />
-                                                            </button>
-                                                        ) : (
-                                                            <button
-                                                                onClick={() => addStrategyToAccount(strat.id)}
-                                                                className="p-2 bg-emerald-500/20 text-emerald-400 rounded-lg"
-                                                                title="Add to account"
-                                                            >
-                                                                <Plus className="w-4 h-4" />
-                                                            </button>
-                                                        )
-                                                    )}
-                                                    <button
-                                                        onClick={() => handleEdit(strat)}
-                                                        className="p-2 bg-slate-800 hover:bg-indigo-500/20 text-slate-400 hover:text-indigo-400 rounded-lg"
-                                                    >
-                                                        <Pencil className="w-4 h-4" />
-                                                    </button>
-                                                    <button
-                                                        onClick={() => handleDelete(strat.id)}
-                                                        className="p-2 bg-slate-800 hover:bg-red-500/20 text-slate-400 hover:text-red-400 rounded-lg"
-                                                    >
-                                                        <Trash2 className="w-4 h-4" />
-                                                    </button>
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    ))}
-                                    {strategies.length === 0 && !loading && (
-                                        <tr>
-                                            <td colSpan={6} className="py-12 text-center text-slate-500 italic">
-                                                No strategies defined yet.
-                                            </td>
-                                        </tr>
-                                    )}
-                                </tbody>
-                            </table>
-                        </div>
-                    </section>
+                                                {/* Actions */}
+                                                <td className="table-cell text-right">
+                                                    <div className="flex justify-end gap-1.5">
+                                                        {selectedAccountId && (
+                                                            isStrategyOnAccount(strat.id) ? (
+                                                                <button
+                                                                    onClick={() => removeStrategyFromAccount(strat.id)}
+                                                                    className={`${iconBtn} hover:bg-red-500/15 hover:text-red-300`}
+                                                                    title="Remove from account"
+                                                                    aria-label="Remove from account"
+                                                                >
+                                                                    <X className="w-4 h-4" />
+                                                                </button>
+                                                            ) : (
+                                                                <button
+                                                                    onClick={() => addStrategyToAccount(strat.id)}
+                                                                    className={`${iconBtn} hover:bg-emerald-500/15 hover:text-emerald-300`}
+                                                                    title="Add to account"
+                                                                    aria-label="Add to account"
+                                                                >
+                                                                    <Plus className="w-4 h-4" />
+                                                                </button>
+                                                            )
+                                                        )}
+                                                        <button
+                                                            onClick={() => handleEdit(strat)}
+                                                            className={`${iconBtn} hover:bg-indigo-500/15 hover:text-indigo-300`}
+                                                            title="Edit"
+                                                            aria-label="Edit"
+                                                        >
+                                                            <Pencil className="w-4 h-4" />
+                                                        </button>
+                                                        <button
+                                                            onClick={() => handleDelete(strat.id)}
+                                                            className={`${iconBtn} hover:bg-red-500/15 hover:text-red-300`}
+                                                            title="Delete"
+                                                            aria-label="Delete"
+                                                        >
+                                                            <Trash2 className="w-4 h-4" />
+                                                        </button>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        ) : (
+                            !loading && (
+                                <EmptyState
+                                    icon={Layers}
+                                    title="No strategies defined yet"
+                                    hint="Create a strategy template above — its Webhook ID is what your TradingView alerts must send to route into it."
+                                />
+                            )
+                        )}
+                    </Card>
                 </>
             )}
         </div>

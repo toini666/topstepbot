@@ -1,11 +1,13 @@
 /**
  * Open Positions Table Component
- * 
+ *
  * Displays the current open positions with their PnL and close actions.
  */
 
-import { Activity, AlertTriangle, X } from 'lucide-react';
+import type { CSSProperties } from 'react';
+import { Activity, AlertTriangle, X, LayoutGrid } from 'lucide-react';
 import type { Position, Trade, Strategy } from '../../types';
+import { Card, CardHeader, Badge, EmptyState } from '../ui';
 
 interface PositionsTableProps {
     positions: Position[];
@@ -23,38 +25,47 @@ export function PositionsTable({
     onFlattenAll,
 }: PositionsTableProps) {
     return (
-        <section className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6 flex flex-col lg:col-span-2">
-            <div className="flex justify-between items-start mb-6">
-                <h2 className="text-xl font-semibold flex items-center gap-2">
-                    <Activity className="w-5 h-5 text-indigo-400" />
-                    Open Positions
-                </h2>
-                <button
-                    onClick={onFlattenAll}
-                    className="btn-danger text-xs"
-                    title="Flatten & Cancel All"
-                >
-                    <AlertTriangle className="w-4 h-4" />
-                    Flatten & Cancel All
-                </button>
-            </div>
+        <Card className="flex flex-col lg:col-span-2">
+            <CardHeader
+                icon={Activity}
+                title="Open Positions"
+                annotation={positions.length > 0 ? `${positions.length}` : undefined}
+                actions={
+                    <button
+                        onClick={onFlattenAll}
+                        className="btn-kill"
+                        title="Flatten & Cancel All"
+                    >
+                        <AlertTriangle className="w-4 h-4" />
+                        Flatten &amp; Cancel All
+                    </button>
+                }
+            />
 
+            {positions.length === 0 ? (
+                <EmptyState
+                    icon={LayoutGrid}
+                    title="No open positions"
+                    hint="Positions opened by the bot or manually will appear here."
+                    className="flex-1"
+                />
+            ) : (
             <div className="overflow-x-auto flex-1">
                 <table className="w-full text-sm text-left">
-                    <thead className="text-slate-500 border-b border-slate-800 uppercase text-xs">
-                        <tr>
-                            <th className="py-3 px-4">Contract</th>
-                            <th className="py-3 px-4">Strategy</th>
-                            <th className="py-3 px-4 text-center">Side</th>
-                            <th className="py-3 px-4 text-center">Qty</th>
-                            <th className="py-3 px-4 text-right">Entry</th>
-                            <th className="py-3 px-4 text-right">Current</th>
-                            <th className="py-3 px-4 text-right">PnL</th>
-                            <th className="py-3 px-4 text-center">Action</th>
+                    <thead>
+                        <tr className="table-header">
+                            <th className="table-cell text-left">Contract</th>
+                            <th className="table-cell text-left">Strategy</th>
+                            <th className="table-cell text-center">Side</th>
+                            <th className="table-cell num">Qty</th>
+                            <th className="table-cell num">Entry</th>
+                            <th className="table-cell num">Current</th>
+                            <th className="table-cell num">PnL</th>
+                            <th className="table-cell text-center">Action</th>
                         </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-800/50">
-                        {positions.map((pos) => {
+                    <tbody>
+                        {positions.map((pos, index) => {
                             // Find matching trade for strategy info
                             const matchingTrade = trades.find(t =>
                                 t.ticker && pos.contractId &&
@@ -66,32 +77,36 @@ export function PositionsTable({
                             const tf = matchingTrade?.timeframe;
 
                             return (
-                                <tr key={pos.id} className="hover:bg-slate-800/30 transition-colors">
-                                    <td className="py-3 px-4 font-bold text-white">{pos.contractId}</td>
-                                    <td className="py-3 px-4 text-violet-300 font-mono text-xs">
+                                <tr
+                                    key={pos.id}
+                                    className="table-row animate-stagger"
+                                    style={{ '--i': index } as CSSProperties}
+                                >
+                                    <td className="table-cell font-bold text-white">{pos.contractId}</td>
+                                    <td className="table-cell text-violet-300 font-mono text-xs">
                                         {tf ? `${stratDisplay} (${tf})` : stratDisplay}
                                     </td>
-                                    <td className="py-3 px-4 text-center">
-                                        <span className={pos.type === 1 ? 'badge-success' : 'badge-danger'}>
+                                    <td className="table-cell text-center">
+                                        <Badge variant={pos.type === 1 ? 'success' : 'danger'} dot>
                                             {pos.type === 1 ? 'LONG' : 'SHORT'}
-                                        </span>
+                                        </Badge>
                                     </td>
-                                    <td className="py-3 px-4 text-center font-mono">{pos.size}</td>
-                                    <td className="py-3 px-4 text-right font-mono">{pos.averagePrice.toFixed(2)}</td>
-                                    <td className="py-3 px-4 text-right font-mono text-slate-400">
+                                    <td className="table-cell num">{pos.size}</td>
+                                    <td className="table-cell num">{pos.averagePrice.toFixed(2)}</td>
+                                    <td className="table-cell num text-slate-400">
                                         {pos.currentPrice ? pos.currentPrice.toFixed(2) : '-'}
                                     </td>
-                                    <td className={`py-3 px-4 text-right font-mono font-bold ${pos.unrealizedPnl === undefined || pos.unrealizedPnl === null
-                                        ? 'text-slate-500'
+                                    <td className={`table-cell num ${pos.unrealizedPnl === undefined || pos.unrealizedPnl === null
+                                        ? 'font-mono font-bold text-slate-500'
                                         : pos.unrealizedPnl >= 0
-                                            ? 'text-green-400'
-                                            : 'text-red-400'
+                                            ? 'readout-up'
+                                            : 'readout-down'
                                         }`}>
                                         {pos.unrealizedPnl !== undefined && pos.unrealizedPnl !== null
                                             ? `$${pos.unrealizedPnl.toFixed(2)}`
                                             : '-'}
                                     </td>
-                                    <td className="py-3 px-4 text-center">
+                                    <td className="table-cell text-center">
                                         <button
                                             onClick={() => onClosePosition(pos.contractId)}
                                             className="p-1.5 hover:bg-red-500/20 text-red-400 rounded-lg transition-colors"
@@ -103,14 +118,10 @@ export function PositionsTable({
                                 </tr>
                             );
                         })}
-                        {positions.length === 0 && (
-                            <tr>
-                                <td colSpan={8} className="py-8 text-center text-slate-500 italic">No open positions.</td>
-                            </tr>
-                        )}
                     </tbody>
                 </table>
             </div>
-        </section>
+            )}
+        </Card>
     );
 }

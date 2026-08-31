@@ -1,7 +1,7 @@
 /**
  * Dashboard Header Component
- * 
- * Displays logo, status badges (connection, market, session), 
+ *
+ * Displays logo, status badges (connection, market, session),
  * account selector dropdown, and daily PnL/active trades stats.
  */
 
@@ -11,6 +11,7 @@ import axios from 'axios';
 import { toast } from 'sonner';
 import type { Account, AccountSettings, MarketStatus } from '../../types';
 import { API_BASE } from '../../config';
+import { StatusLamp, Stat } from '../ui';
 
 interface HeaderProps {
     // Connection
@@ -85,42 +86,47 @@ export function Header({
     }, [accountDropdownOpen]);
 
     return (
-        <header className="max-w-7xl mx-auto mb-6 flex justify-between items-center bg-slate-900/50 p-6 rounded-2xl border border-slate-800/60 shadow-lg shadow-black/20">
+        <header className="max-w-7xl mx-auto mb-6 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-5 bg-slate-900/50 p-4 sm:p-6 rounded-2xl border border-slate-800/60 shadow-lg shadow-black/20">
             <div className="flex items-center gap-4">
-                <img src="/robot_favicon.png" alt="Bot Logo" className="w-12 h-12 rounded-xl" />
+                <img
+                    src="/robot_favicon.png"
+                    alt="Bot Logo"
+                    className="w-12 h-12 rounded-xl ring-1 ring-indigo-400/30 shadow-[0_0_20px_-4px_rgba(99,102,241,0.45)]"
+                />
                 <div>
-                    <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-400 to-indigo-400 bg-clip-text text-transparent">
+                    <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-white">
                         TopStep Bot Toini666
                     </h1>
                     <div className="flex items-center gap-2 mt-2 flex-wrap">
                         {/* Connection Status */}
-                        <div className="flex items-center gap-2 bg-slate-800/50 px-3 py-1 rounded-full border border-slate-700/50 text-xs text-slate-400">
-                            <span>Status:</span>
-                            <span className={`font-mono font-bold ${isConnected ? 'text-green-400' : 'text-orange-400'}`}>
-                                {isConnected ? 'ONLINE' : 'DISCONNECTED'}
-                            </span>
-                        </div>
+                        <StatusLamp
+                            color={isConnected ? 'emerald' : 'red'}
+                            live
+                            label="STATUS"
+                            value={isConnected ? 'ONLINE' : 'DISCONNECTED'}
+                        />
 
                         {/* Market Status */}
-                        <div className="flex items-center gap-2 bg-slate-800/50 px-3 py-1 rounded-full border border-slate-700/50 text-xs text-slate-400">
-                            <span>Market:</span>
-                            <span className={`font-mono font-bold ${isMarketOpen ? 'text-blue-400' : 'text-slate-500'}`}>
-                                {isMarketOpen ? 'OPEN' : 'CLOSED'}
-                            </span>
-                        </div>
+                        <StatusLamp
+                            color={isMarketOpen ? 'sky' : 'slate'}
+                            live={isMarketOpen}
+                            label="MARKET"
+                            value={isMarketOpen ? 'OPEN' : 'CLOSED'}
+                        />
 
                         {/* Current Session */}
                         {isMarketOpen && marketStatus.current_session && (
-                            <div className="flex items-center gap-2 bg-slate-800/50 px-3 py-1 rounded-full border border-slate-700/50 text-xs text-slate-400">
-                                <span>Session:</span>
-                                <span className="font-mono font-bold text-amber-400">{marketStatus.current_session}</span>
-                            </div>
+                            <StatusLamp
+                                color="amber"
+                                label="SESSION"
+                                value={marketStatus.current_session}
+                            />
                         )}
                     </div>
                 </div>
             </div>
 
-            <div className="flex items-center gap-8">
+            <div className="flex flex-wrap items-center gap-4 lg:gap-6">
                 {/* Connect / Force Reconnect Buttons */}
                 {!isConnected && (
                     <div className="flex gap-2">
@@ -135,7 +141,7 @@ export function Header({
                             onClick={handleForceReconnect}
                             disabled={reconnecting}
                             title="Reset all backoff timers and force a fresh login"
-                            className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-amber-400 border border-amber-500/40 rounded-lg hover:bg-amber-500/10 transition-colors disabled:opacity-50"
+                            className="inline-flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-semibold text-amber-400 rounded-xl border border-amber-500/40 bg-amber-500/5 hover:bg-amber-500/10 hover:border-amber-500/60 hover:text-amber-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                             <RefreshCw className={`w-3.5 h-3.5 ${reconnecting ? 'animate-spin' : ''}`} />
                             {reconnecting ? "..." : "Force"}
@@ -145,91 +151,82 @@ export function Header({
 
                 {/* Account Selector */}
                 {isConnected && (
-                    <div className="flex items-center gap-2">
-                        <div className="bg-slate-900 border border-slate-800/60 p-2 rounded-xl min-w-[200px] flex flex-col justify-center relative group-account-selector">
-                            <p className="text-slate-400 text-xs uppercase tracking-wider mb-1 ml-1">Connected Account</p>
-                            <button
-                                onClick={() => accounts.length > 0 && setAccountDropdownOpen(!accountDropdownOpen)}
-                                className="w-full flex items-center justify-between text-left px-1 focus:outline-none"
-                                disabled={accounts.length === 0}
-                            >
-                                <span className="text-white font-mono text-sm truncate mr-2">
-                                    {currentAccount ? `${currentAccount.name} (${currentAccount.id})` : 'Select Account'}
-                                </span>
-                                <ChevronDown className={`w-4 h-4 text-slate-500 transition-transform duration-200 ${accountDropdownOpen ? 'rotate-180' : ''}`} />
-                            </button>
+                    <div className="relative group-account-selector flex flex-col justify-center min-w-[200px] bg-slate-900 border border-slate-800/60 p-2 rounded-xl">
+                        <p className="micro-label mb-1 ml-1">Connected Account</p>
+                        <button
+                            onClick={() => accounts.length > 0 && setAccountDropdownOpen(!accountDropdownOpen)}
+                            className="w-full flex items-center justify-between text-left px-1"
+                            disabled={accounts.length === 0}
+                        >
+                            <span className="text-white font-mono text-sm truncate mr-2">
+                                {currentAccount ? `${currentAccount.name} (${currentAccount.id})` : 'Select Account'}
+                            </span>
+                            <ChevronDown className={`w-4 h-4 text-slate-500 transition-transform duration-200 ${accountDropdownOpen ? 'rotate-180' : ''}`} />
+                        </button>
 
-                            {/* Dropdown */}
-                            {accountDropdownOpen && accounts.length > 0 && (
-                                <div className="absolute top-full left-0 mt-2 w-full bg-slate-800 border border-slate-700 rounded-xl shadow-xl overflow-hidden z-20">
-                                    <div className="max-h-60 overflow-y-auto custom-scrollbar">
-                                        {accounts.map((acc) => (
-                                            <button
-                                                key={acc.id}
-                                                onClick={() => {
-                                                    setSelectedAccountId(acc.id);
-                                                    setAccountDropdownOpen(false);
-                                                }}
-                                                className={`w-full text-left px-4 py-2 flex items-center justify-between transition-colors hover:bg-slate-700/50 ${acc.id === selectedAccountId ? 'bg-indigo-500/10 text-indigo-400' : 'text-slate-300'
-                                                    }`}
-                                            >
-                                                <div className="flex items-center gap-2 truncate">
-                                                    <div
-                                                        className={`p-0.5 rounded-full ${accountSettings[acc.id]?.trading_enabled ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-500'}`}
-                                                        title={accountSettings[acc.id]?.trading_enabled ? "Trading ON" : "Trading OFF"}
-                                                    >
-                                                        <Power className="w-3 h-3" />
-                                                    </div>
-                                                    <span className="font-mono text-xs truncate">{acc.name} ({acc.id})</span>
-                                                </div>
-                                                {acc.id === selectedAccountId && <CheckCircle className="w-3 h-3 flex-shrink-0" />}
-                                            </button>
-                                        ))}
-                                    </div>
-
-                                    {/* Disconnect Option */}
-                                    <div className="border-t border-slate-700 mt-1 pt-1 bg-slate-900/50">
+                        {/* Dropdown */}
+                        {accountDropdownOpen && accounts.length > 0 && (
+                            <div className="dropdown-menu top-full left-0 mt-2 w-full">
+                                <div className="max-h-60 overflow-y-auto custom-scrollbar">
+                                    {accounts.map((acc) => (
                                         <button
+                                            key={acc.id}
                                             onClick={() => {
+                                                setSelectedAccountId(acc.id);
                                                 setAccountDropdownOpen(false);
-                                                onDisconnect();
                                             }}
-                                            className="w-full text-left px-4 py-2 flex items-center gap-2 text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-colors"
+                                            className={acc.id === selectedAccountId ? 'dropdown-item-active' : 'dropdown-item'}
                                         >
-                                            <div className="p-0.5 rounded-full bg-red-500/10">
-                                                <Power className="w-3 h-3" />
+                                            <div className="flex items-center gap-2 truncate">
+                                                <div
+                                                    className={`p-0.5 rounded-full ${accountSettings[acc.id]?.trading_enabled ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-500'}`}
+                                                    title={accountSettings[acc.id]?.trading_enabled ? "Trading ON" : "Trading OFF"}
+                                                >
+                                                    <Power className="w-3 h-3" />
+                                                </div>
+                                                <span className="font-mono text-xs truncate">{acc.name} ({acc.id})</span>
                                             </div>
-                                            <span className="font-bold text-xs">Disconnect</span>
+                                            {acc.id === selectedAccountId && <CheckCircle className="w-3 h-3 flex-shrink-0" />}
                                         </button>
-                                    </div>
+                                    ))}
                                 </div>
-                            )}
-                        </div>
+
+                                {/* Disconnect Option */}
+                                <div className="border-t border-slate-700 mt-1 pt-1 bg-slate-900/50">
+                                    <button
+                                        onClick={() => {
+                                            setAccountDropdownOpen(false);
+                                            onDisconnect();
+                                        }}
+                                        className="w-full text-left px-4 py-2 flex items-center gap-2 text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-colors"
+                                    >
+                                        <div className="p-0.5 rounded-full bg-red-500/10">
+                                            <Power className="w-3 h-3" />
+                                        </div>
+                                        <span className="font-bold text-xs">Disconnect</span>
+                                    </button>
+                                </div>
+                            </div>
+                        )}
                     </div>
                 )}
 
-                <div className="h-8 w-px bg-slate-700/40" />
+                <div className="hidden lg:block h-8 w-px bg-slate-700/40" />
 
                 {/* Stats */}
-                <div className="flex gap-8">
-                    <div className="bg-slate-900 border border-slate-800/60 p-4 rounded-xl min-w-[150px] flex flex-col justify-between shadow-lg shadow-black/20">
-                        <p className="text-slate-400 text-xs uppercase tracking-wider mb-1">Daily P&L (Realized)</p>
-                        <div className="flex items-center gap-2">
-                            <DollarSign className={`w-5 h-5 ${dailyPnl >= 0 ? 'text-green-400' : 'text-red-400'}`} />
-                            <span className={`text-2xl font-mono font-bold ${dailyPnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                                {dailyPnl.toFixed(2)}
-                            </span>
-                        </div>
-                    </div>
-                    <div className="bg-slate-900 border border-slate-800/60 p-4 rounded-xl min-w-[150px] flex flex-col justify-between shadow-lg shadow-black/20">
-                        <p className="text-slate-400 text-xs uppercase tracking-wider mb-1">Active Trades</p>
-                        <div className="flex items-center gap-2">
-                            <Activity className="w-5 h-5 text-blue-400" />
-                            <span className="text-2xl font-mono font-bold text-white">
-                                {activePositions}
-                            </span>
-                        </div>
-                    </div>
+                <div className="flex flex-wrap gap-4">
+                    <Stat
+                        label="Daily P&L (Realized)"
+                        value={`${dailyPnl > 0 ? '+' : dailyPnl < 0 ? '−' : ''}$${Math.abs(dailyPnl).toFixed(2)}`}
+                        icon={DollarSign}
+                        tone={dailyPnl > 0 ? 'up' : dailyPnl < 0 ? 'down' : 'flat'}
+                    />
+                    <Stat
+                        label="Active Trades"
+                        value={activePositions}
+                        icon={Activity}
+                        tone="neutral"
+                    />
                 </div>
             </div>
         </header>

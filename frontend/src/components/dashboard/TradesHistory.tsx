@@ -1,13 +1,15 @@
 /**
  * Trades History Table Component
- * 
+ *
  * Displays closed trades with filtering by time period and strategy.
  */
 
 import { useState, useEffect } from 'react';
-import { DollarSign, ChevronDown, CheckCircle, RefreshCw } from 'lucide-react';
+import type { CSSProperties } from 'react';
+import { DollarSign, ChevronDown, CheckCircle, RefreshCw, History } from 'lucide-react';
 import { formatInUserTz } from '../../utils/timezone';
 import type { AggregatedTrade, Strategy } from '../../types';
+import { Card, CardHeader, Badge, SegmentedControl, EmptyState } from '../ui';
 
 interface TradesHistoryProps {
     trades: AggregatedTrade[];
@@ -18,6 +20,11 @@ interface TradesHistoryProps {
     isReconcileDisabled: boolean;
     reconcileTitle: string;
 }
+
+const PERIOD_OPTIONS = [
+    { value: 'today', label: 'Today' },
+    { value: 'week', label: '7 Days' },
+] as const;
 
 export function TradesHistory({
     trades,
@@ -48,43 +55,37 @@ export function TradesHistory({
     );
 
     return (
-        <section className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6">
-            <h2 className="text-xl font-semibold mb-6 flex items-center gap-2">
-                <DollarSign className="w-5 h-5 text-emerald-400" />
-                Closed Trades (History)
-                <div className="ml-auto flex items-center gap-2">
-                    {/* Reconcile Button */}
-                    <button
-                        onClick={onReconcile}
-                        disabled={isReconcileDisabled}
-                        className="btn-outline p-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:text-slate-400 disabled:hover:bg-transparent disabled:hover:border-slate-700/60"
-                        title={reconcileTitle}
-                    >
-                        <RefreshCw className="w-4 h-4" />
-                    </button>
-
-                    {/* Time Filter */}
-                    <div className="flex bg-slate-800 rounded-lg p-1 text-xs font-medium">
+        <Card>
+            <CardHeader
+                icon={DollarSign}
+                iconClassName="text-emerald-400"
+                title="Closed Trades (History)"
+                annotation={trades.length > 0 ? `${filteredTrades.length}` : undefined}
+                actions={
+                    <>
+                        {/* Reconcile Button */}
                         <button
-                            onClick={() => setHistoryFilter('today')}
-                            className={`px-3 py-1 rounded-md transition-all ${historyFilter === 'today' ? 'bg-indigo-500 text-white shadow' : 'text-slate-400 hover:text-slate-200'}`}
+                            onClick={onReconcile}
+                            disabled={isReconcileDisabled}
+                            className="btn-outline p-2"
+                            title={reconcileTitle}
                         >
-                            Today
-                        </button>
-                        <button
-                            onClick={() => setHistoryFilter('week')}
-                            className={`px-3 py-1 rounded-md transition-all ${historyFilter === 'week' ? 'bg-indigo-500 text-white shadow' : 'text-slate-400 hover:text-slate-200'}`}
-                        >
-                            7 Days
+                            <RefreshCw className="w-4 h-4" />
                         </button>
 
-                        <div className="w-px h-4 bg-slate-700 mx-2 self-center"></div>
+                        {/* Time Filter */}
+                        <SegmentedControl
+                            options={PERIOD_OPTIONS}
+                            value={historyFilter}
+                            onChange={setHistoryFilter}
+                            aria-label="Trade history period"
+                        />
 
                         {/* Strategy Filter */}
                         <div className="relative group-strategy-selector">
                             <button
                                 onClick={() => setStrategyDropdownOpen(!strategyDropdownOpen)}
-                                className="flex items-center gap-2 bg-slate-800 text-slate-300 text-xs font-medium px-3 py-1.5 rounded-md border border-slate-700 hover:bg-slate-700 hover:text-white transition-colors"
+                                className="btn-outline text-xs"
                             >
                                 <span>
                                     {selectedStrategyFilter === 'ALL'
@@ -95,15 +96,14 @@ export function TradesHistory({
                             </button>
 
                             {strategyDropdownOpen && (
-                                <div className="absolute top-full right-0 mt-2 w-48 bg-slate-800 border border-slate-700 rounded-xl shadow-xl overflow-hidden z-20 animate-fade-in-down">
+                                <div className="dropdown-menu top-full right-0 mt-2 w-48">
                                     <div className="max-h-60 overflow-y-auto custom-scrollbar p-1">
                                         <button
                                             onClick={() => {
                                                 setSelectedStrategyFilter('ALL');
                                                 setStrategyDropdownOpen(false);
                                             }}
-                                            className={`w-full text-left px-3 py-2 rounded-lg flex items-center justify-between transition-colors text-xs ${selectedStrategyFilter === 'ALL' ? 'bg-indigo-500/10 text-indigo-400' : 'text-slate-300 hover:bg-slate-700/50'
-                                                }`}
+                                            className={selectedStrategyFilter === 'ALL' ? 'dropdown-item-active rounded-lg' : 'dropdown-item rounded-lg'}
                                         >
                                             <span>All Strategies</span>
                                             {selectedStrategyFilter === 'ALL' && <CheckCircle className="w-3 h-3" />}
@@ -118,8 +118,7 @@ export function TradesHistory({
                                                         setSelectedStrategyFilter(strat || '');
                                                         setStrategyDropdownOpen(false);
                                                     }}
-                                                    className={`w-full text-left px-3 py-2 rounded-lg flex items-center justify-between transition-colors text-xs ${selectedStrategyFilter === strat ? 'bg-indigo-500/10 text-indigo-400' : 'text-slate-300 hover:bg-slate-700/50'
-                                                        }`}
+                                                    className={selectedStrategyFilter === strat ? 'dropdown-item-active rounded-lg' : 'dropdown-item rounded-lg'}
                                                 >
                                                     <span>{displayName}</span>
                                                     {selectedStrategyFilter === strat && <CheckCircle className="w-3 h-3" />}
@@ -130,40 +129,51 @@ export function TradesHistory({
                                 </div>
                             )}
                         </div>
-                    </div>
-                </div>
-            </h2>
+                    </>
+                }
+            />
 
+            {filteredTrades.length === 0 ? (
+                <EmptyState
+                    icon={History}
+                    title="No closed trades found"
+                    hint="Trades closed by the bot will show up here."
+                />
+            ) : (
             <div className="overflow-x-auto">
                 <table className="w-full text-sm text-left">
-                    <thead className="text-slate-500 border-b border-slate-800 uppercase text-xs">
-                        <tr>
-                            <th className="py-3 px-4">Entry Time</th>
-                            <th className="py-3 px-4">Exit Time</th>
-                            <th className="py-3 px-4">Strategy</th>
-                            <th className="py-3 px-4">Symbol</th>
-                            <th className="py-3 px-4 text-center">Side</th>
-                            <th className="py-3 px-4 text-center">Qty</th>
-                            <th className="py-3 px-4 text-right">Entry Price</th>
-                            <th className="py-3 px-4 text-right">Exit Price</th>
-                            <th className="py-3 px-4 text-right" title="Trading fees + TopStep commissions">Fees + Comm.</th>
-                            <th className="py-3 px-4 text-right" title="Net PnL = Gross PnL - Fees - Commissions">Net PnL</th>
+                    <thead>
+                        <tr className="table-header">
+                            <th className="table-cell text-left">Entry Time</th>
+                            <th className="table-cell text-left">Exit Time</th>
+                            <th className="table-cell text-left">Strategy</th>
+                            <th className="table-cell text-left">Symbol</th>
+                            <th className="table-cell text-center">Side</th>
+                            <th className="table-cell num">Qty</th>
+                            <th className="table-cell num">Entry Price</th>
+                            <th className="table-cell num">Exit Price</th>
+                            <th className="table-cell num" title="Trading fees + TopStep commissions">Fees + Comm.</th>
+                            <th className="table-cell num" title="Net PnL = Gross PnL - Fees - Commissions">Net PnL</th>
                         </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-800/50">
-                        {filteredTrades.map((trade) => {
+                    <tbody>
+                        {filteredTrades.map((trade, index) => {
                             const fees = trade.fees || 0;
                             const grossPnl = trade.pnl ?? 0;
                             const netPnl = grossPnl - fees;
                             return (
-                                <tr key={trade.id} className="hover:bg-slate-800/30 transition-colors">
-                                    <td className="py-3 px-4 text-slate-500 font-mono text-xs">
+                                <tr
+                                    key={trade.id}
+                                    className="table-row animate-stagger"
+                                    style={{ '--i': index } as CSSProperties}
+                                >
+                                    <td className="table-cell text-slate-500 font-mono text-xs">
                                         {formatInUserTz(trade.entryTime, 'MM/dd HH:mm:ss')}
                                     </td>
-                                    <td className="py-3 px-4 text-slate-500 font-mono text-xs">
+                                    <td className="table-cell text-slate-500 font-mono text-xs">
                                         {formatInUserTz(trade.exitTime, 'HH:mm:ss')}
                                     </td>
-                                    <td className="py-3 px-4 text-violet-300 font-mono text-xs">
+                                    <td className="table-cell text-violet-300 font-mono text-xs">
                                         {(() => {
                                             const strat = strategies.find(s => s.tv_id === trade.strategy);
                                             const displayName = strat?.name || trade.strategy || '-';
@@ -171,21 +181,20 @@ export function TradesHistory({
                                             return tf ? `${displayName} (${tf})` : displayName;
                                         })()}
                                     </td>
-                                    <td className="py-3 px-4 font-bold text-white">{trade.symbol}</td>
-                                    <td className="py-3 px-4 text-center">
-                                        <span className={trade.side === 'LONG' ? 'badge-success' : 'badge-danger'}>
+                                    <td className="table-cell font-bold text-white">{trade.symbol}</td>
+                                    <td className="table-cell text-center">
+                                        <Badge variant={trade.side === 'LONG' ? 'success' : 'danger'} dot>
                                             {trade.side}
-                                        </span>
+                                        </Badge>
                                     </td>
-                                    <td className="py-3 px-4 text-center font-mono">{trade.size}</td>
-                                    <td className="py-3 px-4 text-right font-mono">{trade.entryPrice.toFixed(2)}</td>
-                                    <td className="py-3 px-4 text-right font-mono">{trade.exitPrice.toFixed(2)}</td>
-                                    <td className="py-3 px-4 text-right font-mono text-slate-400">
+                                    <td className="table-cell num">{trade.size}</td>
+                                    <td className="table-cell num">{trade.entryPrice.toFixed(2)}</td>
+                                    <td className="table-cell num">{trade.exitPrice.toFixed(2)}</td>
+                                    <td className="table-cell num text-slate-400">
                                         {fees ? `$${fees.toFixed(2)}` : '-'}
                                     </td>
                                     <td
-                                        className={`py-3 px-4 text-right font-mono font-bold ${netPnl > 0 ? 'text-green-400' : netPnl < 0 ? 'text-red-400' : 'text-slate-500'
-                                            }`}
+                                        className={`table-cell num ${netPnl > 0 ? 'readout-up' : netPnl < 0 ? 'readout-down' : 'readout-flat'}`}
                                         title={`Gross: $${grossPnl.toFixed(2)} − Fees+Comm.: $${fees.toFixed(2)}`}
                                     >
                                         {trade.pnl !== undefined && trade.pnl !== null ? `$${netPnl.toFixed(2)}` : '-'}
@@ -193,14 +202,10 @@ export function TradesHistory({
                                 </tr>
                             );
                         })}
-                        {filteredTrades.length === 0 && (
-                            <tr>
-                                <td colSpan={10} className="py-8 text-center text-slate-500 italic">No closed trades found.</td>
-                            </tr>
-                        )}
                     </tbody>
                 </table>
             </div>
-        </section>
+            )}
+        </Card>
     );
 }

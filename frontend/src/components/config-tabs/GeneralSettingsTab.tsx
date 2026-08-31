@@ -1,17 +1,20 @@
 /**
  * General Settings Tab Component
- * 
+ *
  * Contains market hours, trading days, blocked periods, news blocks,
  * position actions, auto-flatten, and risk rules settings.
  */
 
 import { useState, useEffect } from 'react';
+import type { ReactNode } from 'react';
 import axios from 'axios';
-import { Clock, Calendar, Plus, Trash2, ChevronDown, CheckCircle, Newspaper, AlertTriangle, Globe } from 'lucide-react';
+import { Clock, Calendar, Plus, Trash2, ChevronDown, CheckCircle, Newspaper, AlertTriangle, Globe, Radio } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import type { TimeBlock, NewsBlock } from '../../types';
 import { TimePicker } from '../TimePicker';
 import { API_BASE } from '../../config';
 import { getUserTimezone, setUserTimezone } from '../../utils/timezone';
+import { Toggle } from '../ui';
 
 export interface GeneralSettingsState {
     blockedPeriodsEnabled: boolean;
@@ -51,6 +54,16 @@ const COMMON_TIMEZONES = [
     'Australia/Sydney', 'Pacific/Auckland',
     'UTC',
 ];
+
+/** Icon + micro-label field heading. Purely presentational grouping helper. */
+function FieldLabel({ icon: Icon, children }: { icon: LucideIcon; children: ReactNode }) {
+    return (
+        <div className="flex items-center gap-2 mb-2">
+            <Icon className="w-3.5 h-3.5 text-slate-500" />
+            <label className="label mb-0">{children}</label>
+        </div>
+    );
+}
 
 export function GeneralSettingsTab({ state, onChange }: GeneralSettingsTabProps) {
     const [newsBlocks, setNewsBlocks] = useState<NewsBlock[]>([]);
@@ -119,34 +132,37 @@ export function GeneralSettingsTab({ state, onChange }: GeneralSettingsTabProps)
         onChange('blockedPeriods', newBlocks);
     };
 
+    const apiTimeoutBadge = state.apiTimeout <= 15 ? 'badge-success' : state.apiTimeout <= 25 ? 'badge-warning' : 'badge-danger';
+    const apiTimeoutLabel = state.apiTimeout <= 15 ? 'Low latency' : state.apiTimeout <= 25 ? 'Med latency' : 'High latency';
+    const jobIntervalBadge = state.jobInterval <= 15 ? 'badge-info' : state.jobInterval <= 30 ? 'badge-warning' : 'badge-neutral';
+    const jobIntervalLabel = state.jobInterval <= 15 ? 'Réactif' : state.jobInterval <= 30 ? 'Modéré' : 'Lent';
+
     return (
         <div className="space-y-6">
             {/* Timezone */}
             <div className="space-y-3">
-                <label className="text-sm font-semibold text-slate-300 flex items-center gap-2">
-                    <Globe className="w-4 h-4 text-slate-400" />
-                    Timezone
-                </label>
+                <FieldLabel icon={Globe}>Timezone</FieldLabel>
                 <select
                     value={currentTz}
                     onChange={e => handleTimezoneChange(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500 transition-colors"
+                    className="input"
                 >
                     {tzOptions.map(tz => (
                         <option key={tz} value={tz}>{tz}</option>
                     ))}
                 </select>
-                <p className="text-[10px] text-slate-500 italic">
+                <p className="help-text">
                     All times (market hours, blocked periods, schedules, logs) use this timezone.
                 </p>
             </div>
 
+            <div className="divider-h" />
+
             {/* Market Hours */}
             <div className="space-y-3">
-                <label className="text-sm font-semibold text-slate-300 flex items-center gap-2">
-                    <Calendar className="w-4 h-4 text-slate-400" />
-                    Market Hours ({currentTz.split('/').pop()?.replace(/_/g, ' ') || currentTz})
-                </label>
+                <FieldLabel icon={Calendar}>
+                    Market Hours <span className="text-slate-500 normal-case font-normal">({currentTz.split('/').pop()?.replace(/_/g, ' ') || currentTz})</span>
+                </FieldLabel>
                 <div className="flex items-center gap-3">
                     <TimePicker
                         value={state.marketOpenTime}
@@ -160,26 +176,26 @@ export function GeneralSettingsTab({ state, onChange }: GeneralSettingsTabProps)
                 </div>
 
                 {/* Weekend Markets Toggle */}
-                <div className="flex items-center justify-between bg-slate-950 p-3 rounded-xl border border-slate-800">
+                <div className="flex items-center justify-between bg-slate-900/60 border border-slate-800/60 p-3 rounded-xl">
                     <div>
                         <span className="text-sm text-slate-300">Weekend Markets Open</span>
-                        <p className="text-[10px] text-slate-500">Are futures markets open on Saturday/Sunday?</p>
+                        <p className="help-text">Are futures markets open on Saturday/Sunday?</p>
                     </div>
-                    <button
-                        onClick={() => onChange('weekendMarketsOpen', !state.weekendMarketsOpen)}
-                        className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${state.weekendMarketsOpen ? 'bg-indigo-500' : 'bg-slate-700'}`}
-                    >
-                        <span className={`${state.weekendMarketsOpen ? 'translate-x-5' : 'translate-x-1'} inline-block h-3 w-3 transform rounded-full bg-white transition-transform`} />
-                    </button>
+                    <Toggle
+                        checked={state.weekendMarketsOpen}
+                        onChange={() => onChange('weekendMarketsOpen', !state.weekendMarketsOpen)}
+                        size="sm"
+                        activeColor="indigo"
+                        label="Weekend markets open"
+                    />
                 </div>
             </div>
 
+            <div className="divider-h" />
+
             {/* Trading Days */}
             <div className="space-y-3">
-                <label className="text-sm font-semibold text-slate-300 flex items-center gap-2">
-                    <Calendar className="w-4 h-4 text-slate-400" />
-                    Trading Days
-                </label>
+                <FieldLabel icon={Calendar}>Trading Days</FieldLabel>
                 <div className="flex gap-2">
                     {[
                         { key: 'MON', label: 'M' },
@@ -212,31 +228,33 @@ export function GeneralSettingsTab({ state, onChange }: GeneralSettingsTabProps)
                         );
                     })}
                 </div>
-                <p className="text-[10px] text-slate-500 italic">
+                <p className="help-text">
                     Click to enable/disable trading on each day.
                 </p>
             </div>
+
+            <div className="divider-h" />
 
             {/* Blocked Periods */}
             <div className={`space-y-3 transition-opacity ${!state.blockedPeriodsEnabled ? "opacity-50" : ""}`}>
                 <div className="flex justify-between items-center">
                     <div className="flex items-center gap-3">
-                        <label className="text-sm font-semibold text-slate-300 flex items-center gap-2">
-                            <Clock className="w-4 h-4 text-slate-400" />
-                            Blocked Trading Hours
-                        </label>
-                        <button
-                            onClick={() => onChange('blockedPeriodsEnabled', !state.blockedPeriodsEnabled)}
-                            className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${state.blockedPeriodsEnabled ? 'bg-indigo-500' : 'bg-slate-700'
-                                }`}
-                        >
-                            <span className={`${state.blockedPeriodsEnabled ? 'translate-x-5' : 'translate-x-1'} inline-block h-3 w-3 transform rounded-full bg-white transition-transform`} />
-                        </button>
+                        <div className="flex items-center gap-2">
+                            <Clock className="w-3.5 h-3.5 text-slate-500" />
+                            <label className="label mb-0">Blocked Trading Hours</label>
+                        </div>
+                        <Toggle
+                            checked={state.blockedPeriodsEnabled}
+                            onChange={() => onChange('blockedPeriodsEnabled', !state.blockedPeriodsEnabled)}
+                            size="sm"
+                            activeColor="indigo"
+                            label="Blocked trading hours enabled"
+                        />
                     </div>
                     <button
                         onClick={addTimeBlock}
                         disabled={!state.blockedPeriodsEnabled}
-                        className="text-xs bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500/20 px-2 py-1 rounded-lg flex items-center gap-1 disabled:opacity-50"
+                        className="text-xs bg-indigo-500/10 text-indigo-300 ring-1 ring-inset ring-indigo-400/20 hover:bg-indigo-500/20 px-2 py-1 rounded-lg flex items-center gap-1 disabled:opacity-40"
                     >
                         <Plus size={12} /> Add
                     </button>
@@ -244,13 +262,14 @@ export function GeneralSettingsTab({ state, onChange }: GeneralSettingsTabProps)
 
                 <div className="space-y-2 pr-2">
                     {state.blockedPeriods.map((block, index) => (
-                        <div key={index} className={`flex items-center gap-2 bg-slate-950 p-2 rounded-xl border ${block.enabled ? 'border-indigo-500/30' : 'border-slate-800 opacity-60'}`}>
-                            <button
-                                onClick={() => updateTimeBlock(index, 'enabled', !block.enabled)}
-                                className={`relative inline-flex h-4 w-7 items-center rounded-full transition-colors ${block.enabled ? 'bg-indigo-500' : 'bg-slate-700'}`}
-                            >
-                                <span className={`${block.enabled ? 'translate-x-3.5' : 'translate-x-0.5'} inline-block h-3 w-3 transform rounded-full bg-white transition-transform`} />
-                            </button>
+                        <div key={index} className={`flex items-center gap-2 bg-slate-900/60 p-2 rounded-xl border ${block.enabled ? 'border-indigo-500/30' : 'border-slate-800/60 opacity-60'}`}>
+                            <Toggle
+                                checked={block.enabled}
+                                onChange={() => updateTimeBlock(index, 'enabled', !block.enabled)}
+                                size="sm"
+                                activeColor="indigo"
+                                label={`Blocked period ${index + 1} enabled`}
+                            />
                             <TimePicker
                                 value={block.start}
                                 onChange={(val) => updateTimeBlock(index, 'start', val)}
@@ -275,26 +294,29 @@ export function GeneralSettingsTab({ state, onChange }: GeneralSettingsTabProps)
                 </div>
             </div>
 
+            <div className="divider-h" />
+
             {/* News Block Settings */}
             <div className={`space-y-3 transition-opacity ${!state.newsBlockEnabled ? "opacity-50" : ""}`}>
                 <div className="flex justify-between items-center">
                     <div className="flex items-center gap-3">
-                        <label className="text-sm font-semibold text-slate-300 flex items-center gap-2">
-                            <Newspaper className="w-4 h-4 text-slate-400" />
-                            News Trading Blocks
-                        </label>
-                        <button
-                            onClick={() => onChange('newsBlockEnabled', !state.newsBlockEnabled)}
-                            className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${state.newsBlockEnabled ? 'bg-indigo-500' : 'bg-slate-700'}`}
-                        >
-                            <span className={`${state.newsBlockEnabled ? 'translate-x-5' : 'translate-x-1'} inline-block h-3 w-3 transform rounded-full bg-white transition-transform`} />
-                        </button>
+                        <div className="flex items-center gap-2">
+                            <Newspaper className="w-3.5 h-3.5 text-slate-500" />
+                            <label className="label mb-0">News Trading Blocks</label>
+                        </div>
+                        <Toggle
+                            checked={state.newsBlockEnabled}
+                            onChange={() => onChange('newsBlockEnabled', !state.newsBlockEnabled)}
+                            size="sm"
+                            activeColor="indigo"
+                            label="News trading blocks enabled"
+                        />
                     </div>
                 </div>
 
                 {state.newsBlockEnabled && (
                     <div className="space-y-3 pl-6">
-                        <p className="text-[10px] text-slate-500 italic">
+                        <p className="help-text mt-0">
                             Automatically block trading around major economic events.
                         </p>
                         <div className="flex items-center gap-4">
@@ -304,7 +326,7 @@ export function GeneralSettingsTab({ state, onChange }: GeneralSettingsTabProps)
                                     type="number"
                                     value={state.newsBlockBefore}
                                     onChange={(e) => onChange('newsBlockBefore', Number(e.target.value))}
-                                    className="w-16 bg-slate-950 border border-slate-700 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-indigo-500 transition-colors font-mono text-center"
+                                    className="input-mono !w-16 text-center"
                                     min={0}
                                 />
                                 <span className="text-sm text-slate-400">min before</span>
@@ -315,7 +337,7 @@ export function GeneralSettingsTab({ state, onChange }: GeneralSettingsTabProps)
                                     type="number"
                                     value={state.newsBlockAfter}
                                     onChange={(e) => onChange('newsBlockAfter', Number(e.target.value))}
-                                    className="w-16 bg-slate-950 border border-slate-700 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-indigo-500 transition-colors font-mono text-center"
+                                    className="input-mono !w-16 text-center"
                                     min={0}
                                 />
                                 <span className="text-sm text-slate-400">min after</span>
@@ -326,13 +348,13 @@ export function GeneralSettingsTab({ state, onChange }: GeneralSettingsTabProps)
                         {newsBlocks.length > 0 ? (
                             <div className="space-y-2">
                                 <div className="flex items-center gap-2">
-                                    <span className="text-xs font-semibold text-slate-400">Today's Blocks</span>
-                                    <span className="text-[10px] bg-amber-500/20 text-amber-400 px-1.5 py-0.5 rounded">Today only</span>
+                                    <span className="micro-label">Today's Blocks</span>
+                                    <span className="badge-warning">Today only</span>
                                 </div>
                                 <div className="space-y-1">
                                     {newsBlocks.map((block, idx) => (
-                                        <div key={idx} className="flex items-center gap-2 text-xs bg-slate-950 p-2 rounded-lg">
-                                            <span className={`w-2 h-2 rounded-full ${block.impact === 'High' ? 'bg-red-500' : block.impact === 'Medium' ? 'bg-amber-500' : 'bg-green-500'}`} />
+                                        <div key={idx} className="flex items-center gap-2 text-xs bg-slate-900/60 p-2 rounded-lg">
+                                            <span className={`w-2 h-2 rounded-full ${block.impact === 'High' ? 'bg-red-500' : block.impact === 'Medium' ? 'bg-amber-500' : 'bg-emerald-500'}`} />
                                             <span className="text-slate-500 font-mono">{block.start}-{block.end}</span>
                                             <span className="text-slate-400">{block.country}</span>
                                             <span className="text-slate-300 flex-1 truncate">{block.event}</span>
@@ -347,12 +369,11 @@ export function GeneralSettingsTab({ state, onChange }: GeneralSettingsTabProps)
                 )}
             </div>
 
+            <div className="divider-h" />
+
             {/* Position Action on Blocked Hours */}
             <div className="space-y-3">
-                <label className="text-sm font-semibold text-slate-300 flex items-center gap-2">
-                    <AlertTriangle className="w-4 h-4 text-slate-400" />
-                    Position Action on Blocked Hours
-                </label>
+                <FieldLabel icon={AlertTriangle}>Position Action on Blocked Hours</FieldLabel>
 
                 <div className="pl-6 space-y-3">
                     <div className="flex items-center gap-4">
@@ -360,7 +381,7 @@ export function GeneralSettingsTab({ state, onChange }: GeneralSettingsTabProps)
                         <div className="relative group-position-action">
                             <button
                                 onClick={() => setPositionActionDropdownOpen(!positionActionDropdownOpen)}
-                                className="min-w-[200px] flex items-center justify-between bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white hover:border-indigo-500/50 transition-colors"
+                                className="input !w-auto min-w-[200px] flex items-center justify-between gap-3 text-sm hover:border-indigo-400/40"
                             >
                                 <span>
                                     {state.positionAction === 'NOTHING' && 'Do Nothing'}
@@ -371,7 +392,7 @@ export function GeneralSettingsTab({ state, onChange }: GeneralSettingsTabProps)
                             </button>
 
                             {positionActionDropdownOpen && (
-                                <div className="absolute top-full left-0 mt-2 w-full bg-slate-800 border border-slate-700 rounded-xl shadow-xl overflow-hidden z-20 animate-fade-in-down">
+                                <div className="dropdown-menu top-full left-0 mt-2 w-full">
                                     <div className="p-1">
                                         {[
                                             { value: 'NOTHING', label: 'Do Nothing' },
@@ -384,10 +405,7 @@ export function GeneralSettingsTab({ state, onChange }: GeneralSettingsTabProps)
                                                     onChange('positionAction', option.value as any);
                                                     setPositionActionDropdownOpen(false);
                                                 }}
-                                                className={`w-full text-left px-3 py-2 rounded-lg flex items-center justify-between transition-colors text-sm ${state.positionAction === option.value
-                                                    ? 'bg-indigo-500/10 text-indigo-400'
-                                                    : 'text-slate-300 hover:bg-slate-700/50'
-                                                    }`}
+                                                className={state.positionAction === option.value ? 'dropdown-item-active rounded-lg' : 'dropdown-item rounded-lg'}
                                             >
                                                 <span>{option.label}</span>
                                                 {state.positionAction === option.value && <CheckCircle className="w-3.5 h-3.5" />}
@@ -405,7 +423,7 @@ export function GeneralSettingsTab({ state, onChange }: GeneralSettingsTabProps)
                                     type="number"
                                     value={state.positionActionBuffer}
                                     onChange={(e) => onChange('positionActionBuffer', Number(e.target.value))}
-                                    className="w-16 bg-slate-950 border border-slate-700 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-indigo-500 transition-colors font-mono text-center"
+                                    className="input-mono !w-16 text-center"
                                     min={1}
                                 />
                                 <span className="text-sm text-slate-400">min</span>
@@ -414,26 +432,29 @@ export function GeneralSettingsTab({ state, onChange }: GeneralSettingsTabProps)
                     </div>
 
                     {state.positionAction !== 'NOTHING' && (
-                        <div className={`text-[10px] p-2 rounded-lg inline-block ${state.positionAction === 'FLATTEN' ? 'bg-red-500/10 text-red-400' : 'bg-amber-500/10 text-amber-400'}`}>
-                            {state.positionAction === 'BREAKEVEN' && "Stop Loss will be moved to entry price for all open positions."}
-                            {state.positionAction === 'FLATTEN' && "All positions will be closed and orders cancelled."}
+                        <div className="flex items-start gap-2 text-xs text-slate-400">
+                            <AlertTriangle className={`w-3.5 h-3.5 mt-0.5 flex-shrink-0 ${state.positionAction === 'FLATTEN' ? 'text-red-400' : 'text-amber-400'}`} />
+                            <span>
+                                {state.positionAction === 'BREAKEVEN' && "Stop Loss will be moved to entry price for all open positions."}
+                                {state.positionAction === 'FLATTEN' && "All positions will be closed and orders cancelled."}
+                            </span>
                         </div>
                     )}
                 </div>
             </div>
 
             {/* Auto Flatten */}
-            <div className="space-y-3">
+            <div className="space-y-3 pt-4 border-t border-slate-800/60">
                 <div className="flex justify-between items-center">
                     <div className="flex items-center gap-3">
-                        <label className="text-sm font-semibold text-slate-300">Auto-Flatten (All Accounts)</label>
-                        <button
-                            onClick={() => onChange('autoFlattenEnabled', !state.autoFlattenEnabled)}
-                            className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${state.autoFlattenEnabled ? 'bg-indigo-500' : 'bg-slate-700'
-                                }`}
-                        >
-                            <span className={`${state.autoFlattenEnabled ? 'translate-x-5' : 'translate-x-1'} inline-block h-3 w-3 transform rounded-full bg-white transition-transform`} />
-                        </button>
+                        <label className="label mb-0">Auto-Flatten (All Accounts)</label>
+                        <Toggle
+                            checked={state.autoFlattenEnabled}
+                            onChange={() => onChange('autoFlattenEnabled', !state.autoFlattenEnabled)}
+                            size="sm"
+                            activeColor="indigo"
+                            label="Auto-flatten enabled"
+                        />
                     </div>
                     <TimePicker
                         value={state.autoFlattenTime}
@@ -441,65 +462,73 @@ export function GeneralSettingsTab({ state, onChange }: GeneralSettingsTabProps)
                         disabled={!state.autoFlattenEnabled}
                     />
                 </div>
-                <p className="text-[10px] text-slate-500 italic">
-                    Closes ALL positions and cancels ALL orders across ALL accounts at this time.
+                <p className="help-text flex items-start gap-1.5">
+                    <AlertTriangle className="w-3 h-3 mt-0.5 flex-shrink-0 text-amber-400" />
+                    <span>Closes ALL positions and cancels ALL orders across ALL accounts at this time.</span>
                 </p>
             </div>
 
             {/* Risk Rules */}
-            <div className="space-y-3 pt-4 border-t border-slate-800">
-                <label className="text-sm font-semibold text-slate-300">Risk Rules</label>
+            <div className="space-y-3 pt-4 border-t border-slate-800/60">
+                <label className="label">Risk Rules</label>
 
                 {/* Single Position per Asset */}
                 <div className="flex justify-between items-center">
                     <div>
                         <span className="text-sm text-slate-300">Single Position Per Asset</span>
-                        <p className="text-[10px] text-slate-500">Prevent opening 2 positions on the same asset</p>
+                        <p className="help-text">Prevent opening 2 positions on the same asset</p>
                     </div>
-                    <button
-                        onClick={() => onChange('enforceSinglePosition', !state.enforceSinglePosition)}
-                        className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${state.enforceSinglePosition ? 'bg-indigo-500' : 'bg-slate-700'}`}
-                    >
-                        <span className={`${state.enforceSinglePosition ? 'translate-x-5' : 'translate-x-1'} inline-block h-3 w-3 transform rounded-full bg-white transition-transform`} />
-                    </button>
+                    <Toggle
+                        checked={state.enforceSinglePosition}
+                        onChange={() => onChange('enforceSinglePosition', !state.enforceSinglePosition)}
+                        size="sm"
+                        activeColor="indigo"
+                        label="Enforce single position per asset"
+                    />
                 </div>
 
                 {/* Block Cross-Account Opposite */}
                 <div className="flex justify-between items-center">
                     <div>
                         <span className="text-sm text-slate-300">Block Cross-Account Opposite</span>
-                        <p className="text-[10px] text-slate-500">Prevent LONG on one account if SHORT on another</p>
+                        <p className="help-text">Prevent LONG on one account if SHORT on another</p>
                     </div>
-                    <button
-                        onClick={() => onChange('blockCrossAccount', !state.blockCrossAccount)}
-                        className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${state.blockCrossAccount ? 'bg-indigo-500' : 'bg-slate-700'}`}
-                    >
-                        <span className={`${state.blockCrossAccount ? 'translate-x-5' : 'translate-x-1'} inline-block h-3 w-3 transform rounded-full bg-white transition-transform`} />
-                    </button>
+                    <Toggle
+                        checked={state.blockCrossAccount}
+                        onChange={() => onChange('blockCrossAccount', !state.blockCrossAccount)}
+                        size="sm"
+                        activeColor="indigo"
+                        label="Block cross-account opposite positions"
+                    />
                 </div>
 
                 {/* Manual Trading Mode */}
-                <div className={`flex justify-between items-center p-3 rounded-xl border transition-colors ${state.websocketDisabled ? 'border-amber-500/40 bg-amber-500/5' : 'border-slate-800'}`}>
+                <div className="flex justify-between items-center p-3 rounded-xl border border-slate-800/60 bg-slate-900/60">
                     <div>
-                        <span className="text-sm text-slate-300">Mode trading manuel</span>
-                        <p className="text-[10px] text-slate-500">Désactive le WebSocket pour trader manuellement sur TopstepX en parallèle</p>
+                        <span className="text-sm text-slate-300 flex items-center gap-1.5">
+                            <Radio className={`w-3.5 h-3.5 ${state.websocketDisabled ? 'text-amber-400' : 'text-slate-500'}`} />
+                            Mode trading manuel
+                        </span>
+                        <p className="help-text">Désactive le WebSocket pour trader manuellement sur TopstepX en parallèle</p>
                         {state.websocketDisabled && (
                             <p className="text-[10px] text-amber-400 mt-0.5">WebSocket désactivé — prix via polling HTTP uniquement</p>
                         )}
                     </div>
-                    <button
-                        onClick={() => onChange('websocketDisabled', !state.websocketDisabled)}
-                        className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${state.websocketDisabled ? 'bg-amber-500' : 'bg-slate-700'}`}
-                    >
-                        <span className={`${state.websocketDisabled ? 'translate-x-5' : 'translate-x-1'} inline-block h-3 w-3 transform rounded-full bg-white transition-transform`} />
-                    </button>
+                    <Toggle
+                        checked={state.websocketDisabled}
+                        onChange={() => onChange('websocketDisabled', !state.websocketDisabled)}
+                        size="sm"
+                        activeColor="indigo"
+                        className={state.websocketDisabled ? 'bg-amber-500/90 border-amber-400/50 shadow-[0_0_12px_-2px_rgba(251,191,36,0.5)]' : undefined}
+                        label="Manual trading mode (WebSocket disabled)"
+                    />
                 </div>
             </div>
 
             {/* Network / Performance */}
-            <div className="space-y-3 pt-4 border-t border-slate-800">
+            <div className="space-y-3 pt-4 border-t border-slate-800/60">
                 <div className="flex items-center justify-between">
-                    <label className="text-sm font-semibold text-slate-300">Network / Performance</label>
+                    <label className="label mb-0">Network / Performance</label>
                     <div className="flex gap-1.5">
                         <button
                             type="button"
@@ -526,20 +555,18 @@ export function GeneralSettingsTab({ state, onChange }: GeneralSettingsTabProps)
                             <span className="text-[10px] text-slate-500 ml-1.5">seconds</span>
                         </div>
                         <div className="flex items-center gap-2">
-                            <span className={`text-[10px] px-1.5 py-0.5 rounded font-mono ${state.apiTimeout <= 15 ? 'bg-green-500/10 text-green-400' : state.apiTimeout <= 25 ? 'bg-amber-500/10 text-amber-400' : 'bg-orange-500/10 text-orange-400'}`}>
-                                {state.apiTimeout <= 15 ? 'Low latency' : state.apiTimeout <= 25 ? 'Med latency' : 'High latency'}
-                            </span>
+                            <span className={apiTimeoutBadge}>{apiTimeoutLabel}</span>
                             <input
                                 type="number"
                                 min={3}
                                 max={60}
                                 value={state.apiTimeout}
                                 onChange={e => onChange('apiTimeout', Math.max(3, Math.min(60, Number(e.target.value))))}
-                                className="w-16 bg-slate-950 border border-slate-700 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-indigo-500 transition-colors font-mono text-center"
+                                className="input-mono !w-16 text-center"
                             />
                         </div>
                     </div>
-                    <p className="text-[10px] text-slate-500">Temps max d'attente par requête TopStep. Si la requête dépasse ce délai, elle est annulée et retentée.</p>
+                    <p className="help-text mt-0">Temps max d'attente par requête TopStep. Si la requête dépasse ce délai, elle est annulée et retentée.</p>
                 </div>
 
                 {/* Job Interval */}
@@ -550,20 +577,18 @@ export function GeneralSettingsTab({ state, onChange }: GeneralSettingsTabProps)
                             <span className="text-[10px] text-slate-500 ml-1.5">seconds</span>
                         </div>
                         <div className="flex items-center gap-2">
-                            <span className={`text-[10px] px-1.5 py-0.5 rounded font-mono ${state.jobInterval <= 15 ? 'bg-blue-500/10 text-blue-400' : state.jobInterval <= 30 ? 'bg-amber-500/10 text-amber-400' : 'bg-slate-700 text-slate-400'}`}>
-                                {state.jobInterval <= 15 ? 'Réactif' : state.jobInterval <= 30 ? 'Modéré' : 'Lent'}
-                            </span>
+                            <span className={jobIntervalBadge}>{jobIntervalLabel}</span>
                             <input
                                 type="number"
                                 min={5}
                                 max={60}
                                 value={state.jobInterval}
                                 onChange={e => onChange('jobInterval', Math.max(5, Math.min(60, Number(e.target.value))))}
-                                className="w-16 bg-slate-950 border border-slate-700 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-indigo-500 transition-colors font-mono text-center"
+                                className="input-mono !w-16 text-center"
                             />
                         </div>
                     </div>
-                    <p className="text-[10px] text-slate-500">Fréquence de vérification des positions. Nécessite un redémarrage pour être pris en compte.</p>
+                    <p className="help-text mt-0">Fréquence de vérification des positions. Nécessite un redémarrage pour être pris en compte.</p>
                 </div>
             </div>
         </div>

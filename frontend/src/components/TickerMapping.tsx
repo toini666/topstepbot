@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Trash2, Plus, RefreshCw, Layers } from 'lucide-react';
 import { API_BASE } from '../config';
 import type { TickerMap } from '../types';
+import { Button, EmptyState } from './ui';
 
 interface TickerMappingProps {
     mappings: TickerMap[];
@@ -60,31 +61,30 @@ export function TickerMapping({ mappings, onAdd, onDelete, onUpdate }: TickerMap
     return (
         <div className="space-y-4">
             <div className="flex justify-between items-center">
-                <h4 className="text-sm font-semibold text-slate-300 flex items-center gap-2">
-                    <Layers className="w-4 h-4 text-slate-400" />
+                <h4 className="text-sm font-semibold text-slate-200 flex items-center gap-2">
+                    <Layers className="w-4 h-4 text-indigo-400" />
                     Ticker Mappings
                 </h4>
-                <button
+                <Button
+                    variant="outline"
+                    icon={RefreshCw}
+                    loading={loadingContracts}
                     onClick={fetchContracts}
-                    disabled={loadingContracts}
-                    className="text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 px-3 py-1.5 rounded-lg flex items-center gap-2 transition-colors"
+                    className="!px-3 !py-1.5 !text-xs"
                 >
-                    <RefreshCw className={`w-3 h-3 ${loadingContracts ? 'animate-spin' : ''}`} />
                     {availableContracts.length > 0 ? 'Refetch Contracts' : 'Load Contracts'}
-                </button>
+                </Button>
             </div>
 
             {/* Add New Mapping Form */}
-            <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 flex flex-col gap-3">
-                <div className="flex gap-2">
-                    <input
-                        type="text"
-                        placeholder="TradingView Ticker (e.g. MNQ1!)"
-                        value={tvTicker}
-                        onChange={(e) => setTvTicker(e.target.value)}
-                        className="flex-1 input-mono"
-                    />
-                </div>
+            <div className="well p-3 flex flex-col gap-3">
+                <input
+                    type="text"
+                    placeholder="TradingView Ticker (e.g. MNQ1!)"
+                    value={tvTicker}
+                    onChange={(e) => setTvTicker(e.target.value)}
+                    className="input-mono"
+                />
 
                 <div className="flex gap-2">
                     <select
@@ -103,73 +103,100 @@ export function TickerMapping({ mappings, onAdd, onDelete, onUpdate }: TickerMap
                         ))}
                     </select>
 
-                    <input
-                        type="number"
-                        value={microEquivalent}
-                        onChange={(e) => setMicroEquivalent(Math.max(1, parseInt(e.target.value) || 1))}
-                        className="w-14 bg-slate-900 border border-slate-700 rounded-lg px-2 py-2 text-sm text-white text-center focus:outline-none focus:border-indigo-500 font-mono"
-                        min="1"
-                        title="Micro equivalent (1=micro, 10=mini)"
-                    />
+                    <div className="w-16 shrink-0">
+                        <input
+                            type="number"
+                            value={microEquivalent}
+                            onChange={(e) => setMicroEquivalent(Math.max(1, parseInt(e.target.value) || 1))}
+                            className="input-mono text-center px-2 py-2 text-sm"
+                            min="1"
+                            title="Micro equivalent (1=micro, 10=mini)"
+                        />
+                    </div>
 
-                    <button
+                    <Button
+                        variant="primary"
+                        icon={Plus}
+                        loading={adding}
+                        disabled={!tvTicker || !selectedContract}
                         onClick={handleAdd}
-                        disabled={!tvTicker || !selectedContract || adding}
-                        className="btn-primary px-4 shrink-0"
+                        className="shrink-0"
                     >
-                        <Plus size={16} /> Add
-                    </button>
+                        Add
+                    </Button>
                 </div>
+                <p className="help-text -mt-1">Micro equivalent: 1 for a micro contract, 10 for a mini.</p>
             </div>
 
             {/* List */}
-            <div className="space-y-2 pr-2">
-                {mappings.map((m) => (
-                    <div key={m.id} className="flex justify-between items-center bg-slate-900/50 p-2.5 rounded-lg border border-slate-800/50 hover:border-slate-700 transition-colors">
-                        <div className="flex items-center gap-3">
-                            <span className="font-mono text-indigo-400 font-bold text-sm w-20 truncate" title={m.tv_ticker}>{m.tv_ticker}</span>
-                            <span className="text-slate-600 text-xs">→</span>
-                            <div className="flex flex-col">
-                                <span className="font-mono text-white text-sm font-bold">{m.ts_ticker}</span>
-                                <span className="text-[10px] text-slate-500">
-                                    Tick: {m.tick_size} / ${m.tick_value}
-                                </span>
-                            </div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                            <div className="flex items-center gap-1">
-                                <span className="text-[10px] text-slate-500">×</span>
-                                <input
-                                    type="number"
-                                    value={m.micro_equivalent}
-                                    onChange={(e) => {
-                                        const val = parseInt(e.target.value) || 1;
-                                        if (onUpdate && val >= 1) {
-                                            onUpdate(m.id, { micro_equivalent: val });
-                                        }
-                                    }}
-                                    className="w-10 bg-slate-800 border border-slate-700 rounded px-1 py-0.5 text-xs text-white text-center focus:outline-none focus:border-indigo-500 font-mono"
-                                    min="1"
-                                    title="Micro equivalent (1=micro, 10=mini)"
-                                />
-                            </div>
-                            <button
-                                onClick={() => onDelete(m.id)}
-                                className="p-1.5 hover:bg-red-500/10 text-slate-500 hover:text-red-400 rounded-lg transition-colors"
-                                aria-label={`Delete mapping ${m.tv_ticker}`}
-                            >
-                                <Trash2 size={14} />
-                            </button>
-                        </div>
-                    </div>
-                ))}
-
-                {mappings.length === 0 && (
-                    <p className="text-xs text-slate-500 italic text-center py-4">
-                        No mappings configured. The bot will try to auto-resolve tickers.
-                    </p>
-                )}
-            </div>
+            {mappings.length > 0 ? (
+                <div className="overflow-x-auto custom-scrollbar">
+                    <table className="w-full text-sm text-left">
+                        <thead>
+                            <tr className="table-header">
+                                <th className="table-cell font-semibold">TV Ticker</th>
+                                <th className="table-cell font-semibold">TS Contract</th>
+                                <th className="table-cell font-semibold text-right">Tick Size</th>
+                                <th className="table-cell font-semibold text-right">Tick Value</th>
+                                <th className="table-cell font-semibold text-right">Micro</th>
+                                <th className="table-cell font-semibold text-right">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {mappings.map((m, i) => (
+                                <tr
+                                    key={m.id}
+                                    className="table-row animate-stagger"
+                                    style={{ '--i': i } as React.CSSProperties}
+                                >
+                                    <td className="table-cell">
+                                        <span className="font-mono text-indigo-300 font-semibold text-sm" title={m.tv_ticker}>
+                                            {m.tv_ticker}
+                                        </span>
+                                    </td>
+                                    <td className="table-cell">
+                                        <span className="font-mono text-slate-100 text-sm">{m.ts_ticker}</span>
+                                    </td>
+                                    <td className="table-cell num text-slate-400">{m.tick_size}</td>
+                                    <td className="table-cell num text-slate-400">${m.tick_value}</td>
+                                    <td className="table-cell num">
+                                        <div className="w-14 ml-auto">
+                                            <input
+                                                type="number"
+                                                value={m.micro_equivalent}
+                                                onChange={(e) => {
+                                                    const val = parseInt(e.target.value) || 1;
+                                                    if (onUpdate && val >= 1) {
+                                                        onUpdate(m.id, { micro_equivalent: val });
+                                                    }
+                                                }}
+                                                className="input-mono text-right px-2 py-1 text-xs"
+                                                min="1"
+                                                title="Micro equivalent (1=micro, 10=mini)"
+                                            />
+                                        </div>
+                                    </td>
+                                    <td className="table-cell text-right">
+                                        <button
+                                            onClick={() => onDelete(m.id)}
+                                            className="inline-flex items-center justify-center p-1.5 rounded-lg text-slate-500 hover:text-red-300 hover:bg-red-500/15 transition-colors"
+                                            aria-label={`Delete mapping ${m.tv_ticker}`}
+                                        >
+                                            <Trash2 className="w-3.5 h-3.5" />
+                                        </button>
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            ) : (
+                <EmptyState
+                    icon={Layers}
+                    title="No ticker mappings configured"
+                    hint="The bot will try to auto-resolve tickers."
+                />
+            )}
         </div>
     );
 }
