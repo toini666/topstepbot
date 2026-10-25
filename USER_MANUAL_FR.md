@@ -95,6 +95,7 @@ Accessible via le bouton **Settings** (icône d'engrenage) dans la navigation.
         - *Move SL to Breakeven* : Déplacer le Stop Loss au prix d'entrée.
         - *Flatten* : Fermer toutes les positions.
 - **Auto-Flatten** : Heure précise à laquelle toutes les positions sont forcées à la fermeture (ex: 21:55 avant la clôture du marché).
+    - Les semaines où l'Europe et les USA n'ont pas encore changé d'heure tous les deux, ces heures doivent être décalées : voir [docs/changement-heure.md](docs/changement-heure.md).
 - **Risk Rules** :
     - *Single Position Per Asset* : Empêche d'empiler plusieurs positions sur le même actif.
     - *Block Cross-Account Opposite* : Empêche d'être Long sur un compte et Short sur un autre (couverture interdite).

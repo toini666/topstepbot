@@ -286,6 +286,7 @@ Periodic status pings to external systems (N8N, Healthchecks.io) for crash detec
 - [Product Requirements](docs/prd.md)
 - [Execution Flows](docs/flows.md)
 - [TopStep API Reference](docs/docapitopstep.md)
+- [Daylight saving gap weeks (FR)](docs/changement-heure.md)
 
 ---
 
